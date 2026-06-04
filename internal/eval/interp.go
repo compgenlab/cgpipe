@@ -2,6 +2,7 @@ package eval
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -10,6 +11,18 @@ import (
 )
 
 var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
+
+// Interpolate resolves a template string against the given variables. Used by
+// workflow orchestration to resolve stage names/files/args (which reference
+// ${prior_stage.export}) as each stage runs.
+func Interpolate(raw string, vars map[string]Value) (string, error) {
+	sc := newScope()
+	for k, v := range vars {
+		sc.set(k, v)
+	}
+	ip := &interp{sc: sc, out: io.Discard, prog: &Program{Snippets: map[string]string{}, Exports: map[string]Value{}}}
+	return ip.interpolate(raw)
+}
 
 // interpolate resolves a raw template to a single string (@{…} expansions are
 // joined with spaces).
@@ -148,7 +161,11 @@ func (ip *interp) resolveDollarBrace(inside string) (string, error) {
 		return "", err
 	}
 	if _, unset := v.(UnsetVal); unset {
-		return "", fmt.Errorf("undefined variable in ${%s}", strings.TrimSpace(inside))
+		name := strings.TrimSpace(inside)
+		if stage, export, ok := strings.Cut(name, "."); ok && identPathRe.MatchString(stage) && identPathRe.MatchString(export) {
+			return "", fmt.Errorf("${%s}: stage %q has no value %q (it may not have run, or did not export it)", name, stage, export)
+		}
+		return "", fmt.Errorf("undefined variable in ${%s}", name)
 	}
 	return stringify(v), nil
 }

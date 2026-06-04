@@ -58,6 +58,10 @@ type backend struct {
 	opts Options
 }
 
+// ExternalDep: the shell runner is synchronous, so prerequisites already ran and
+// their files exist; there are no external (queued) jobs to depend on.
+func (b *backend) ExternalDep(string) (string, bool) { return "", false }
+
 // Submit renders the target body and runs it with bash (synchronously, so
 // dependencies have already run). It returns no job id.
 func (b *backend) Submit(t *eval.Target, _ []string) (string, error) {

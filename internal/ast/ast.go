@@ -181,6 +181,22 @@ type (
 		PosV token.Pos
 		Code Expr
 	}
+	// Export exposes a named value from a (stage) pipeline to a calling workflow.
+	// A no-op when the pipeline runs standalone.
+	Export struct {
+		PosV  token.Pos
+		Name  string
+		Value Expr
+	}
+	// Stage declares a stage of a workflow: run File (a .cgp pipeline) with Args,
+	// exposing its exports as ${Name.export}. Name/File/Args are raw templates,
+	// resolved at orchestration time (so ${prior_stage.x} references work).
+	Stage struct {
+		PosV token.Pos
+		Name string
+		File string
+		Args []string
+	}
 	// Dumpvars prints all in-scope variables (debugging).
 	Dumpvars struct{ PosV token.Pos }
 	// Showhelp prints the script's help-text block.
@@ -224,6 +240,8 @@ func (s *EvalStmt) Pos() token.Pos { return s.PosV }
 func (s *Dumpvars) Pos() token.Pos { return s.PosV }
 func (s *Showhelp) Pos() token.Pos { return s.PosV }
 func (s *Sleep) Pos() token.Pos    { return s.PosV }
+func (s *Export) Pos() token.Pos   { return s.PosV }
+func (s *Stage) Pos() token.Pos    { return s.PosV }
 
 func (*Assign) stmtNode()   {}
 func (*Print) stmtNode()    {}
@@ -239,3 +257,5 @@ func (*EvalStmt) stmtNode() {}
 func (*Dumpvars) stmtNode() {}
 func (*Showhelp) stmtNode() {}
 func (*Sleep) stmtNode()    {}
+func (*Export) stmtNode()   {}
+func (*Stage) stmtNode()    {}

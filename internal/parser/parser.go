@@ -149,6 +149,13 @@ func (p *parser) parseStmt() ast.Stmt {
 	case token.CARET, token.COLON:
 		return p.parseTarget()
 	case token.IDENT:
+		// export/stage are checked before the assignment test (export contains '=').
+		switch p.cur().Lit {
+		case "export":
+			return p.parseExport()
+		case "stage":
+			return p.parseStage()
+		}
 		if p.lineIsAssignment() {
 			return p.parseAssign()
 		}
@@ -296,6 +303,27 @@ func (p *parser) parseEvalStmt() ast.Stmt {
 func (p *parser) parseSleep() ast.Stmt {
 	pos := p.advance().Pos // sleep
 	return &ast.Sleep{PosV: pos, Secs: p.parseExpr(0)}
+}
+
+func (p *parser) parseExport() ast.Stmt {
+	pos := p.advance().Pos // export
+	name := p.expect(token.IDENT).Lit
+	p.expect(token.ASSIGN)
+	return &ast.Export{PosV: pos, Name: name, Value: p.parseExpr(0)}
+}
+
+// parseStage parses `stage NAME FILE ARGS...`. The rest of the line is captured
+// raw (so ${stage.x} references survive) and split into words.
+func (p *parser) parseStage() ast.Stmt {
+	pos := p.advance().Pos // stage
+	startOff := p.cur().Pos.Off
+	endOff, _, _ := p.scanDeclEnd()
+	p.i = p.declEndIndex
+	words := declWords(p.src[startOff:endOff])
+	if len(words) < 2 {
+		p.fail(pos, "stage requires a name and a pipeline file")
+	}
+	return &ast.Stage{PosV: pos, Name: words[0], File: words[1], Args: words[2:]}
 }
 
 func (p *parser) atStmtEnd() bool {

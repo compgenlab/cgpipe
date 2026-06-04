@@ -42,7 +42,17 @@ type Program struct {
 	Snippets    map[string]string // name -> raw body (for @name invocation)
 	Help        string            // leading comment block
 	Log         string            // log path set via `log`
+	Stages      []StageDecl       // workflow stage declarations (raw templates)
+	Exports     map[string]Value  // values exposed via `export` (for a calling workflow)
 	Scope       *Scope
+}
+
+// StageDecl is a workflow stage: run File with Args, exposing its exports as
+// ${Name.export}. Fields are raw templates, resolved at orchestration time.
+type StageDecl struct {
+	Name string
+	File string
+	Args []string
 }
 
 // Stringify renders a value as it appears in substitution (exported for runners).
@@ -133,7 +143,7 @@ func Run(file *ast.File, opts Options) (*Program, error) {
 		dir:       filepath.Dir(opts.File),
 		sc:        newScope(),
 		out:       opts.Out,
-		prog:      &Program{Snippets: map[string]string{}, Help: file.Help},
+		prog:      &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help},
 		including: map[string]bool{},
 	}
 	if ip.out == nil {
@@ -157,6 +167,35 @@ func Run(file *ast.File, opts Options) (*Program, error) {
 	}
 	ip.prog.Scope = ip.sc
 	return ip.prog, nil
+}
+
+// ExportNames returns the set of names that a file could export — every `export`
+// declaration, including those inside if/for branches. Used for best-effort
+// static validation of ${stage.x} references in a workflow.
+func ExportNames(file *ast.File) []string {
+	var names []string
+	seen := map[string]bool{}
+	var walk func([]ast.Stmt)
+	walk = func(stmts []ast.Stmt) {
+		for _, s := range stmts {
+			switch n := s.(type) {
+			case *ast.Export:
+				if !seen[n.Name] {
+					seen[n.Name] = true
+					names = append(names, n.Name)
+				}
+			case *ast.If:
+				for _, b := range n.Blocks {
+					walk(b)
+				}
+				walk(n.Else)
+			case *ast.For:
+				walk(n.Body)
+			}
+		}
+	}
+	walk(file.Stmts)
+	return names
 }
 
 // Vars returns a copy of the program's final variable scope.
@@ -245,6 +284,16 @@ func (ip *interp) execStmt(s ast.Stmt) error {
 			return err
 		}
 		time.Sleep(time.Duration(toFloat(v) * float64(time.Second)))
+		return nil
+	case *ast.Export:
+		v, err := ip.eval(n.Value)
+		if err != nil {
+			return err
+		}
+		ip.prog.Exports[n.Name] = v
+		return nil
+	case *ast.Stage:
+		ip.prog.Stages = append(ip.prog.Stages, StageDecl{Name: n.Name, File: n.File, Args: n.Args})
 		return nil
 	}
 	return fmt.Errorf("%s: unsupported statement %T", s.Pos(), s)

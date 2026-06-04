@@ -13,9 +13,10 @@ scale.
 > (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
 > the optional SQLite ledger (cross-run reuse of still-queued jobs) are
 > implemented, plus `cgp sub` for one-off job submission, config-file loading,
-> container/GPU wrapping, and `-manifest*` fan-out (run a pipeline once per
-> manifest row/file). Multi-pipeline `stage` composition is not done yet. The JVM
-> version remains available and supported at `compgen-io/cgpipe-jvm`.
+> container/GPU wrapping, `-manifest*` fan-out (run a pipeline once per manifest
+> row/file), and multi-pipeline `stage` composition (chain standalone pipelines
+> via `export` / `${stage.x}`). The JVM version remains available and supported at
+> `compgen-io/cgpipe-jvm`.
 
 ```sh
 cgp pipeline.cgp                 # build @default (or the first target)

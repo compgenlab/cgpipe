@@ -149,6 +149,49 @@ func TestManifestCGPFanout(t *testing.T) {
 	}
 }
 
+func writeWorkflowFixtures(t *testing.T) {
+	t.Helper()
+	os.WriteFile("a.cgp", []byte("a.txt: {{\n    echo from-a > ${output}\n}}\n@default: a.txt\nexport f = \"a.txt\""), 0o644)
+	os.WriteFile("b.cgp", []byte("b.txt: ${bam} {{\n    cat ${input} > ${output}\n    echo plus-b >> ${output}\n}}\n@default: b.txt"), 0o644)
+}
+
+func TestWorkflowShell(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeWorkflowFixtures(t)
+	os.WriteFile("wf.cgp", []byte("stage a a.cgp\nstage b b.cgp --bam ${a.f}"), 0o644)
+
+	if code := run([]string{"wf.cgp"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "b.txt")); string(b) != "from-a\nplus-b\n" {
+		t.Fatalf("b.txt = %q (stage b should consume stage a's output)", string(b))
+	}
+}
+
+func TestWorkflowStaticTypo(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeWorkflowFixtures(t)
+	os.WriteFile("wf.cgp", []byte("stage a a.cgp\nstage b b.cgp --bam ${a.nope}"), 0o644)
+	if code := run([]string{"wf.cgp"}); code == 0 {
+		t.Fatal("workflow with a typo'd ${a.nope} should fail fast")
+	}
+}
+
+func TestWorkflowRuntimeMissingExport(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// a.cgp could export f (so static passes) but only under a false guard, so at
+	// runtime f is never set and ${a.f} must error.
+	os.WriteFile("a.cgp", []byte("a.txt: {{\n    echo x > ${output}\n}}\n@default: a.txt\nif false { export f = \"a.txt\" }"), 0o644)
+	os.WriteFile("b.cgp", []byte("b.txt: ${bam} {{\n    cp ${input} ${output}\n}}\n@default: b.txt"), 0o644)
+	os.WriteFile("wf.cgp", []byte("stage a a.cgp\nstage b b.cgp --bam ${a.f}"), 0o644)
+	if code := run([]string{"wf.cgp"}); code == 0 {
+		t.Fatal("workflow should fail when a conditional export didn't fire at runtime")
+	}
+}
+
 func TestRunMissingFile(t *testing.T) {
 	if code := run([]string{"does-not-exist.cgp"}); code != 1 {
 		t.Fatalf("run(missing) = %d, want 1", code)

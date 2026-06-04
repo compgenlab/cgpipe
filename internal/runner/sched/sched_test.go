@@ -219,6 +219,52 @@ func TestSubmitOneAfterDep(t *testing.T) {
 	}
 }
 
+// TestExternalDepWiresAfterok: a target whose input is produced by an active
+// ledger job (an earlier stage still queued) depends on it via afterok.
+func TestExternalDepWiresAfterok(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	scripts := filepath.Join(dir, "scripts")
+	os.MkdirAll(bin, 0o755)
+	os.MkdirAll(scripts, 0o755)
+	counter := filepath.Join(dir, "counter")
+	os.WriteFile(filepath.Join(bin, "sbatch"), []byte("#!/bin/bash\n"+
+		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n"+
+		"cat > \"$CGP_SCRIPTS/job.$n\"\necho $n\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "scontrol"), []byte("#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CGP_COUNTER", counter)
+	t.Setenv("CGP_SCRIPTS", scripts)
+
+	ledgerPath := filepath.Join(dir, "ledger.db")
+	lg, err := ledger.Open(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lg.Record(ledger.Job{JobID: "777", Outputs: []string{"dep.bam"}}) // earlier stage owns dep.bam
+	lg.Close()
+
+	// out.bam depends on dep.bam, which is not on disk (still queued as job 777).
+	prog := eval.NewJob(eval.JobSpec{
+		Command:  "process ${input} > ${output}",
+		Outputs:  []string{"out.bam"},
+		Inputs:   []string{"dep.bam"},
+		Settings: map[string]eval.Value{"cgp.ledger": eval.StrVal(ledgerPath)},
+	})
+	sch, _ := For("slurm")
+	var out bytes.Buffer
+	if err := Run(prog, sch, Options{Dir: dir, Out: &out}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	script, err := os.ReadFile(filepath.Join(scripts, "job.1001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(script), "afterok:777") {
+		t.Errorf("out.bam's job should depend on dep.bam's owner 777:\n%s", script)
+	}
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)
