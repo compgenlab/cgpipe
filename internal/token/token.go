@@ -55,6 +55,7 @@ const (
 	DOT    // .
 	DOTDOT // ..
 	AT     // @
+	CARET  // ^   (temporary-output marker on target outputs)
 	LPAREN // (
 	RPAREN // )
 	LBRACK // [
@@ -109,6 +110,7 @@ var names = [...]string{
 	DOT:        ".",
 	DOTDOT:     "..",
 	AT:         "@",
+	CARET:      "^",
 	LPAREN:     "(",
 	RPAREN:     ")",
 	LBRACK:     "[",
@@ -128,11 +130,13 @@ func (k Kind) String() string {
 	return fmt.Sprintf("Kind(%d)", int(k))
 }
 
-// Pos is a source position. Line and Col are 1-based.
+// Pos is a source position. Line and Col are 1-based; Off is a 0-based byte
+// offset into the source (used for slicing raw target-line path words).
 type Pos struct {
 	File string
 	Line int
 	Col  int
+	Off  int
 }
 
 func (p Pos) String() string {
