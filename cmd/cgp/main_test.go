@@ -7,8 +7,34 @@ import (
 )
 
 func TestRunVersion(t *testing.T) {
-	if code := run([]string{"--version"}); code != 0 {
-		t.Fatalf("run(--version) = %d, want 0", code)
+	if code := run([]string{"version"}); code != 0 {
+		t.Fatalf("run(version) = %d, want 0", code)
+	}
+}
+
+func TestRunDoubleHyphenVariable(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// --greeting sets the script variable; -dr just renders (no file written)
+	os.WriteFile("p.cgp", []byte(`out.txt: {{
+    echo ${greeting} > ${output}
+}}
+@default: out.txt`), 0o644)
+	if code := run([]string{"p.cgp", "--greeting", "hiya"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "out.txt"))
+	if string(b) != "hiya\n" {
+		t.Fatalf("out.txt = %q, want %q", string(b), "hiya\n")
+	}
+}
+
+func TestRunUnknownSingleHyphenOption(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("x: {{\n  true\n}}\n@default: x"), 0o644)
+	if code := run([]string{"p.cgp", "-zzz"}); code != 2 {
+		t.Fatalf("run(-zzz) = %d, want 2 (unknown option)", code)
 	}
 }
 

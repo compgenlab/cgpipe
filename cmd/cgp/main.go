@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/compgen-io/cgp/internal/buildinfo"
 	"github.com/compgen-io/cgp/internal/eval"
@@ -19,16 +20,16 @@ import (
 const usage = `cgp — run a .cgp pipeline
 
 usage:
-    cgp [flags] <pipeline.cgp> [goal ...] [-name value ...]
+    cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp version
 
-flags:
-    -h, --help       show this help
-    -v, --version    print version
-    -dr, --dry-run   render the shell scripts instead of executing them
+options (single hyphen):
+    -h           show this help
+    -dr          render the shell scripts instead of executing them
 
-A bare argument is a goal (target) to build; -name value sets a pipeline
-variable. With no goal, cgp builds @default (or the first target).
+Script variables use a double hyphen: --name value (or --name=value). A bare
+argument is a goal (target) to build. With no goal, cgp builds @default (or
+the first defined target).
 `
 
 func main() {
@@ -42,10 +43,10 @@ func run(args []string) int {
 	}
 
 	switch args[0] {
-	case "-h", "--help", "help":
+	case "-h", "help":
 		fmt.Print(usage)
 		return 0
-	case "-v", "--version", "version":
+	case "version":
 		fmt.Printf("cgp %s\n", buildinfo.Version)
 		return 0
 	case "ledger":
@@ -62,19 +63,31 @@ func run(args []string) int {
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
 		switch {
-		case a == "-dr" || a == "--dry-run":
-			dryRun = true
-		case len(a) > 1 && a[0] == '-':
-			name := a[1:]
-			for len(name) > 0 && name[0] == '-' {
-				name = name[1:]
+		case strings.HasPrefix(a, "--"):
+			// double hyphen: a script variable (--name value or --name=value)
+			nv := a[2:]
+			if eq := strings.IndexByte(nv, '='); eq >= 0 {
+				vars[nv[:eq]] = parseCLIValue(nv[eq+1:])
+				continue
 			}
 			if i+1 >= len(rest) {
-				fmt.Fprintf(os.Stderr, "cgp: flag %s needs a value\n", a)
+				fmt.Fprintf(os.Stderr, "cgp: variable %s needs a value\n", a)
 				return 2
 			}
 			i++
-			vars[name] = parseCLIValue(rest[i])
+			vars[nv] = parseCLIValue(rest[i])
+		case len(a) > 1 && a[0] == '-':
+			// single hyphen: a cgp option
+			switch a {
+			case "-dr":
+				dryRun = true
+			case "-h":
+				fmt.Print(usage)
+				return 0
+			default:
+				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
+				return 2
+			}
 		default:
 			goals = append(goals, a)
 		}

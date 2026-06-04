@@ -1,10 +1,6 @@
-# cgp v1 — language specification
+# cgp — language specification
 
-> **Status:** Phase 0 draft. This is the reference the Phase 1 implementation is built against. It restates the cgpipe (JVM) language as it behaves today, with the deliberate refinements settled for the Go rewrite called out inline and collected under [Deliberate differences from JVM cgpipe](#deliberate-differences-from-jvm-cgpipe).
->
-> `cgp` is the Go rewrite of cgpipe. The historical JVM implementation lives at `compgen-io/cgpipe-jvm`. Where this document says "cgpipe," it means the JVM tool's established behavior; "cgp" means the new tool specified here.
-
-`cgp` is a small interpreted language whose purpose is to generate and submit job scripts. A pipeline file is read top to bottom in *global* context — every uncommented line is cgp code. Target definitions open a separate *body* context (raw shell with interpolation). Files use the `.cgp` extension.
+`cgp` is a small interpreted language for generating and running job scripts. A pipeline file is read top to bottom in *global* context — every uncommented line is cgp code. Target definitions open a separate *body* context (raw shell with interpolation). Files use the `.cgp` extension.
 
 ---
 
@@ -37,8 +33,8 @@ The first blank or non-comment line ends the help block.
 ### 1.4 Tokens
 Identifiers, numeric literals, string literals, operators, and the structural tokens `{`, `}`, `{{`, `}}`, `:`, `--`, `(`, `)`, `[`, `]`, `,`, `..`. Whitespace separates tokens and is otherwise insignificant except for (a) leading comment runs (help text) and (b) leading whitespace inside shell bodies, which is stripped on render.
 
-### 1.5 The two block delimiters — the lexer's mode flip
-This is the central lexical rule of cgp and the biggest change from cgpipe:
+### 1.5 The two block delimiters
+This is the central lexical rule of cgp:
 
 - **`{ ... }`** delimits a block of **cgp code** (`if`, `for`). The lexer is in token mode; braces are matched by counting.
 - **`{{ ... }}`** delimits a **shell body** (target bodies, `snippet`, and the special targets). The lexer switches to **capture mode**: the body is read as raw text and is *not* tokenized as cgp. A shell body is terminated by a **lone `}}` on its own line** (after leading-whitespace strip).
@@ -82,9 +78,9 @@ Set with `=`. No declarations; the only scopes are global and the per-target bod
     method  ?= "fast"
 
 ### 3.1 Command-line variables
-`-name value` on the command line is equivalent to `name = "value"` set before the script runs:
+A double-hyphen `--name value` on the command line sets the script variable `name` before the script runs. (Single-hyphen arguments like `-dr` are cgp's own options; double-hyphen arguments are always script variables.)
 
-    $ cgp pipeline.cgp -sample patient_42 -threads 16
+    $ cgp pipeline.cgp --sample patient_42 --threads 16
 
 Because CLI values are applied first, `?=` defaults do not override them.
 
@@ -131,7 +127,7 @@ Escaping: prefix `$` or `@` with `\` for a literal. If the string will be evalua
 ## 5. Statements and control flow
 
 ### 5.1 Control flow uses brace blocks
-`endif`/`done` are removed; `{ }` delimits the block.
+`{ }` delimits the block.
 
     if count > 100 {
         print "many"
@@ -161,7 +157,7 @@ Loop variables remain set after the loop (no separate scope).
 | `showhelp`      | Print the help-text block (same as `-h`). |
 | `sleep seconds` | Pause. Rarely needed. |
 
-`include` runs in global context — the included file's statements and targets become part of the current pipeline. It's the primary composition mechanism for shared defaults and target libraries. (cgpipe's body-only `import` is replaced by `snippet`/`@name` — see [§6.6](#66-snippets).)
+`include` runs in global context — the included file's statements and targets become part of the current pipeline. It's the primary composition mechanism for shared defaults and target libraries. (For sharing *body* fragments, use `snippet`/`@name` — see [§6.6](#66-snippets).)
 
 ---
 
@@ -211,7 +207,7 @@ A target body may begin with a **directive block** that sets per-job settings, s
       }}
 
 ### 6.3 Inline conditionals
-`${if cond; true_value; false_value}` substitutes one fragment or the other; the else-clause may be omitted (`${if cond; true_value}` ⇒ empty when false). This replaces cgpipe's inline `<% if %>…<% endif %>`:
+`${if cond; true_value; false_value}` substitutes one fragment or the other; the else-clause may be omitted (`${if cond; true_value}` ⇒ empty when false):
 
     bwa mem -t ${procs} ${if rg; "-R " + rg} ${ref} ${reads} > ${output}
 
@@ -230,13 +226,13 @@ For control flow that must wrap *shell* lines (loops/conditionals that emit shel
         fi
     }}
 
-The non-`%` lines between `% for … {` and `% }` are shell, emitted once per loop iteration with `${…}` resolved each time. This replaces cgpipe's `<% for %>…<% done %>`. (`%` as a control-line marker is distinct from `%` wildcards, which appear only in target declaration lines — see [§7.3](#73-wildcards).)
+The non-`%` lines between `% for … {` and `% }` are shell, emitted once per loop iteration with `${…}` resolved each time. (`%` as a control-line marker is distinct from `%` wildcards, which appear only in target declaration lines — see [§7.3](#73-wildcards).)
 
 ### 6.5 Scoping
 A target captures the surrounding global context at definition time, like a closure. The body may *read* any variable in scope at definition; assignments inside the directive block are target-local and do not leak to the global scope. The loop variable in a body-defining `for` is captured per target.
 
 ### 6.6 Snippets
-Shared body fragments are defined with `snippet name {{ }}` and invoked with `@name` inside a body (replacing cgpipe's `name::` definition and `<% import name %>`):
+Shared body fragments are defined with `snippet name {{ }}` and invoked with `@name` inside a body:
 
     snippet common {{
         set -euo pipefail
@@ -252,16 +248,16 @@ Shared body fragments are defined with `snippet name {{ }}` and invoked with `@n
 
 ## 7. Target declaration features
 
-### 7.1 Make-style substitutions, modernized
-cgpipe's terse `$<`/`$>`/`$%` are replaced by named forms (old forms accepted as deprecated aliases during migration):
+### 7.1 Build-variable substitutions
+Inside a body, these stand for the target's inputs and outputs:
 
-| cgpipe | cgp | Meaning |
-|--------|-----|---------|
-| `$<`  | `${input}`     | All inputs, space-joined |
-| `$>`  | `${output}`    | All outputs, space-joined |
-| `$%`  | `${stem}`      | Wildcard stem |
-| `$<1` | `${input[0]}`  | First input (0-based index) |
-| `$>1` | `${output[0]}` | First output |
+| Form | Meaning |
+|------|---------|
+| `${input}`     | All inputs, space-joined |
+| `${output}`    | All outputs, space-joined |
+| `${stem}`      | Wildcard stem |
+| `${input[0]}`  | First input (0-based index) |
+| `${output[0]}` | First output |
 
 There is no singular/plural distinction: `${input}` is always "the inputs as a value" (joins with spaces when substituted into a string); index with `[N]` for one element. `${input.length()}`, `${input.join(",")}`, and shell `for f in ${input}` all follow naturally.
 
@@ -326,7 +322,7 @@ Requesting `all` builds the three goals. (An empty `{{ }}` is also grammatically
 
 cgp's built-in/virtual targets all share one sigil. **The rule: a target name beginning with `@` is a reserved cgp target and never names a file on disk.** This is what lets reserved names coexist with real filenames — a pipeline can still produce a file literally called `pre` or `default`; only `@pre` / `@default` are reserved. (`@` here is in *target-header* position; it is distinct from `@{…}` list expansion and from `@name` snippet invocation inside a `{{ }}` body — see [§6.6](#66-snippets).)
 
-cgpipe's `__pre__`/`__post__`/etc. become these `@`-prefixed targets:
+The reserved targets:
 
 | Target | When it runs |
 |--------|--------------|
@@ -354,9 +350,9 @@ cgpipe's `__pre__`/`__post__`/etc. become these `@`-prefixed targets:
 
     @default: final.vcf report.html
 
-- **No phony file.** Because `@default` can never be a filename, nothing is stat-ed or expected on disk — strictly better than cgpipe's "first output, normally a never-created `.PHONY`" convention.
+- **No phony file.** Because `@default` can never be a filename, nothing is stat-ed or expected on disk.
 - **Forces its goals to build**, exactly as if they were requested on the command line (unlike an opportunistic `: inputs` job, which never forces its inputs).
-- **Fallback:** if no `@default` is declared, cgp builds the **first defined target** (Make/cgpipe compatibility), so trivial pipelines need nothing.
+- **Fallback:** if no `@default` is declared, cgp builds the **first defined target**, so trivial pipelines need nothing.
 - **CLI overrides:** `cgp p.cgp` builds the `@default` goals; `cgp p.cgp final.vcf` builds the named target(s) instead.
 - **Accumulates:** multiple `@default:` lines (across the file, `include`s, or dynamic generation) add to the goal set, so `@default: @{all_outputs}` after a loop works.
 
@@ -384,7 +380,7 @@ Dot syntax, on variables, literals, or chained results. Argument counts are chec
 | `abspath()` | — | string | Resolved absolute path |
 | `exists()` / `isfile()` / `isdir()` | — | bool | Filesystem test at evaluation time |
 
-> **Refinement:** `sub` uses Go's `regexp` (RE2) syntax rather than Java regex. To strip a literal `.bam`: `name.sub("\\.bam$","")`. The migration tool flags regex patterns that differ between the two engines.
+`sub` uses Go's `regexp` (RE2) syntax. To strip a literal `.bam`: `name.sub("\\.bam$","")`.
 
 ### 9.3 list
 
@@ -406,7 +402,7 @@ Only `type()`. No implicit coercion; an unknown method throws `Method not found`
 
 ## 10. The ledger (job tracking)
 
-> The ledger is cgpipe's "joblog," renamed and re-grounded. It is **optional** — a pipeline runs correctly without one.
+> The ledger is **optional** — a pipeline runs correctly without one.
 
 ### 10.1 Purpose and scope
 The ledger is a record of **which job owns (last produced) which output file**, plus that job's inputs and dependencies. Its core query is "who owns output path `X`?" It enables cross-run composition: cgp won't resubmit a job whose output is already pending in the scheduler, even across separate invocations, and it wires new downstream work as a scheduler dependency (`afterok:<id>`) of the in-flight job.
@@ -467,7 +463,7 @@ Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or
 ## 11. Configuration
 
 ### 11.1 Namespace and locations
-The configuration namespace is `cgp.*` (was `cgpipe.*`). User-scoped state lives under a single root, `~/.cgp/`:
+The configuration namespace is `cgp.*`. User-scoped state lives under a single root, `~/.cgp/`:
 
 | Path | Purpose |
 |------|---------|
@@ -481,7 +477,7 @@ The configuration namespace is `cgp.*` (was `cgpipe.*`). User-scoped state lives
 2. System config (`/etc/cgp/config`)
 3. User config (`~/.cgp/config`)
 4. Environment (`CGP_ENV` evaluated as cgp; `CGP_RUN_ID`, `CGP_DRYRUN`)
-5. Command-line `-name value` / `-t name=value`
+5. Command-line `--name value`
 6. The pipeline script (`=` always wins; `?=` respects upstream)
 
 ### 11.3 Selected `cgp.*` settings
@@ -499,7 +495,7 @@ The configuration namespace is `cgp.*` (was `cgpipe.*`). User-scoped state lives
 | `cgp.container.engine` | `docker`, `singularity`/`apptainer`; unset disables container wrapping |
 | `cgp.container.*` | Bind mounts, env passthrough, engine opts, etc. |
 
-> **Refinements vs cgpipe config defaults:** `global_hold` (hold all jobs until the pipeline submits cleanly) and host-env capture (cgpipe's `job.env`) are **not** defaults in cgp — they are opt-in via `~/.cgp/config`. This keeps the core small; belt-and-suspenders behavior is a choice.
+`global_hold` (hold all jobs until the pipeline submits cleanly) and host-environment capture are **not** defaults — enable them in `~/.cgp/config` if you want them. This keeps the core small; belt-and-suspenders behavior is opt-in.
 
 ### 11.4 Per-job directives (the `job.*` surface, prefix dropped in bodies)
 Set globally as `job.<name>` for defaults, or as a bare `<name>` directive inside a target body's directive block. Common: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`, `container`, `gpu`, plus the assembly flags `shexec`, `nopre`, `nopost`. (Full runner/job table belongs in a future Running Jobs chapter.)
@@ -555,28 +551,9 @@ Set globally as `job.<name>` for defaults, or as a bare `<name>` directive insid
 
 ---
 
-## Deliberate differences from JVM cgpipe
+## Open items
 
-A consolidated list of every intentional change this spec makes. The migration tool (`cgpipe-to-cgp`, Phase 3) automates the syntactic ones.
+These language details are intentionally not yet pinned down:
 
-| Area | cgpipe (JVM) | cgp (this spec) |
-|------|--------------|-----------------|
-| Code blocks | indentation-delimited bodies; `if … endif`, `for … done` | `{ }` for cgp code (no `endif`/`done`); `{{ }}` for shell bodies, terminated by a lone `}}` line |
-| Per-job settings | `<% job.x = … %>` block in the body | directive block before `--`, `job.` prefix dropped |
-| Inline shell conditional | `<% if c %>frag<% endif %>` | `${if c; frag}` |
-| In-body control flow | `<% for … %> … <% done %>` | `%`-prefixed cgp lines (`% for … {` / `% }`) |
-| Make substitutions | `$<` `$>` `$%` `$<1` `$>1` | `${input}` `${output}` `${stem}` `${input[0]}` `${output[0]}` (old forms = deprecated aliases) |
-| Reserved targets | `__pre__`, `__post__`, `__setup__`, `__teardown__`, `__postsubmit__` | `@pre`, `@post`, `@setup`, `@teardown`, `@postsubmit` (uniform `@` sigil ⇒ never a filename) |
-| Default goal | first target listed (often a never-created phony file) | `@default: goals` reserved target — bodyless, no phony file; falls back to first target; CLI overrides |
-| Snippets | `name::` def + `<% import name %>` | `snippet name {{ }}` + `@name` |
-| Job tracking | flat-file joblog; recursive staleness walk | SQLite **ledger** (optional; ownership only, no state, no mtimes); mtime restart + run-scoped stat cache |
-| Restart | recursive graph walk per invocation | mtime-based + `--force`; no restart "modes" |
-| Temp cleanup | hand-rolled (`^` is a marker; no auto-delete) | unchanged — explicit, never automatic |
-| Config namespace | `cgpipe.*`, `~/.cgpiperc` | `cgp.*`, `~/.cgp/` (config, templates, cache) |
-| `global_hold` / env capture | on/available | opt-in via `~/.cgp/config`, not defaults |
-| regex (`sub`) | Java regex | Go `regexp` (RE2) |
-| Binary / files | `cgpipe`, `.cgp`/`.cgpipe`/`.mvp` | `cgp` (+ `cgsub` for one-off submits), `.cgp` |
-
-### Deferred / open
-- The directive/shell disambiguation **when `--` is omitted** (whole-body-is-shell vs. a space-around-`=` heuristic) is deferred until the lexer exists and can be tested against real scripts. Canonical mechanism is the explicit `--`.
-- `${{var}}` double-evaluation and `$(cmd)` parse-time substitution are carried over as-is; their interaction with deferred body rendering will be pinned down during implementation.
+- **Directive/shell disambiguation when `--` is omitted.** A body with no `--` is entirely shell; the explicit `--` is the canonical way to introduce a directive block. Whether to additionally warn on a directive-looking line in a no-`--` body is undecided.
+- **`${{var}}` double-evaluation** and how it composes with deferred body rendering.
