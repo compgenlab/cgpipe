@@ -291,42 +291,74 @@ Prefix an output with `^` to mark it **temporary** — an intermediate that only
 
     ^calls.${chrom}.vcf: aligned.bam ref.fa {{ … }}
 
-Temporary outputs:
-1. Are **not required to exist on disk** — if the downstream output is current, the temp job is skipped even if the temp file is gone.
-2. Are **not mtime-checked** against the filesystem.
-3. Are **tracked separately** (shown as `TEMP`, recorded `is_temp` in the ledger).
+A temp output is treated specially **only in how its absence is handled**. When it is present, it is mtime-checked exactly like a normal output.
+
+1. **Absence does not force a rebuild.** A missing temp does not, by itself, trigger its own job. If everything downstream is current, the temp job is skipped even though the file is gone.
+2. **When present, it is mtime-checked like any file.** If the temp exists and is **newer than a downstream output**, that downstream rebuilds. If it exists and is older than its own inputs, it rebuilds.
+3. **When absent, staleness looks *through* it.** A downstream target is stale iff it is missing or older than the temp's *effective input timestamps* — i.e. cgp propagates the comparison up the chain to the temp's inputs (recursively). So an updated ultimate source re-triggers the whole chain even after the intermediate was deleted.
+4. **Tracked separately** (shown as `TEMP`, recorded `is_temp` in the ledger).
+
+Put simply: a **missing** temp is *transparent* (it passes staleness through from its inputs); a **present** temp is a *normal file*.
+
+Worked through, for `A → B → C` with `^B`:
+
+| On disk | Change | Decision |
+|---------|--------|----------|
+| A, C (B deleted) | A updated, newer than C | look through missing B to A ⇒ C stale ⇒ rebuild B then C |
+| A, B, C | B newer than C | B present ⇒ C stale ⇒ rebuild C (possible only because B exists to stat) |
+| A, C (B deleted) | A older than C | look through missing B to A ⇒ C current ⇒ skip all |
 
 `^` is a marker only; it's stripped before the filename reaches the shell. **cgp never auto-deletes temp files** — deletion is always explicit and user-written ([§7.6](#76-opportunistic-jobs)). "Temp" describes why a file was made, not permission to remove it.
 
 ### 7.6 Opportunistic jobs
 A target with **no outputs** — a leading `:` and a list of inputs — is *opportunistic*. It runs after the rest of the pipeline is submitted, never forces its inputs to be built, and runs only if all inputs are already available (on disk, submitted earlier this run, or recorded in the ledger). If any input is missing and nothing will produce it, it's silently skipped. The canonical use is guarded cleanup of temp files (see the [§6.4](#64-in-body-control-flow--lines) example).
 
+### 7.7 Bodyless (aggregator) targets
+A target may omit the `{{ }}` body entirely. It then has no recipe and is a pure **aggregation rule** — it declares that its output depends on its inputs but contributes nothing to build it. The output name is virtual (never stat-ed, never expected on disk), making it a Make-style phony grouping target:
+
+    all: final.vcf report.html qc.html
+
+Requesting `all` builds the three goals. (An empty `{{ }}` is also grammatically valid — a no-op recipe — but bodyless is the clean form for grouping.) `@default` ([§8.1](#81-the-default-goal-default)) is the special, build-by-default form of this idea.
+
 ---
 
-## 8. Special targets (keywords)
+## 8. Reserved targets (`@`-prefixed)
 
-cgpipe's `__pre__`/`__post__`/etc. become keywords with `{{ }}` bodies:
+cgp's built-in/virtual targets all share one sigil. **The rule: a target name beginning with `@` is a reserved cgp target and never names a file on disk.** This is what lets reserved names coexist with real filenames — a pipeline can still produce a file literally called `pre` or `default`; only `@pre` / `@default` are reserved. (`@` here is in *target-header* position; it is distinct from `@{…}` list expansion and from `@name` snippet invocation inside a `{{ }}` body — see [§6.6](#66-snippets).)
 
-| Keyword | When it runs |
-|---------|--------------|
-| `pre {{ }}`        | Prepended to every other target's body (unless `nopre`) |
-| `post {{ }}`       | Appended to every other target's body (unless `nopost`) |
-| `setup {{ }}`      | Once, as the first job in the pipeline |
-| `teardown {{ }}`   | Once, as the last job |
-| `postsubmit {{ }}` | Once per submitted job, synchronously, on the submit host, right after submission |
+cgpipe's `__pre__`/`__post__`/etc. become these `@`-prefixed targets:
 
-    pre {{
+| Target | When it runs |
+|--------|--------------|
+| `@pre {{ }}`        | Prepended to every other target's body (unless `nopre`) |
+| `@post {{ }}`       | Appended to every other target's body (unless `nopost`) |
+| `@setup {{ }}`      | Once, as the first job in the pipeline |
+| `@teardown {{ }}`   | Once, as the last job |
+| `@postsubmit {{ }}` | Once per submitted job, synchronously, on the submit host, right after submission |
+
+    @pre {{
         echo "Inputs:  ${input}"
         echo "Start:   $(date)"
     }}
 
-    setup {{
+    @setup {{
         shexec = true
         --
         mkdir -p output logs
     }}
 
-`shexec = true` runs the body directly on the submission host instead of submitting it (the usual choice for `mkdir`-style setup); only `setup`/`teardown` may be shexec, and `postsubmit` always is. Per-target opt-out of `pre`/`post` via `nopre = true` / `nopost = true` directives.
+`shexec = true` runs the body directly on the submission host instead of submitting it (the usual choice for `mkdir`-style setup); only `@setup`/`@teardown` may be shexec, and `@postsubmit` always is. Per-target opt-out of `@pre`/`@post` via `nopre = true` / `nopost = true` directives.
+
+### 8.1 The default goal (`@default`)
+`@default` declares what cgp builds when invoked with no explicit target. It is a reserved target whose **inputs are the goals**; it has **no body** (and therefore no `{{ }}`):
+
+    @default: final.vcf report.html
+
+- **No phony file.** Because `@default` can never be a filename, nothing is stat-ed or expected on disk — strictly better than cgpipe's "first output, normally a never-created `.PHONY`" convention.
+- **Forces its goals to build**, exactly as if they were requested on the command line (unlike an opportunistic `: inputs` job, which never forces its inputs).
+- **Fallback:** if no `@default` is declared, cgp builds the **first defined target** (Make/cgpipe compatibility), so trivial pipelines need nothing.
+- **CLI overrides:** `cgp p.cgp` builds the `@default` goals; `cgp p.cgp final.vcf` builds the named target(s) instead.
+- **Accumulates:** multiple `@default:` lines (across the file, `include`s, or dynamic generation) add to the goal set, so `@default: @{all_outputs}` after a loop works.
 
 ---
 
@@ -534,7 +566,8 @@ A consolidated list of every intentional change this spec makes. The migration t
 | Inline shell conditional | `<% if c %>frag<% endif %>` | `${if c; frag}` |
 | In-body control flow | `<% for … %> … <% done %>` | `%`-prefixed cgp lines (`% for … {` / `% }`) |
 | Make substitutions | `$<` `$>` `$%` `$<1` `$>1` | `${input}` `${output}` `${stem}` `${input[0]}` `${output[0]}` (old forms = deprecated aliases) |
-| Special targets | `__pre__`, `__post__`, `__setup__`, `__teardown__`, `__postsubmit__` | `pre`, `post`, `setup`, `teardown`, `postsubmit` keywords |
+| Reserved targets | `__pre__`, `__post__`, `__setup__`, `__teardown__`, `__postsubmit__` | `@pre`, `@post`, `@setup`, `@teardown`, `@postsubmit` (uniform `@` sigil ⇒ never a filename) |
+| Default goal | first target listed (often a never-created phony file) | `@default: goals` reserved target — bodyless, no phony file; falls back to first target; CLI overrides |
 | Snippets | `name::` def + `<% import name %>` | `snippet name {{ }}` + `@name` |
 | Job tracking | flat-file joblog; recursive staleness walk | SQLite **ledger** (optional; ownership only, no state, no mtimes); mtime restart + run-scoped stat cache |
 | Restart | recursive graph walk per invocation | mtime-based + `--force`; no restart "modes" |
