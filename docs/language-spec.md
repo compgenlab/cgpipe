@@ -556,4 +556,3 @@ Set globally as `job.<name>` for defaults, or as a bare `<name>` directive insid
 These language details are intentionally not yet pinned down:
 
 - **Directive/shell disambiguation when `--` is omitted.** A body with no `--` is entirely shell; the explicit `--` is the canonical way to introduce a directive block. Whether to additionally warn on a directive-looking line in a no-`--` body is undecided.
-- **`${{var}}` double-evaluation** and how it composes with deferred body rendering.

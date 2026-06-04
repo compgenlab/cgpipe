@@ -65,6 +65,15 @@ func TestRunExitCode(t *testing.T) {
 	}
 }
 
+func TestRunPipelineHelp(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("#!/usr/bin/env cgp\n# Does a thing.\n# --ref FILE\nx: {{\n  true\n}}"), 0o644)
+	if code := run([]string{"p.cgp", "-h"}); code != 0 {
+		t.Fatalf("run(p.cgp -h) = %d, want 0", code)
+	}
+}
+
 func TestRunMissingFile(t *testing.T) {
 	if code := run([]string{"does-not-exist.cgp"}); code != 1 {
 		t.Fatalf("run(missing) = %d, want 1", code)

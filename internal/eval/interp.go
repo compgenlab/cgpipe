@@ -38,6 +38,22 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 		case c == '\\' && i+1 < len(raw):
 			buf.WriteByte(raw[i+1])
 			i += 2
+		case c == '$' && i+2 < len(raw) && raw[i+1] == '{' && raw[i+2] == '{':
+			// ${{ var }} double-evaluation: substitute, then evaluate the result
+			end := strings.Index(raw[i+3:], "}}")
+			if end < 0 {
+				return nil, fmt.Errorf("unterminated ${{ in %q", raw)
+			}
+			v, err := ip.evalString(raw[i+3 : i+3+end])
+			if err != nil {
+				return nil, err
+			}
+			s, err := ip.interpolate(stringify(v))
+			if err != nil {
+				return nil, err
+			}
+			buf.WriteString(s)
+			i = i + 3 + end + 2
 		case c == '$' && i+1 < len(raw) && raw[i+1] == '{':
 			end := strings.IndexByte(raw[i+2:], '}')
 			if end < 0 {

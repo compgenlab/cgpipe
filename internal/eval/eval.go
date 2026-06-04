@@ -5,9 +5,13 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/compgen-io/cgp/internal/ast"
+	"github.com/compgen-io/cgp/internal/parser"
 	"github.com/compgen-io/cgp/internal/token"
 )
 
@@ -21,6 +25,7 @@ type Target struct {
 	Inputs  []string
 	Body    string
 	HasBody bool
+	Stem    string // wildcard stem, when instantiated from a % rule
 	Scope   *Scope
 }
 
@@ -34,6 +39,9 @@ type Program struct {
 	Setup       *Target
 	Teardown    *Target
 	Postsubmit  *Target
+	Snippets    map[string]string // name -> raw body (for @name invocation)
+	Help        string            // leading comment block
+	Log         string            // log path set via `log`
 	Scope       *Scope
 }
 
@@ -50,20 +58,24 @@ type Options struct {
 }
 
 type interp struct {
-	file string
-	sc   *Scope
-	out  io.Writer
-	prog *Program
+	file      string
+	dir       string // directory of the current file (for include resolution)
+	sc        *Scope
+	out       io.Writer
+	prog      *Program
+	including map[string]bool // include cycle guard (absolute paths)
 }
 
 // Run evaluates the file's global statements and returns the resulting Program.
 // A call to exit surfaces as *ExitError.
 func Run(file *ast.File, opts Options) (*Program, error) {
 	ip := &interp{
-		file: opts.File,
-		sc:   newScope(),
-		out:  opts.Out,
-		prog: &Program{},
+		file:      opts.File,
+		dir:       filepath.Dir(opts.File),
+		sc:        newScope(),
+		out:       opts.Out,
+		prog:      &Program{Snippets: map[string]string{}, Help: file.Help},
+		including: map[string]bool{},
 	}
 	if ip.out == nil {
 		ip.out = os.Stdout
@@ -112,9 +124,85 @@ func (ip *interp) execStmt(s ast.Stmt) error {
 		return ip.execFor(n)
 	case *ast.Target:
 		return ip.execTarget(n)
+	case *ast.Include:
+		return ip.execInclude(n)
+	case *ast.Snippet:
+		ip.prog.Snippets[n.Name] = n.Body
+		return nil
+	case *ast.Log:
+		v, err := ip.eval(n.Path)
+		if err != nil {
+			return err
+		}
+		ip.prog.Log = stringify(v)
+		return nil
+	case *ast.EvalStmt:
+		v, err := ip.eval(n.Code)
+		if err != nil {
+			return err
+		}
+		f, err := parser.Parse(stringify(v), "<eval>")
+		if err != nil {
+			return err
+		}
+		return ip.execStmts(f.Stmts)
+	case *ast.Dumpvars:
+		keys := make([]string, 0, len(ip.sc.vars))
+		for k := range ip.sc.vars {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(ip.out, "%s = %s\n", k, stringify(ip.sc.vars[k]))
+		}
+		return nil
+	case *ast.Showhelp:
+		fmt.Fprintln(ip.out, ip.prog.Help)
+		return nil
+	case *ast.Sleep:
+		v, err := ip.eval(n.Secs)
+		if err != nil {
+			return err
+		}
+		time.Sleep(time.Duration(toFloat(v) * float64(time.Second)))
+		return nil
 	}
 	return fmt.Errorf("%s: unsupported statement %T", s.Pos(), s)
 }
+
+func (ip *interp) execInclude(n *ast.Include) error {
+	v, err := ip.eval(n.Path)
+	if err != nil {
+		return err
+	}
+	path := stringify(v)
+	resolved := path
+	if !filepath.IsAbs(path) {
+		if cand := filepath.Join(ip.dir, path); fileExists(cand) {
+			resolved = cand
+		}
+	}
+	abs, _ := filepath.Abs(resolved)
+	if ip.including[abs] {
+		return fmt.Errorf("%s: include cycle: %s", n.Pos(), path)
+	}
+	src, err := os.ReadFile(resolved)
+	if err != nil {
+		return fmt.Errorf("%s: include %q: %w", n.Pos(), path, err)
+	}
+	f, err := parser.Parse(string(src), resolved)
+	if err != nil {
+		return err
+	}
+	ip.including[abs] = true
+	defer delete(ip.including, abs)
+	oldDir := ip.dir
+	ip.dir = filepath.Dir(resolved)
+	defer func() { ip.dir = oldDir }()
+	return ip.execStmts(f.Stmts)
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func (ip *interp) execAssign(n *ast.Assign) error {
 	v, err := ip.eval(n.Value)

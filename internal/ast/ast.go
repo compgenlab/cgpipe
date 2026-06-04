@@ -5,9 +5,11 @@ import "github.com/compgen-io/cgp/internal/token"
 // Node is any AST node.
 type Node interface{ Pos() token.Pos }
 
-// File is a parsed cgp source file: a sequence of top-level statements.
+// File is a parsed cgp source file: a sequence of top-level statements plus the
+// leading comment block (help text).
 type File struct {
 	Stmts []Stmt
+	Help  string
 }
 
 // ---- expressions ----
@@ -158,6 +160,36 @@ type (
 		Cond Expr
 		Body []Stmt
 	}
+	// Include inlines another .cgp file at this point (global context).
+	Include struct {
+		PosV token.Pos
+		Path Expr
+	}
+	// Snippet defines a reusable body fragment, invoked with @Name inside a body.
+	Snippet struct {
+		PosV token.Pos
+		Name string
+		Body string
+	}
+	// Log opens/replaces the cgp log file.
+	Log struct {
+		PosV token.Pos
+		Path Expr
+	}
+	// EvalStmt evaluates a string-valued expression as cgp source at run time.
+	EvalStmt struct {
+		PosV token.Pos
+		Code Expr
+	}
+	// Dumpvars prints all in-scope variables (debugging).
+	Dumpvars struct{ PosV token.Pos }
+	// Showhelp prints the script's help-text block.
+	Showhelp struct{ PosV token.Pos }
+	// Sleep pauses for the given number of seconds.
+	Sleep struct {
+		PosV token.Pos
+		Secs Expr
+	}
 	// Target is an output-first build rule. Outputs/Inputs are raw word templates
 	// (may carry a leading ^, ${…}, @{…}, % — resolved at eval). Body is nil for a
 	// bodyless (aggregator) target. Special names a reserved @-target ("pre",
@@ -178,18 +210,32 @@ type Body struct {
 	Raw  string
 }
 
-func (s *Assign) Pos() token.Pos { return s.PosV }
-func (s *Print) Pos() token.Pos  { return s.PosV }
-func (s *Exit) Pos() token.Pos   { return s.PosV }
-func (s *Unset) Pos() token.Pos  { return s.PosV }
-func (s *If) Pos() token.Pos     { return s.PosV }
-func (s *For) Pos() token.Pos    { return s.PosV }
-func (s *Target) Pos() token.Pos { return s.PosV }
+func (s *Assign) Pos() token.Pos   { return s.PosV }
+func (s *Print) Pos() token.Pos    { return s.PosV }
+func (s *Exit) Pos() token.Pos     { return s.PosV }
+func (s *Unset) Pos() token.Pos    { return s.PosV }
+func (s *If) Pos() token.Pos       { return s.PosV }
+func (s *For) Pos() token.Pos      { return s.PosV }
+func (s *Target) Pos() token.Pos   { return s.PosV }
+func (s *Include) Pos() token.Pos  { return s.PosV }
+func (s *Snippet) Pos() token.Pos  { return s.PosV }
+func (s *Log) Pos() token.Pos      { return s.PosV }
+func (s *EvalStmt) Pos() token.Pos { return s.PosV }
+func (s *Dumpvars) Pos() token.Pos { return s.PosV }
+func (s *Showhelp) Pos() token.Pos { return s.PosV }
+func (s *Sleep) Pos() token.Pos    { return s.PosV }
 
-func (*Assign) stmtNode() {}
-func (*Print) stmtNode()  {}
-func (*Exit) stmtNode()   {}
-func (*Unset) stmtNode()  {}
-func (*If) stmtNode()     {}
-func (*For) stmtNode()    {}
-func (*Target) stmtNode() {}
+func (*Assign) stmtNode()   {}
+func (*Print) stmtNode()    {}
+func (*Exit) stmtNode()     {}
+func (*Unset) stmtNode()    {}
+func (*If) stmtNode()       {}
+func (*For) stmtNode()      {}
+func (*Target) stmtNode()   {}
+func (*Include) stmtNode()  {}
+func (*Snippet) stmtNode()  {}
+func (*Log) stmtNode()      {}
+func (*EvalStmt) stmtNode() {}
+func (*Dumpvars) stmtNode() {}
+func (*Showhelp) stmtNode() {}
+func (*Sleep) stmtNode()    {}

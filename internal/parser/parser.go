@@ -14,7 +14,30 @@ import (
 // positions in error messages.
 func Parse(src, file string) (*ast.File, error) {
 	p := &parser{src: src, toks: lexer.Tokenize(src, file)}
-	return p.parseFile()
+	f, err := p.parseFile()
+	if f != nil {
+		f.Help = extractHelp(src)
+	}
+	return f, err
+}
+
+// extractHelp returns the leading block of comment lines (after an optional
+// shebang), with the `#` markers stripped — the script's help text.
+func extractHelp(src string) string {
+	lines := strings.Split(src, "\n")
+	i := 0
+	if i < len(lines) && strings.HasPrefix(lines[i], "#!") {
+		i++
+	}
+	var help []string
+	for ; i < len(lines); i++ {
+		t := strings.TrimLeft(lines[i], " \t")
+		if !strings.HasPrefix(t, "#") {
+			break
+		}
+		help = append(help, strings.TrimPrefix(t[1:], " "))
+	}
+	return strings.Join(help, "\n")
 }
 
 // ParseExpr parses a single cgp expression (used for ${…}/@{…} interpolation and
@@ -126,6 +149,9 @@ func (p *parser) parseStmt() ast.Stmt {
 	case token.CARET, token.COLON:
 		return p.parseTarget()
 	case token.IDENT:
+		if p.lineIsAssignment() {
+			return p.parseAssign()
+		}
 		switch p.cur().Lit {
 		case "print":
 			return p.parsePrint()
@@ -133,9 +159,22 @@ func (p *parser) parseStmt() ast.Stmt {
 			return p.parseExit()
 		case "unset":
 			return p.parseUnset()
-		}
-		if p.lineIsAssignment() {
-			return p.parseAssign()
+		case "include":
+			return p.parseInclude()
+		case "snippet":
+			return p.parseSnippet()
+		case "log":
+			return p.parseLog()
+		case "eval":
+			return p.parseEvalStmt()
+		case "sleep":
+			return p.parseSleep()
+		case "dumpvars":
+			t := p.advance()
+			return &ast.Dumpvars{PosV: t.Pos}
+		case "showhelp":
+			t := p.advance()
+			return &ast.Showhelp{PosV: t.Pos}
 		}
 		return p.parseTarget()
 	default:
@@ -230,6 +269,33 @@ func (p *parser) parseUnset() ast.Stmt {
 	p.advance() // unset
 	node.Name = p.dottedName()
 	return node
+}
+
+func (p *parser) parseInclude() ast.Stmt {
+	pos := p.advance().Pos // include
+	return &ast.Include{PosV: pos, Path: p.parseExpr(0)}
+}
+
+func (p *parser) parseSnippet() ast.Stmt {
+	pos := p.advance().Pos // snippet
+	name := p.expect(token.IDENT).Lit
+	body := p.parseBody()
+	return &ast.Snippet{PosV: pos, Name: name, Body: body.Raw}
+}
+
+func (p *parser) parseLog() ast.Stmt {
+	pos := p.advance().Pos // log
+	return &ast.Log{PosV: pos, Path: p.parseExpr(0)}
+}
+
+func (p *parser) parseEvalStmt() ast.Stmt {
+	pos := p.advance().Pos // eval
+	return &ast.EvalStmt{PosV: pos, Code: p.parseExpr(0)}
+}
+
+func (p *parser) parseSleep() ast.Stmt {
+	pos := p.advance().Pos // sleep
+	return &ast.Sleep{PosV: pos, Secs: p.parseExpr(0)}
 }
 
 func (p *parser) atStmtEnd() bool {
