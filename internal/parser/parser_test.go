@@ -326,6 +326,26 @@ calls.merged.vcf: acc {{
 	}
 }
 
+func TestParseExport(t *testing.T) {
+	e, ok := only(t, `export bam = "aligned.bam"`).(*ast.Export)
+	if !ok || e.Name != "bam" {
+		t.Fatalf("export = %#v", only(t, `export bam = "aligned.bam"`))
+	}
+}
+
+func TestParseStage(t *testing.T) {
+	s, ok := only(t, `stage align align.cgp --fastq ${fastqs} --ref ${ref}`).(*ast.Stage)
+	if !ok {
+		t.Fatalf("not a Stage")
+	}
+	if s.Name != "align" || s.File != "align.cgp" {
+		t.Fatalf("stage name/file = %q/%q", s.Name, s.File)
+	}
+	if len(s.Args) != 4 || s.Args[0] != "--fastq" || s.Args[1] != "${fastqs}" {
+		t.Fatalf("stage args = %v", s.Args)
+	}
+}
+
 func TestDottedVariableName(t *testing.T) {
 	id, ok := only(t, `x = job.stdout`).(*ast.Assign).Value.(*ast.Ident)
 	if !ok || id.Name != "job.stdout" {

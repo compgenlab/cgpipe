@@ -18,6 +18,10 @@ import (
 // local shell). Submit is only called for targets that must run and have a body.
 type Backend interface {
 	Submit(t *eval.Target, deps []string) (jobID string, err error)
+	// ExternalDep reports a job (from a prior run / earlier stage, via the ledger)
+	// that will produce input — used when input has no in-run producer and isn't on
+	// disk yet. Returns ("", false) when there is none (e.g. the shell backend).
+	ExternalDep(input string) (jobID string, ok bool)
 }
 
 // Options configure a build.
@@ -138,6 +142,13 @@ func (r *driver) submit(t *eval.Target) (string, error) {
 	for _, in := range t.Inputs {
 		pt := r.producerFor(in)
 		if pt == nil {
+			// No in-run producer: if it's not on disk but an external job (ledger)
+			// will produce it, depend on that job.
+			if !r.statExists(in) {
+				if id, ok := r.backend.ExternalDep(in); ok && id != "" {
+					deps = append(deps, id)
+				}
+			}
 			continue
 		}
 		sub, err := r.resolve(pt)
@@ -193,6 +204,12 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 		}
 		m, ok := r.statMtime(in)
 		if !ok {
+			// Not on disk and no in-run producer: maybe a prior run / earlier stage
+			// will produce it (tracked in the ledger). Treat it as a rebuilt input.
+			if _, ext := r.backend.ExternalDep(in); ext {
+				anyInputRebuilt = true
+				continue
+			}
 			return resolved{}, fmt.Errorf("no rule to make %q (needed by %v)", in, t.Outputs)
 		}
 		if m > inNewest {

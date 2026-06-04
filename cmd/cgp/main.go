@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -244,7 +245,14 @@ func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[stri
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
+	if len(prog.Stages) > 0 {
+		return orchestrate(prog, cfgs, runnerName, dryRun)
+	}
+	return dispatchRun(prog, file, goals, runnerName, dryRun, cache)
+}
 
+// dispatchRun runs an evaluated program through the selected runner.
+func dispatchRun(prog *eval.Program, file string, goals []string, runnerName string, dryRun bool, cache *runner.Cache) int {
 	name := runnerName
 	if name == "" {
 		if v, ok := prog.Get("cgp.runner"); ok {
@@ -270,6 +278,130 @@ func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[stri
 	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Pipeline: file, Cache: cache}); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
+	}
+	return 0
+}
+
+var stageRefRe = regexp.MustCompile(`\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)`)
+
+// orchestrate runs a workflow's stages in declaration order, threading each
+// stage's exports (as ${name.export}) into the variables of later stages. Each
+// stage gets a fresh stat cache, since a later stage reads an earlier stage's
+// freshly produced outputs (so they must not be cached as missing).
+func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dryRun bool) int {
+	wfVars := wf.Vars()
+	if code := validateStageRefs(wf, wfVars); code != 0 {
+		return code
+	}
+	for _, st := range wf.Stages {
+		name, err := eval.Interpolate(st.Name, wfVars)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: stage name: %v\n", err)
+			return 1
+		}
+		subfile, err := eval.Interpolate(st.File, wfVars)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: stage %s file: %v\n", name, err)
+			return 1
+		}
+		subVars := map[string]eval.Value{}
+		for i := 0; i < len(st.Args); i++ {
+			a, err := eval.Interpolate(st.Args[i], wfVars)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
+				return 1
+			}
+			if !strings.HasPrefix(a, "--") {
+				fmt.Fprintf(os.Stderr, "cgp: stage %s: expected --name, got %q\n", name, a)
+				return 2
+			}
+			nv := a[2:]
+			if eq := strings.IndexByte(nv, '='); eq >= 0 {
+				subVars[nv[:eq]] = parseCLIValue(nv[eq+1:])
+				continue
+			}
+			// value is the next interpolated arg
+			i++
+			if i >= len(st.Args) {
+				fmt.Fprintf(os.Stderr, "cgp: stage %s: --%s needs a value\n", name, nv)
+				return 2
+			}
+			val, err := eval.Interpolate(st.Args[i], wfVars)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
+				return 1
+			}
+			subVars[nv] = parseCLIValue(val)
+		}
+
+		src, err := os.ReadFile(subfile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
+			return 1
+		}
+		sf, err := parser.Parse(string(src), subfile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
+			return 1
+		}
+		subProg, err := eval.Run(sf, eval.Options{File: subfile, Configs: cfgs, Vars: subVars})
+		if err != nil {
+			var ex *eval.ExitError
+			if errors.As(err, &ex) {
+				return ex.Code
+			}
+			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
+			return 1
+		}
+		if code := dispatchRun(subProg, subfile, nil, runnerName, dryRun, runner.NewCache()); code != 0 {
+			return code
+		}
+		for k, v := range subProg.Exports {
+			wfVars[name+"."+k] = v
+		}
+	}
+	return 0
+}
+
+// validateStageRefs is a best-effort static check: a ${NAME.X} reference to a
+// declared stage NAME whose file never exports X is a typo and fails fast.
+// (Conditional exports that don't fire are caught at runtime when referenced.)
+func validateStageRefs(wf *eval.Program, wfVars map[string]eval.Value) int {
+	exports := map[string]map[string]bool{}
+	for _, st := range wf.Stages {
+		name, err := eval.Interpolate(st.Name, wfVars)
+		if err != nil {
+			continue
+		}
+		subfile, err := eval.Interpolate(st.File, wfVars)
+		if err != nil {
+			continue
+		}
+		src, err := os.ReadFile(subfile)
+		if err != nil {
+			continue
+		}
+		sf, err := parser.Parse(string(src), subfile)
+		if err != nil {
+			continue
+		}
+		set := map[string]bool{}
+		for _, e := range eval.ExportNames(sf) {
+			set[e] = true
+		}
+		exports[name] = set
+	}
+	for _, st := range wf.Stages {
+		for _, a := range append([]string{st.File}, st.Args...) {
+			for _, m := range stageRefRe.FindAllStringSubmatch(a, -1) {
+				stage, exp := m[1], m[2]
+				set, known := exports[stage]
+				if known && !set[exp] {
+					fmt.Fprintf(os.Stderr, "cgp: reference ${%s.%s}, but stage %q exports no %q\n", stage, exp, stage, exp)
+					return 1
+				}
+			}
+		}
 	}
 	return 0
 }

@@ -385,6 +385,46 @@ func TestTempOutputFlag(t *testing.T) {
 	}
 }
 
+func TestExportAndStageCollected(t *testing.T) {
+	prog, _ := runSrc(t, "export f = \"a.txt\"\nstage b b.cgp --bam ${x}", map[string]Value{"x": StrVal("v")})
+	if prog.Exports["f"] != StrVal("a.txt") {
+		t.Fatalf("exports = %v", prog.Exports)
+	}
+	if len(prog.Stages) != 1 || prog.Stages[0].Name != "b" || prog.Stages[0].File != "b.cgp" {
+		t.Fatalf("stages = %#v", prog.Stages)
+	}
+	if len(prog.Stages[0].Args) != 2 || prog.Stages[0].Args[1] != "${x}" {
+		t.Fatalf("stage args = %v (should be raw, not interpolated)", prog.Stages[0].Args)
+	}
+}
+
+func TestExportNamesWalksConditionals(t *testing.T) {
+	f, err := parser.Parse("export a = 1\nif cond { export b = 2 }\nfor x in [1] { export c = 3 }", "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, n := range ExportNames(f) {
+		got[n] = true
+	}
+	for _, want := range []string{"a", "b", "c"} {
+		if !got[want] {
+			t.Errorf("ExportNames missing %q (got %v)", want, got)
+		}
+	}
+}
+
+func TestInterpolateHelper(t *testing.T) {
+	got, err := Interpolate("${a.b}-x", map[string]Value{"a.b": StrVal("V")})
+	if err != nil || got != "V-x" {
+		t.Fatalf("Interpolate = %q, err=%v", got, err)
+	}
+	// missing stage export => a clear error
+	if _, err := Interpolate("${a.b}", nil); err == nil {
+		t.Fatal("expected error for missing ${a.b}")
+	}
+}
+
 func TestDynamicTargetGeneration(t *testing.T) {
 	prog, _ := runSrc(t, `
 chroms = ["1", "2", "3"]

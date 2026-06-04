@@ -201,6 +201,23 @@ func (b *backend) cfg(name string) string {
 	return ""
 }
 
+// ExternalDep reports an active ledger job that owns input (from a prior run or
+// an earlier workflow stage whose jobs are still queued), so a dependent stage
+// wires afterok onto it instead of failing on the not-yet-produced file.
+func (b *backend) ExternalDep(input string) (string, bool) {
+	if b.ledger == nil {
+		return "", false
+	}
+	owner, ok, err := b.ledger.OwnerOf(input)
+	if err != nil || !ok || owner == "" {
+		return "", false
+	}
+	if b.sch.IsActive != nil && !b.sch.IsActive(owner) {
+		return "", false
+	}
+	return owner, true
+}
+
 func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// Cross-run reuse: if an existing job still owns this output and is still
 	// active in the scheduler, depend on it instead of resubmitting.
