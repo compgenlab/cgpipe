@@ -107,6 +107,55 @@ sub/out.txt: {{
 	}
 }
 
+// §8 Ordering: @setup runs first, the goals next, @teardown last.
+func TestSetupGoalTeardownOrder(t *testing.T) {
+	chdirTmp(t)
+	src := `@setup {{
+    shexec = true
+    --
+    echo setup >> order.log
+}}
+out.txt: {{
+    echo main >> order.log
+    echo x > ${output}
+}}
+@teardown {{
+    shexec = true
+    --
+    echo teardown >> order.log
+}}
+@default: out.txt`
+	runReal(t, src, "out.txt")
+	if got := readFile(t, "order.log"); got != "setup\nmain\nteardown\n" {
+		t.Errorf("run order = %q, want setup→main→teardown", got)
+	}
+}
+
+// §8 @postsubmit runs once per submitted job, synchronously, on the submit host.
+//
+// GAP: neither backend nor the driver invokes p.Postsubmit, so the body never
+// runs. (It is also underspecified what per-job context the body receives.)
+// The assertion below is the spec-correct behavior, ready to un-skip.
+func TestPostsubmitRunsPerJob(t *testing.T) {
+	t.Skip("GAP §8: @postsubmit is never invoked (and its per-job body context is undefined)")
+	chdirTmp(t)
+	src := `a.txt: {{
+    echo a > ${output}
+}}
+b.txt: a.txt {{
+    cp ${input} ${output}
+}}
+@postsubmit {{
+    echo ran >> postsubmit.log
+}}
+@default: b.txt`
+	runReal(t, src, "b.txt")
+	// two jobs submitted (a, b) ⇒ two postsubmit runs
+	if got := readFile(t, "postsubmit.log"); got != "ran\nran\n" {
+		t.Errorf("postsubmit.log = %q, want one line per submitted job", got)
+	}
+}
+
 // §8.1 @default declares the build-by-default goals.
 func TestDefaultGoal(t *testing.T) {
 	prog, _ := build(t, "a.txt: {{\n  true\n}}\nb.txt: {{\n  true\n}}\n@default: b.txt", nil)

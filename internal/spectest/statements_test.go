@@ -102,6 +102,13 @@ func TestShowhelp(t *testing.T) {
 	mustContain(t, printed(t, "# Helpful line.\nshowhelp"), "Helpful line.")
 }
 
+// §5.2 sleep pauses; sleep 0 is a no-op that does not disturb execution.
+func TestSleep(t *testing.T) {
+	if got := printed(t, "print \"a\"\nsleep 0\nprint \"b\""); got != "a\nb\n" {
+		t.Errorf("sleep 0: out = %q", got)
+	}
+}
+
 // §5.2 include inlines another file in global context.
 func TestInclude(t *testing.T) {
 	dir := chdirTmp(t)

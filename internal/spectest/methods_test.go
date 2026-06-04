@@ -93,6 +93,34 @@ func TestRangeMethods(t *testing.T) {
 	}
 }
 
+// §9.2 split with no delimiter splits into characters; with a delimiter splits
+// on it.
+func TestSplitWithAndWithoutDelim(t *testing.T) {
+	if got := printsExpr(t, `"abc".split().length()`); got != "3" {
+		t.Errorf("split() into chars: %q, want 3", got)
+	}
+	if got := printsExpr(t, `"a:b:c".split(":").length()`); got != "3" {
+		t.Errorf("split(\":\"): %q, want 3", got)
+	}
+}
+
+// §9 Methods chain on the result of the previous call.
+func TestChainedMethods(t *testing.T) {
+	if got := printsExpr(t, `"/p/CHR1.BAM".basename().lower().sub("\\.bam$", "")`); got != "chr1" {
+		t.Errorf("chained basename→lower→sub = %q, want chr1", got)
+	}
+	if got := printsExpr(t, `"a,b,c".split(",")[1]`); got != "b" {
+		t.Errorf("split then index = %q, want b", got)
+	}
+}
+
+// §9.3 The receiver-flipped join (separator.join(list)) equals list.join(sep).
+func TestReceiverFlippedJoin(t *testing.T) {
+	if got := printsExpr(t, `",".join(["a", "b"]) == ["a", "b"].join(",")`); got != "true" {
+		t.Errorf("receiver-flipped join mismatch: %q", got)
+	}
+}
+
 // §9.5 An unknown method throws.
 func TestUnknownMethodErrors(t *testing.T) {
 	wantErr(t, "unknown method", `print (5).frobnicate()`)

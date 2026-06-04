@@ -24,6 +24,37 @@ func TestWildcardStem(t *testing.T) {
 	}
 }
 
+// §7.3 `%` matches one or more characters: a single-character and a
+// multi-character stem both work, and the stem is reused on the input side.
+func TestWildcardSingleAndMultiChar(t *testing.T) {
+	t.Run("single_char", func(t *testing.T) {
+		chdirTmp(t)
+		writeFile(t, "a.in", "x")
+		runReal(t, "%.out: %.in {{\n    echo ${stem} > ${output}\n}}\n@default: a.out", "a.out")
+		if got := strings.TrimSpace(readFile(t, "a.out")); got != "a" {
+			t.Errorf("single-char stem = %q, want a", got)
+		}
+	})
+	t.Run("multi_char", func(t *testing.T) {
+		chdirTmp(t)
+		writeFile(t, "sample01.in", "x")
+		runReal(t, "%.out: %.in {{\n    echo ${stem} > ${output}\n}}\n@default: sample01.out", "sample01.out")
+		if got := strings.TrimSpace(readFile(t, "sample01.out")); got != "sample01" {
+			t.Errorf("multi-char stem = %q, want sample01", got)
+		}
+	})
+}
+
+// §7.3 `%` requires at least one character: a zero-length stem does not match,
+// so there is no rule to build a bare ".out".
+func TestWildcardRequiresNonEmptyStem(t *testing.T) {
+	chdirTmp(t)
+	writeFile(t, ".in", "x")
+	if err := runRealErr(t, "%.out: %.in {{\n    cp ${input} ${output}\n}}\n@default: .out", ".out"); err == nil {
+		t.Error("a zero-length stem should not match the % wildcard")
+	}
+}
+
 // §7.2 Multiple definitions for one output: the first whose inputs are all
 // satisfiable is used.
 func TestMultipleDefinitionsFirstSatisfiable(t *testing.T) {

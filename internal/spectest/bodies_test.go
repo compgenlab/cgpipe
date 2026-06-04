@@ -87,6 +87,45 @@ out: in {{
 	}
 }
 
+// §6.4 A % for loop over a range emits its shell body once per iteration.
+func TestPercentForRange(t *testing.T) {
+	got := render(t, `out: in {{
+% for i in 1..10 {
+    process chunk ${i}
+% }
+}}`)
+	lines := shellLines(got)
+	if len(lines) != 10 {
+		t.Fatalf("want 10 iterations, got %d: %v", len(lines), lines)
+	}
+	if lines[0] != "process chunk 1" || lines[9] != "process chunk 10" {
+		t.Errorf("iterations = %v", lines)
+	}
+}
+
+// §6.2 The directive block is ordinary cgp code: control flow there sets job
+// settings conditionally, which the shell can then read.
+func TestDirectiveBlockControlFlow(t *testing.T) {
+	mk := func(flag string) string {
+		return "big = " + flag + `
+out: in {{
+    if big {
+        mem = "16G"
+    } else {
+        mem = "4G"
+    }
+    --
+    echo using ${mem}
+}}`
+	}
+	if got := shellLines(render(t, mk("true"))); len(got) != 1 || got[0] != "echo using 16G" {
+		t.Errorf("true branch = %v", got)
+	}
+	if got := shellLines(render(t, mk("false"))); len(got) != 1 || got[0] != "echo using 4G" {
+		t.Errorf("false branch = %v", got)
+	}
+}
+
 // §6.5 Scoping: directive-block assignments are target-local and do not leak to
 // the global scope.
 func TestDirectiveAssignmentsDoNotLeak(t *testing.T) {

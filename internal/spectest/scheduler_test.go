@@ -154,6 +154,45 @@ func TestOpportunisticSchedulerDep(t *testing.T) {
 	mustContain(t, cleanup, "#SBATCH -d afterok:1001", "rm -f prod.bam")
 }
 
+// §8 shexec runs a target's body on the submission host instead of submitting
+// it: the @setup body executes locally (no sbatch call), while the normal target
+// is still submitted.
+func TestShexecRunsOnSubmitHost(t *testing.T) {
+	capture := installMocks(t, "slurm")
+	workdir := t.TempDir()
+	src := `@setup {{
+    shexec = true
+    --
+    echo ok > setup_marker.txt
+}}
+out.bam: {{
+    name = "j"
+    --
+    echo x > ${output}
+}}
+@default: out.bam`
+	prog, _ := build(t, src, nil)
+	sch, _ := sched.For("slurm")
+	var out bytes.Buffer
+	if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	// @setup ran locally (in the working dir), not through sbatch.
+	if !fileExists(filepath.Join(workdir, "setup_marker.txt")) {
+		t.Error("shexec @setup did not run on the submit host")
+	}
+	// exactly one job submitted — the normal target, not @setup.
+	if n := submitCount(t, capture); n != 1 {
+		t.Errorf("%d submits, want 1 (@setup is shexec, not submitted)", n)
+	}
+	mustContain(t, captured(t, capture, "submit-1.stdin"), "#SBATCH -J j")
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 // §10.5 Cross-run reuse: with a ledger, a second run that finds the output still
 // owned by an active job reuses it instead of resubmitting.
 func TestLedgerReuseAcrossRuns(t *testing.T) {

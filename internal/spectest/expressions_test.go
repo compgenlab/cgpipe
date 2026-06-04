@@ -54,6 +54,16 @@ func TestIndexAndSlice(t *testing.T) {
 	}
 }
 
+// §4.2 Negative slice bounds and nested indexing.
+func TestSliceNegativeAndNestedIndex(t *testing.T) {
+	if got := printed(t, "x = [1, 2, 3, 4]\nprint x[-2:]"); got != "3 4\n" {
+		t.Errorf("x[-2:] = %q, want \"3 4\"", got)
+	}
+	if got := printed(t, "x = [[1, 2], [3, 4]]\nprint x[1][0]"); got != "3\n" {
+		t.Errorf("x[1][0] = %q, want 3", got)
+	}
+}
+
 // §4.3 String substitution forms inside a literal.
 func TestStringSubstitutionForms(t *testing.T) {
 	// ${var}: substitute, error if unset (tested separately); list joins with spaces

@@ -221,6 +221,125 @@ func TestConvertNoInput(t *testing.T) {
 	}
 }
 
+// §14 Manifest fan-out: CSV format, one run per row.
+func TestManifestCSVFanout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("samples.csv", []byte("sample,greeting\nP001,hi\nP002,yo\n"), 0o644)
+	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
+	if code := run([]string{"p.cgp", "-manifest-csv", "samples.csv"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	for _, c := range []struct{ f, want string }{{"out.P001.txt", "hi\n"}, {"out.P002.txt", "yo\n"}} {
+		if b, err := os.ReadFile(filepath.Join(dir, c.f)); err != nil || string(b) != c.want {
+			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
+		}
+	}
+}
+
+// §14 Manifest fan-out: JSON array of objects, one run per object.
+func TestManifestJSONFanout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("samples.json", []byte(`[{"sample":"P001","greeting":"hi"},{"sample":"P002","greeting":"yo"}]`), 0o644)
+	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
+	if code := run([]string{"p.cgp", "-manifest-json", "samples.json"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	for _, c := range []struct{ f, want string }{{"out.P001.txt", "hi\n"}, {"out.P002.txt", "yo\n"}} {
+		if b, err := os.ReadFile(filepath.Join(dir, c.f)); err != nil || string(b) != c.want {
+			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
+		}
+	}
+}
+
+// §14 An explicit --name value on the command line overrides a manifest column.
+func TestManifestCLIOverridesColumn(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("samples.tsv", []byte("sample\tgreeting\nP001\tfrom-file\n"), 0o644)
+	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
+	if code := run([]string{"p.cgp", "-manifest-tsv", "samples.tsv", "--greeting", "from-cli"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.P001.txt")); string(b) != "from-cli\n" {
+		t.Errorf("out.P001.txt = %q, want CLI value to override the column", string(b))
+	}
+}
+
+// §3.1 / §2 A CLI value that looks numeric arrives parsed (int), not as a string.
+func TestCLIVarNumericTyping(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo ${threads.type()} > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp", "--threads", "16"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "int\n" {
+		t.Errorf("threads.type() = %q, want int (numeric CLI value is parsed)", string(b))
+	}
+}
+
+// §15 -dr renders instead of executing: no output file is produced.
+func TestDryRunDoesNotExecute(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp", "-dr"}); code != 0 {
+		t.Fatalf("run -dr = %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out.txt")); err == nil {
+		t.Error("-dr should not have produced out.txt")
+	}
+}
+
+// §15 / §8.1 An explicit goal on the command line overrides @default.
+func TestExplicitGoalOverridesDefault(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("a.txt: {{\n    echo a > ${output}\n}}\nb.txt: {{\n    echo b > ${output}\n}}\n@default: a.txt"), 0o644)
+	if code := run([]string{"p.cgp", "b.txt"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if exists := fileThere(dir, "b.txt"); !exists {
+		t.Error("explicit goal b.txt was not built")
+	}
+	if fileThere(dir, "a.txt") {
+		t.Error("@default a.txt should not build when an explicit goal is given")
+	}
+}
+
+// §15.1 cgp sub -dr renders the one-off job instead of running it.
+func TestSubDryRun(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if code := run([]string{"sub", "-dr", "-o", "out.txt", "--", "echo hi > ${output}"}); code != 0 {
+		t.Fatalf("cgp sub -dr = %d", code)
+	}
+	if fileThere(dir, "out.txt") {
+		t.Error("cgp sub -dr should not create out.txt")
+	}
+}
+
+// §15.2 cgp ledger vacuum runs against a ledger db.
+func TestLedgerVacuumCLI(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "l.db")
+	// create the ledger by submitting a one-off job that records an output.
+	t.Chdir(dir)
+	if code := run([]string{"sub", "-ledger", db, "-o", "out.txt", "--", "echo hi > ${output}"}); code != 0 {
+		t.Fatalf("seed ledger = %d", code)
+	}
+	if code := run([]string{"ledger", "vacuum", db}); code != 0 {
+		t.Fatalf("cgp ledger vacuum = %d, want 0", code)
+	}
+}
+
+func fileThere(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
+}
+
 func TestRunMissingFile(t *testing.T) {
 	if code := run([]string{"does-not-exist.cgp"}); code != 1 {
 		t.Fatalf("run(missing) = %d, want 1", code)
