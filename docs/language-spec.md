@@ -291,10 +291,22 @@ Prefix an output with `^` to mark it **temporary** — an intermediate that only
 
     ^calls.${chrom}.vcf: aligned.bam ref.fa {{ … }}
 
-Temporary outputs:
-1. Are **not required to exist on disk** — if the downstream output is current, the temp job is skipped even if the temp file is gone.
-2. Are **not mtime-checked** against the filesystem.
-3. Are **tracked separately** (shown as `TEMP`, recorded `is_temp` in the ledger).
+A temp output is treated specially **only in how its absence is handled**. When it is present, it is mtime-checked exactly like a normal output.
+
+1. **Absence does not force a rebuild.** A missing temp does not, by itself, trigger its own job. If everything downstream is current, the temp job is skipped even though the file is gone.
+2. **When present, it is mtime-checked like any file.** If the temp exists and is **newer than a downstream output**, that downstream rebuilds. If it exists and is older than its own inputs, it rebuilds.
+3. **When absent, staleness looks *through* it.** A downstream target is stale iff it is missing or older than the temp's *effective input timestamps* — i.e. cgp propagates the comparison up the chain to the temp's inputs (recursively). So an updated ultimate source re-triggers the whole chain even after the intermediate was deleted.
+4. **Tracked separately** (shown as `TEMP`, recorded `is_temp` in the ledger).
+
+Put simply: a **missing** temp is *transparent* (it passes staleness through from its inputs); a **present** temp is a *normal file*.
+
+Worked through, for `A → B → C` with `^B`:
+
+| On disk | Change | Decision |
+|---------|--------|----------|
+| A, C (B deleted) | A updated, newer than C | look through missing B to A ⇒ C stale ⇒ rebuild B then C |
+| A, B, C | B newer than C | B present ⇒ C stale ⇒ rebuild C (possible only because B exists to stat) |
+| A, C (B deleted) | A older than C | look through missing B to A ⇒ C current ⇒ skip all |
 
 `^` is a marker only; it's stripped before the filename reaches the shell. **cgp never auto-deletes temp files** — deletion is always explicit and user-written ([§7.6](#76-opportunistic-jobs)). "Temp" describes why a file was made, not permission to remove it.
 
