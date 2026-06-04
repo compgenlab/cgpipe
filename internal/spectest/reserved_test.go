@@ -132,12 +132,7 @@ out.txt: {{
 }
 
 // §8 @postsubmit runs once per submitted job, synchronously, on the submit host.
-//
-// GAP: neither backend nor the driver invokes p.Postsubmit, so the body never
-// runs. (It is also underspecified what per-job context the body receives.)
-// The assertion below is the spec-correct behavior, ready to un-skip.
 func TestPostsubmitRunsPerJob(t *testing.T) {
-	t.Skip("GAP §8: @postsubmit is never invoked (and its per-job body context is undefined)")
 	chdirTmp(t)
 	src := `a.txt: {{
     echo a > ${output}

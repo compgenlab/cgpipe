@@ -38,6 +38,26 @@ func (p *Program) JobContext(t *Target) (map[string]Value, string, error) {
 	return vars, body, nil
 }
 
+// RenderPostsubmit renders the @postsubmit body in the context of one submitted
+// job: the job's ${input} / ${output} / ${stem} are exposed, plus ${jobid} (the
+// scheduler id, empty for the shell runner). Returns "" when no @postsubmit is
+// defined. The body runs once per submitted job, on the submit host.
+func (p *Program) RenderPostsubmit(job *Target, jobID string) (string, error) {
+	if p.Postsubmit == nil || !p.Postsubmit.HasBody {
+		return "", nil
+	}
+	sc := newScope()
+	if job.Scope != nil {
+		sc = job.Scope.clone()
+	}
+	sc.set("input", toStrList(job.Inputs))
+	sc.set("output", toStrList(job.Outputs))
+	sc.set("stem", StrVal(job.Stem))
+	sc.set("jobid", StrVal(jobID))
+	ip := &interp{sc: sc, out: io.Discard, prog: p}
+	return ip.renderBodyText(p.Postsubmit.Body)
+}
+
 // RenderText renders an arbitrary template string (a runner submission template)
 // against the given variables, using the same body-rendering rules (${…}
 // substitution and %-control lines).

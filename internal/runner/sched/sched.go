@@ -219,6 +219,27 @@ func (b *backend) ExternalDep(input string) (string, bool) {
 	return owner, true
 }
 
+// PostSubmit runs the @postsubmit body on the submission host after a job is
+// submitted, with the scheduler job id available as ${jobid}.
+func (b *backend) PostSubmit(job *eval.Target, jobID string) error {
+	body, err := b.prog.RenderPostsubmit(job, jobID)
+	if err != nil || body == "" {
+		return err
+	}
+	if b.opts.DryRun {
+		fmt.Fprintf(b.opts.Out, "# [postsubmit %s] %s\n%s\n", jobID, runner.Label(job), body)
+		return nil
+	}
+	cmd := exec.Command(b.shell, "-c", body)
+	cmd.Dir = b.opts.Dir
+	cmd.Stdout = b.opts.Out
+	cmd.Stderr = b.opts.Out
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("@postsubmit (%s): %w", runner.Label(job), err)
+	}
+	return nil
+}
+
 func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// Cross-run reuse: if an existing job still owns this output and is still
 	// active in the scheduler, depend on it instead of resubmitting.

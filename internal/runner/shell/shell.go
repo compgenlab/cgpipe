@@ -63,6 +63,27 @@ type backend struct {
 // their files exist; there are no external (queued) jobs to depend on.
 func (b *backend) ExternalDep(string) (string, bool) { return "", false }
 
+// PostSubmit runs the @postsubmit body for the just-run job (locally, as the
+// shell runner already is on the submit host).
+func (b *backend) PostSubmit(job *eval.Target, jobID string) error {
+	body, err := b.prog.RenderPostsubmit(job, jobID)
+	if err != nil || body == "" {
+		return err
+	}
+	if b.opts.DryRun {
+		fmt.Fprintf(b.opts.Out, "# ---- @postsubmit (%s) ----\n%s\n", runner.Label(job), body)
+		return nil
+	}
+	cmd := exec.Command("bash", "-c", body)
+	cmd.Dir = b.opts.Dir
+	cmd.Stdout = b.opts.Stdout
+	cmd.Stderr = b.opts.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("@postsubmit (%s): %w", runner.Label(job), err)
+	}
+	return nil
+}
+
 // Submit renders the target body and runs it with bash (synchronously, so
 // dependencies have already run). It returns no job id.
 func (b *backend) Submit(t *eval.Target, _ []string) (string, error) {

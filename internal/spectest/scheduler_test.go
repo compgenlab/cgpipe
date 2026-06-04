@@ -154,6 +154,44 @@ func TestOpportunisticSchedulerDep(t *testing.T) {
 	mustContain(t, cleanup, "#SBATCH -d afterok:1001", "rm -f prod.bam")
 }
 
+// §8 @postsubmit runs on the submit host after each submission, with the
+// scheduler-assigned job id available as ${jobid}.
+func TestPostsubmitSeesJobID(t *testing.T) {
+	installMocks(t, "slurm")
+	workdir := t.TempDir()
+	src := `a.bam: {{
+    name = "a"
+    --
+    echo a > ${output}
+}}
+b.bam: a.bam {{
+    name = "b"
+    --
+    cp ${input} ${output}
+}}
+@postsubmit {{
+    echo "${output} -> ${jobid}" >> ` + workdir + `/ps.log
+}}
+@default: b.bam`
+	prog, _ := build(t, src, nil)
+	sch, _ := sched.For("slurm")
+	var out bytes.Buffer
+	if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	log := captured0(t, filepath.Join(workdir, "ps.log"))
+	mustContain(t, log, "a.bam -> 1001", "b.bam -> 1002")
+}
+
+func captured0(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(b)
+}
+
 // §8 shexec runs a target's body on the submission host instead of submitting
 // it: the @setup body executes locally (no sbatch call), while the normal target
 // is still submitted.

@@ -22,6 +22,9 @@ type Backend interface {
 	// that will produce input — used when input has no in-run producer and isn't on
 	// disk yet. Returns ("", false) when there is none (e.g. the shell backend).
 	ExternalDep(input string) (jobID string, ok bool)
+	// PostSubmit runs the @postsubmit hook (if any) on the submit host, once for
+	// the job just submitted, with its id available as ${jobid}.
+	PostSubmit(job *eval.Target, jobID string) error
 }
 
 // Options configure a build.
@@ -92,7 +95,7 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 	}
 
 	if p.Setup != nil && p.Setup.HasBody {
-		if _, err := b.Submit(p.Setup, nil); err != nil {
+		if _, err := r.doSubmit(p.Setup, nil); err != nil {
 			return err
 		}
 	}
@@ -113,7 +116,7 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 		}
 	}
 	if p.Teardown != nil && p.Teardown.HasBody {
-		if _, err := b.Submit(p.Teardown, nil); err != nil {
+		if _, err := r.doSubmit(p.Teardown, nil); err != nil {
 			return err
 		}
 	}
@@ -204,11 +207,26 @@ func (r *driver) submit(t *eval.Target) (string, error) {
 	if !t.HasBody {
 		return "", nil // bodyless aggregator
 	}
-	id, err := r.backend.Submit(t, deps)
+	id, err := r.doSubmit(t, deps)
 	if err != nil {
 		return "", err
 	}
 	r.jobID[t] = id
+	return id, nil
+}
+
+// doSubmit submits a target and then runs the @postsubmit hook (once per
+// submitted job, on the submit host) with the job's id.
+func (r *driver) doSubmit(t *eval.Target, deps []string) (string, error) {
+	id, err := r.backend.Submit(t, deps)
+	if err != nil {
+		return "", err
+	}
+	if r.prog.Postsubmit != nil && r.prog.Postsubmit.HasBody {
+		if err := r.backend.PostSubmit(t, id); err != nil {
+			return "", err
+		}
+	}
 	return id, nil
 }
 
@@ -422,7 +440,7 @@ func (r *driver) runOpportunistic(t *eval.Target) (string, error) {
 			}
 		}
 	}
-	return r.backend.Submit(t, deps)
+	return r.doSubmit(t, deps)
 }
 
 func matchWildcard(rule *eval.Target, goal string) (string, bool) {
