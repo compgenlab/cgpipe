@@ -17,6 +17,28 @@ func Parse(src, file string) (*ast.File, error) {
 	return p.parseFile()
 }
 
+// ParseExpr parses a single cgp expression (used for ${…}/@{…} interpolation and
+// %-control headers in bodies).
+func ParseExpr(src string) (e ast.Expr, err error) {
+	p := &parser{src: src, toks: lexer.Tokenize(src, "<expr>")}
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(bailout); ok {
+				e, err = nil, p.err
+				return
+			}
+			panic(r)
+		}
+	}()
+	p.skipSeparators()
+	e = p.parseExpr(0)
+	p.skipSeparators()
+	if p.cur().Kind != token.EOF {
+		p.fail(p.cur().Pos, "unexpected %s after expression", p.cur())
+	}
+	return e, nil
+}
+
 type parser struct {
 	src          string
 	toks         []token.Token
