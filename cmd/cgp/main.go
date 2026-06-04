@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/compgen-io/cgp/internal/ast"
 	"github.com/compgen-io/cgp/internal/buildinfo"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
@@ -18,6 +20,46 @@ import (
 	"github.com/compgen-io/cgp/internal/runner/sched"
 	"github.com/compgen-io/cgp/internal/runner/shell"
 )
+
+// loadConfigs discovers and parses the config layers (system, then user, then
+// CGP_ENV / CGP_RUN_ID), each itself a cgp script, in resolution order.
+func loadConfigs() ([]eval.ConfigFile, error) {
+	var cfgs []eval.ConfigFile
+	addSrc := func(name, dir, src string) error {
+		f, err := parser.Parse(src, name)
+		if err != nil {
+			return fmt.Errorf("config %s: %w", name, err)
+		}
+		cfgs = append(cfgs, eval.ConfigFile{Dir: dir, File: f})
+		return nil
+	}
+	addFile := func(path string) error {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil // a missing config file is fine
+		}
+		return addSrc(path, filepath.Dir(path), string(b))
+	}
+	if err := addFile("/etc/cgp/config"); err != nil {
+		return nil, err
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if err := addFile(filepath.Join(home, ".cgp", "config")); err != nil {
+			return nil, err
+		}
+	}
+	envSrc := os.Getenv("CGP_ENV")
+	if rid := os.Getenv("CGP_RUN_ID"); rid != "" {
+		envSrc += "\ncgp.run_id = \"" + rid + "\""
+	}
+	if strings.TrimSpace(envSrc) != "" {
+		cwd, _ := os.Getwd()
+		if err := addSrc("CGP_ENV", cwd, envSrc); err != nil {
+			return nil, err
+		}
+	}
+	return cfgs, nil
+}
 
 const usage = `cgp — run a .cgp pipeline
 
@@ -108,6 +150,10 @@ func run(args []string) int {
 		}
 	}
 
+	if os.Getenv("CGP_DRYRUN") != "" {
+		dryRun = true
+	}
+
 	src, err := os.ReadFile(file)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
@@ -129,7 +175,13 @@ func run(args []string) int {
 		return 0
 	}
 
-	prog, err := eval.Run(f, eval.Options{File: file, Vars: vars})
+	cfgs, err := loadConfigs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+
+	prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: vars})
 	if err != nil {
 		var ex *eval.ExitError
 		if errors.As(err, &ex) {
@@ -290,11 +342,35 @@ func runSub(args []string) int {
 		fmt.Fprint(os.Stderr, subUsage)
 		return 2
 	}
+
+	// Merge config (cgp.* / job.*) as defaults, then let explicit flags win.
+	cfgs, err := loadConfigs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	base, err := eval.Run(&ast.File{}, eval.Options{Configs: cfgs})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	for k, v := range base.Vars() {
+		if strings.HasPrefix(k, "cgp.") || strings.HasPrefix(k, "job.") {
+			if _, set := settings[k]; !set {
+				settings[k] = v
+			}
+		}
+	}
 	if runnerName != "" {
 		settings["cgp.runner"] = eval.StrVal(runnerName)
 	}
 	if ledgerPath != "" {
 		settings["cgp.ledger"] = eval.StrVal(ledgerPath)
+	}
+	if runnerName == "" {
+		if v, ok := settings["cgp.runner"]; ok {
+			runnerName = eval.Stringify(v)
+		}
 	}
 
 	prog := eval.NewJob(eval.JobSpec{

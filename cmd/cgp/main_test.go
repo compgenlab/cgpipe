@@ -86,6 +86,26 @@ func TestSubShellCreatesFile(t *testing.T) {
 	}
 }
 
+func TestConfigFileLoaded(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".cgp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(home, ".cgp", "config"), []byte(`greeting ?= "from-config"`), 0o644)
+	t.Setenv("HOME", home)
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "out.txt"))
+	if string(b) != "from-config\n" {
+		t.Fatalf("out.txt = %q, want config-provided default", string(b))
+	}
+}
+
 func TestSubNoCommand(t *testing.T) {
 	if code := run([]string{"sub", "-mem", "8G"}); code != 2 {
 		t.Fatalf("cgp sub with no command = %d, want 2", code)

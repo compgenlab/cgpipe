@@ -302,6 +302,55 @@ func TestExitPropagates(t *testing.T) {
 	}
 }
 
+// ---- config layering ----
+
+func configFrom(t *testing.T, src string) ConfigFile {
+	t.Helper()
+	f, err := parser.Parse(src, "config")
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	return ConfigFile{Dir: ".", File: f}
+}
+
+func TestConfigEvaluatedBeforeScript(t *testing.T) {
+	main, _ := parser.Parse(`x ?= 2`, "main")
+	prog, err := Run(main, Options{Out: io.Discard, Configs: []ConfigFile{configFrom(t, `x = 1`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// config set x=1 first; the script's ?= must not override it.
+	if v, _ := prog.Get("x"); v != IntVal(1) {
+		t.Fatalf("x = %v, want 1 (config beats script ?=)", v)
+	}
+}
+
+func TestCLIVarBeatsConfig(t *testing.T) {
+	main, _ := parser.Parse(``, "main")
+	prog, err := Run(main, Options{
+		Out:     io.Discard,
+		Configs: []ConfigFile{configFrom(t, `x = 1`)},
+		Vars:    map[string]Value{"x": IntVal(5)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := prog.Get("x"); v != IntVal(5) {
+		t.Fatalf("x = %v, want 5 (CLI beats config)", v)
+	}
+}
+
+func TestScriptAssignBeatsConfig(t *testing.T) {
+	main, _ := parser.Parse(`x = 3`, "main")
+	prog, err := Run(main, Options{Out: io.Discard, Configs: []ConfigFile{configFrom(t, `x = 1`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := prog.Get("x"); v != IntVal(3) {
+		t.Fatalf("x = %v, want 3 (script = is last, wins)", v)
+	}
+}
+
 // ---- target collection ----
 
 func TestTargetCollection(t *testing.T) {

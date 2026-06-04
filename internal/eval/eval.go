@@ -99,11 +99,21 @@ type ExitError struct{ Code int }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("exit %d", e.Code) }
 
-// Options configures a run.
+// ConfigFile is a parsed config script (itself cgp), evaluated before the main
+// file. Dir is its directory, for resolving its `include`s.
+type ConfigFile struct {
+	Dir  string
+	File *ast.File
+}
+
+// Options configures a run. Evaluation order is: Configs (in slice order), then
+// Vars (command-line), then the main file — matching the documented resolution
+// order (config < CLI < script).
 type Options struct {
-	File string
-	Vars map[string]Value // command-line / manifest variables, applied first
-	Out  io.Writer        // destination for print (defaults to os.Stdout)
+	File    string
+	Configs []ConfigFile
+	Vars    map[string]Value
+	Out     io.Writer // destination for print (defaults to os.Stdout)
 }
 
 type interp struct {
@@ -129,14 +139,35 @@ func Run(file *ast.File, opts Options) (*Program, error) {
 	if ip.out == nil {
 		ip.out = os.Stdout
 	}
+	// 1. config files, in order (system, user, env)
+	for _, cfg := range opts.Configs {
+		ip.dir = cfg.Dir
+		if err := ip.execStmts(cfg.File.Stmts); err != nil {
+			return ip.prog, err
+		}
+	}
+	ip.dir = filepath.Dir(opts.File)
+	// 2. command-line variables
 	for k, v := range opts.Vars {
 		ip.sc.set(k, v)
 	}
+	// 3. the pipeline script
 	if err := ip.execStmts(file.Stmts); err != nil {
 		return ip.prog, err
 	}
 	ip.prog.Scope = ip.sc
 	return ip.prog, nil
+}
+
+// Vars returns a copy of the program's final variable scope.
+func (p *Program) Vars() map[string]Value {
+	m := map[string]Value{}
+	if p.Scope != nil {
+		for k, v := range p.Scope.vars {
+			m[k] = v
+		}
+	}
+	return m
 }
 
 func (ip *interp) execStmts(stmts []ast.Stmt) error {
