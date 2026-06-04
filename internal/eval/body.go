@@ -17,33 +17,74 @@ var snippetRe = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_]*)$`)
 // including the global @pre / @post wrappers (for non-reserved targets). The
 // per-target ${input} / ${output} / ${stem} variables are made available.
 func (p *Program) RenderTarget(t *Target) (string, error) {
+	_, body, err := p.renderTargetScope(t)
+	return body, err
+}
+
+// JobContext renders a target's body and returns the resulting job variables
+// (the target's captured scope plus the directive settings, with global job.<x>
+// promoted to bare <x>) alongside the rendered body. Scheduler runners use this
+// to feed a submission template.
+func (p *Program) JobContext(t *Target) (map[string]Value, string, error) {
+	sc, body, err := p.renderTargetScope(t)
+	if err != nil {
+		return nil, "", err
+	}
+	vars := make(map[string]Value, len(sc.vars))
+	for k, v := range sc.vars {
+		vars[k] = v
+	}
+	return vars, body, nil
+}
+
+// RenderText renders an arbitrary template string (a runner submission template)
+// against the given variables, using the same body-rendering rules (${…}
+// substitution and %-control lines).
+func (p *Program) RenderText(tmpl string, vars map[string]Value) (string, error) {
+	sc := newScope()
+	for k, v := range vars {
+		sc.set(k, v)
+	}
+	ip := &interp{sc: sc, out: io.Discard, prog: p}
+	return ip.renderBodyText(tmpl)
+}
+
+// renderTargetScope builds the render scope for t (captured scope + input/output/
+// stem + global job.* promoted to bare names), evaluates the directive block as a
+// side effect, and returns the scope and the rendered body (with @pre/@post).
+func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 	sc := t.Scope.clone()
 	sc.set("input", toStrList(t.Inputs))
 	sc.set("output", toStrList(t.Outputs))
 	sc.set("stem", StrVal(t.Stem))
+	for k, v := range t.Scope.vars {
+		if bare, ok := strings.CutPrefix(k, "job."); ok && !sc.has(bare) {
+			sc.set(bare, v)
+		}
+	}
 	ip := &interp{sc: sc, out: io.Discard, prog: p}
 
 	var sections []string
 	if t.Special == "" && p.Pre != nil {
 		s, err := ip.renderBodyText(p.Pre.Body)
 		if err != nil {
-			return "", fmt.Errorf("@pre: %w", err)
+			return nil, "", fmt.Errorf("@pre: %w", err)
 		}
 		sections = append(sections, s)
 	}
 	main, err := ip.renderBodyText(t.Body)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	sections = append(sections, main)
 	if t.Special == "" && p.Post != nil {
 		s, err := ip.renderBodyText(p.Post.Body)
 		if err != nil {
-			return "", fmt.Errorf("@post: %w", err)
+			return nil, "", fmt.Errorf("@post: %w", err)
 		}
 		sections = append(sections, s)
 	}
-	return strings.Join(sections, "\n"), nil
+	return sc, strings.Join(sections, "\n"), nil
 }
 
 // renderBodyText resolves one raw {{ }} body into shell text: directives before

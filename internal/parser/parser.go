@@ -526,7 +526,16 @@ func (p *parser) parsePostfix() ast.Expr {
 		case token.DOT:
 			pos := p.advance().Pos
 			name := p.expect(token.IDENT).Lit
-			p.expect(token.LPAREN)
+			if p.cur().Kind != token.LPAREN {
+				// dotted variable name (e.g. job.stdout, cgp.runner) — extend the
+				// identifier rather than treating '.' as a method call.
+				if id, ok := x.(*ast.Ident); ok {
+					id.Name += "." + name
+					continue
+				}
+				p.fail(pos, "expected '(' for method call after '.%s'", name)
+			}
+			p.advance() // (
 			var args []ast.Expr
 			if p.cur().Kind != token.RPAREN {
 				args = append(args, p.parseExpr(0))

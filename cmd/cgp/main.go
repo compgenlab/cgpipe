@@ -14,6 +14,7 @@ import (
 	"github.com/compgen-io/cgp/internal/buildinfo"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgen-io/cgp/internal/runner/sched"
 	"github.com/compgen-io/cgp/internal/runner/shell"
 )
 
@@ -25,7 +26,9 @@ usage:
 
 options (single hyphen):
     -h           show this help
-    -dr          render the shell scripts instead of executing them
+    -dr          dry run: render scripts instead of executing/submitting
+    -r NAME      runner: shell (default), slurm, sge, pbs, batchq
+                 (also set via cgp.runner in the script/config)
 
 Script variables use a double hyphen: --name value (or --name=value). A bare
 argument is a goal (target) to build. With no goal, cgp builds @default (or
@@ -59,6 +62,7 @@ func run(args []string) int {
 	var goals []string
 	dryRun := false
 	showHelp := false
+	runnerName := ""
 
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -84,6 +88,13 @@ func run(args []string) int {
 				dryRun = true
 			case "-h":
 				showHelp = true
+			case "-r":
+				if i+1 >= len(rest) {
+					fmt.Fprintln(os.Stderr, "cgp: option -r needs a value")
+					return 2
+				}
+				i++
+				runnerName = rest[i]
 			default:
 				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
 				return 2
@@ -124,7 +135,30 @@ func run(args []string) int {
 		return 1
 	}
 
-	if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun}); err != nil {
+	name := runnerName
+	if name == "" {
+		if v, ok := prog.Get("cgp.runner"); ok {
+			name = eval.Stringify(v)
+		}
+	}
+	if name == "" {
+		name = "shell"
+	}
+
+	if name == "shell" {
+		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun}); err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	sch, ok := sched.For(name)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, %s)\n", name, strings.Join(sched.Names(), ", "))
+		return 2
+	}
+	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun}); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
