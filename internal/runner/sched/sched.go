@@ -12,8 +12,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgen-io/cgp/internal/ledger"
 	"github.com/compgen-io/cgp/internal/runner"
 )
 
@@ -27,6 +29,7 @@ type Scheduler struct {
 	MailType   string                // default mail type when `mail` is set
 	PrepareMem func(string) string   // optional mem normalization
 	ReleaseCmd func(string) []string // command to release a held job
+	IsActive   func(string) bool     // is a job id still queued/running? (for ledger reuse)
 }
 
 var schedulers = map[string]Scheduler{
@@ -35,25 +38,53 @@ var schedulers = map[string]Scheduler{
 		SubCmd: []string{"sbatch", "--parsable"}, HoldArgs: []string{"-H"},
 		DepSep: ":", MailType: "END,FAIL", PrepareMem: slurmMem,
 		ReleaseCmd: func(id string) []string { return []string{"scontrol", "release", id} },
+		IsActive:   slurmActive,
 	},
 	"sge": {
 		Name: "sge", Template: sgeTmpl,
 		SubCmd: []string{"qsub"}, HoldArgs: []string{"-h", "u"},
 		DepSep: ",", MailType: "ae",
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
+		IsActive:   func(id string) bool { return exec.Command("qstat", "-j", id).Run() == nil },
 	},
 	"pbs": {
 		Name: "pbs", Template: pbsTmpl,
 		SubCmd: []string{"qsub"}, HoldArgs: []string{"-h"},
 		DepSep: ":", MailType: "abe", PrepareMem: pbsMem,
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
+		IsActive:   func(id string) bool { return exec.Command("qstat", id).Run() == nil },
 	},
 	"batchq": {
 		Name: "batchq", Template: batchqTmpl,
 		SubCmd: []string{"batchq", "submit"}, HoldArgs: []string{"--hold"},
 		DepSep:     ",",
 		ReleaseCmd: func(id string) []string { return []string{"batchq", "release", id} },
+		IsActive:   func(id string) bool { return exec.Command("batchq", "status", id).Run() == nil },
 	},
+}
+
+// slurmActive reports whether a SLURM job is still pending/running (and not
+// doomed by an unsatisfiable dependency), via `scontrol show job`.
+func slurmActive(id string) bool {
+	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	if err != nil {
+		return false
+	}
+	state, reason := "", ""
+	for _, tok := range strings.Fields(string(out)) {
+		if kv := strings.SplitN(tok, "=", 2); len(kv) == 2 {
+			switch kv[0] {
+			case "JobState":
+				state = kv[1]
+			case "Reason":
+				reason = kv[1]
+			}
+		}
+	}
+	if state != "PENDING" && state != "RUNNING" {
+		return false
+	}
+	return reason != "DependencyNeverSatisfied"
 }
 
 // For returns the scheduler with the given name.
@@ -67,10 +98,11 @@ func Names() []string { return []string{"slurm", "sge", "pbs", "batchq"} }
 
 // Options configure a scheduler run.
 type Options struct {
-	Goals  []string
-	DryRun bool
-	Dir    string
-	Out    io.Writer // submission scripts (dry-run) and job-id output
+	Goals    []string
+	DryRun   bool
+	Dir      string
+	Pipeline string    // pipeline filename, recorded in the ledger
+	Out      io.Writer // submission scripts (dry-run) and job-id output
 }
 
 // Run builds the program's goals by submitting stale targets to the scheduler.
@@ -86,7 +118,20 @@ func Run(p *eval.Program, sch Scheduler, opts Options) error {
 	if v, ok := p.Get("cgp.runner." + sch.Name + ".global_hold"); ok {
 		gh = eval.Truthy(v)
 	}
-	b := &backend{prog: p, sch: sch, opts: opts, shell: shell, globalHold: gh}
+	b := &backend{prog: p, sch: sch, opts: opts, shell: shell, globalHold: gh, user: os.Getenv("USER")}
+	if v, ok := p.Get("cgp.run_id"); ok {
+		b.runID = eval.Stringify(v)
+	}
+	// Optional ledger: enables cross-run reuse of still-active jobs. Not used in
+	// dry-run (no real job ids).
+	if v, ok := p.Get("cgp.ledger"); ok && eval.Stringify(v) != "" && !opts.DryRun {
+		lg, err := ledger.Open(eval.Stringify(v))
+		if err != nil {
+			return fmt.Errorf("ledger: %w", err)
+		}
+		defer lg.Close()
+		b.ledger = lg
+	}
 	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir}); err != nil {
 		return err
 	}
@@ -99,6 +144,9 @@ type backend struct {
 	opts       Options
 	shell      string
 	globalHold bool
+	ledger     *ledger.Ledger
+	runID      string
+	user       string
 	dryN       int
 	ids        []string
 	held       []string
@@ -112,6 +160,17 @@ func (b *backend) cfg(name string) string {
 }
 
 func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
+	// Cross-run reuse: if an existing job still owns this output and is still
+	// active in the scheduler, depend on it instead of resubmitting.
+	if b.ledger != nil && len(t.Outputs) > 0 {
+		if owner, ok, err := b.ledger.OwnerOf(t.Outputs[0]); err == nil && ok && owner != "" {
+			if b.sch.IsActive == nil || b.sch.IsActive(owner) {
+				fmt.Fprintf(b.opts.Out, "# reuse: %s already owned by active job %s\n", runner.Label(t), owner)
+				return owner, nil
+			}
+		}
+	}
+
 	vars, body, err := b.prog.JobContext(t)
 	if err != nil {
 		return "", err
@@ -144,7 +203,20 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return b.submitScript(runner.Label(t), script)
+	id, err := b.submitScript(runner.Label(t), script)
+	if err != nil {
+		return "", err
+	}
+	if b.ledger != nil && id != "" && len(t.Outputs) > 0 {
+		if err := b.ledger.Record(ledger.Job{
+			JobID: id, RunID: b.runID, Name: jobName(t), Pipeline: b.opts.Pipeline,
+			WorkingDir: b.opts.Dir, User: b.user, SubmitTime: time.Now().Unix(),
+			Outputs: t.Outputs, Temp: t.Temp, Inputs: t.Inputs, Deps: deps,
+		}); err != nil {
+			return "", fmt.Errorf("ledger record: %w", err)
+		}
+	}
+	return id, nil
 }
 
 func (b *backend) submitScript(label, script string) (string, error) {

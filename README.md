@@ -8,11 +8,12 @@ JVM, fast startup, and an SQLite-backed ledger designed for fast restarts at
 scale.
 
 > **Status: early development.** The language is specified in
-> [`docs/language-spec.md`](docs/language-spec.md). `cgp` can now run pipelines
-> with the local shell — lexer, parser, evaluator, body renderer, and shell
-> runner (dependency resolution + mtime staleness, including temp look-through)
-> are implemented. Scheduler runners, the ledger, workflow composition, and
-> `cgsub` are not done yet. The JVM version remains available and supported at
+> [`docs/language-spec.md`](docs/language-spec.md). `cgp` runs pipelines with the
+> local shell or a batch scheduler — the full language, dependency resolution
+> (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
+> the optional SQLite ledger (cross-run reuse of still-queued jobs) are
+> implemented. Workflow composition (`stage`/`--manifest`) and `cgsub` are not
+> done yet. The JVM version remains available and supported at
 > `compgen-io/cgpipe-jvm`.
 
 ```sh

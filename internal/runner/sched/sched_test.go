@@ -112,6 +112,69 @@ b.bam: a.bam {{
 	mustContainAll(t, renderDry(t, "batchq", src), "#BATCHQ -afterok dryrun.1")
 }
 
+// TestLedgerReuse runs the same pipeline twice with a ledger and a still-active
+// mock job: the second run must reuse the existing job, not resubmit.
+func TestLedgerReuse(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	scripts := filepath.Join(dir, "scripts")
+	os.MkdirAll(bin, 0o755)
+	os.MkdirAll(scripts, 0o755)
+	counter := filepath.Join(dir, "counter")
+
+	sbatch := "#!/bin/bash\n" +
+		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n" +
+		"cat > \"$CGP_SCRIPTS/job.$n\"\n" +
+		"echo $n\n"
+	if err := os.WriteFile(filepath.Join(bin, "sbatch"), []byte(sbatch), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// scontrol reports the job as RUNNING (active) so the second run reuses it.
+	scontrol := "#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"
+	if err := os.WriteFile(filepath.Join(bin, "scontrol"), []byte(scontrol), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CGP_COUNTER", counter)
+	t.Setenv("CGP_SCRIPTS", scripts)
+
+	ledgerPath := filepath.Join(dir, "ledger.db")
+	src := "cgp.ledger = \"" + ledgerPath + "\"\n" +
+		"a.bam: {{\n    name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
+	sch, _ := For("slurm")
+
+	// Run 1: nothing in the ledger -> submit (job 1001).
+	var out1 bytes.Buffer
+	if err := Run(program(t, src), sch, Options{Dir: dir, Out: &out1}); err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+	if c := readFile(t, counter); c != "1001" {
+		t.Fatalf("after run 1 counter = %q, want 1001 (one submit)", c)
+	}
+
+	// Run 2: a.bam still doesn't exist (mock didn't run the body), so it's stale,
+	// but job 1001 is still active -> reuse, no new submit.
+	var out2 bytes.Buffer
+	if err := Run(program(t, src), sch, Options{Dir: dir, Out: &out2}); err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+	if c := readFile(t, counter); c != "1001" {
+		t.Fatalf("after run 2 counter = %q, want 1001 (should reuse, not resubmit)", c)
+	}
+	if !strings.Contains(out2.String(), "reuse") {
+		t.Errorf("run 2 output should note reuse:\n%s", out2.String())
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(b))
+}
+
 // TestSubmitWithMock submits to a mock `sbatch` on PATH, verifying job-id capture
 // and that the dependent job's script carries the upstream id as afterok:.
 func TestSubmitWithMock(t *testing.T) {

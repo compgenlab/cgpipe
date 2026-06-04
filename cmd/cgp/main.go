@@ -13,6 +13,7 @@ import (
 
 	"github.com/compgen-io/cgp/internal/buildinfo"
 	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgen-io/cgp/internal/ledger"
 	"github.com/compgen-io/cgp/internal/parser"
 	"github.com/compgen-io/cgp/internal/runner/sched"
 	"github.com/compgen-io/cgp/internal/runner/shell"
@@ -53,8 +54,7 @@ func run(args []string) int {
 		fmt.Printf("cgp %s\n", buildinfo.Version)
 		return 0
 	case "ledger":
-		fmt.Fprintln(os.Stderr, "cgp: ledger subcommand not implemented yet")
-		return 1
+		return runLedger(args[1:])
 	}
 
 	file := args[0]
@@ -158,7 +158,26 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, %s)\n", name, strings.Join(sched.Names(), ", "))
 		return 2
 	}
-	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun}); err != nil {
+	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Pipeline: file}); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// runLedger handles `cgp ledger <subcommand> ...`.
+func runLedger(args []string) int {
+	if len(args) < 2 || args[0] != "vacuum" {
+		fmt.Fprintln(os.Stderr, "usage: cgp ledger vacuum <ledger.db>")
+		return 2
+	}
+	lg, err := ledger.Open(args[1])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	defer lg.Close()
+	if err := lg.Vacuum(); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
