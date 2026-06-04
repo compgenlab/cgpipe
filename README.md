@@ -7,10 +7,20 @@ DSL, a persistent job ledger) while shipping as a single static binary with no
 JVM, fast startup, and an SQLite-backed ledger designed for fast restarts at
 scale.
 
-> **Status: early development (Phase 0).** The language is specified in
-> [`docs/language-spec.md`](docs/language-spec.md); the binaries here are a
-> compiling skeleton — pipeline evaluation is not implemented yet. The JVM
-> version remains available and supported at `compgen-io/cgpipe-jvm`.
+> **Status: early development.** The language is specified in
+> [`docs/language-spec.md`](docs/language-spec.md). `cgp` can now run pipelines
+> with the local shell — lexer, parser, evaluator, body renderer, and shell
+> runner (dependency resolution + mtime staleness, including temp look-through)
+> are implemented. Scheduler runners, the ledger, workflow composition, and
+> `cgsub` are not done yet. The JVM version remains available and supported at
+> `compgen-io/cgpipe-jvm`.
+
+```sh
+cgp pipeline.cgp                 # build @default (or the first target)
+cgp pipeline.cgp out.bam         # build a specific target
+cgp pipeline.cgp -sample p42     # set a pipeline variable
+cgp pipeline.cgp -dr             # dry run: print the rendered shell scripts
+```
 
 ## Build
 
