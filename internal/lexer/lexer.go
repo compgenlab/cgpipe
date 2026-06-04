@@ -30,7 +30,9 @@ func New(src, file string) *Lexer {
 	return &Lexer{src: src, file: file, off: 0, line: 1, col: 1}
 }
 
-func (l *Lexer) pos() token.Pos { return token.Pos{File: l.file, Line: l.line, Col: l.col} }
+func (l *Lexer) pos() token.Pos {
+	return token.Pos{File: l.file, Line: l.line, Col: l.col, Off: l.off}
+}
 
 func (l *Lexer) tok(k token.Kind, lit string, p token.Pos) token.Token {
 	return token.Token{Kind: k, Lit: lit, Pos: p}
@@ -260,6 +262,9 @@ func (l *Lexer) lexOperator(start token.Pos) token.Token {
 	case '@':
 		l.advance()
 		return l.tok(token.AT, "", start)
+	case '^':
+		l.advance()
+		return l.tok(token.CARET, "", start)
 	case '(':
 		l.advance()
 		return l.tok(token.LPAREN, "", start)
