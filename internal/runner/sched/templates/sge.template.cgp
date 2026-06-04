@@ -1,0 +1,55 @@
+#!${shell}
+#$ -w e
+#$ -terse
+#$ -N ${name.sub("/", "_")}
+% if hold {
+#$ -h
+% }
+% if env {
+#$ -V
+% }
+% if walltime {
+#$ -l h_rt=${walltime}
+% }
+% if procs > 1 {
+% if parallelenv {
+#$ -pe ${parallelenv} ${procs}
+% }
+% }
+% if mem {
+#$ -l h_vmem=${mem}
+% }
+% if gpu {
+#$ -l gpu=${gpu}
+% }
+% if depids {
+#$ -hold_jid ${depids}
+% }
+% if queue {
+#$ -q ${queue}
+% }
+% if account {
+#$ -A ${account}
+% }
+% if mail {
+#$ -M ${mail}
+#$ -m ${mailtype}
+% }
+% if stdout {
+#$ -o ${stdout}
+% }
+% if stderr {
+#$ -e ${stderr}
+% }
+% for c in custom {
+#$ ${c}
+% }
+#$ -notify
+
+set -eo pipefail
+
+% for line in setup {
+${line}
+% }
+
+${_body}

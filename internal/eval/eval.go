@@ -45,6 +45,20 @@ type Program struct {
 	Scope       *Scope
 }
 
+// Stringify renders a value as it appears in substitution (exported for runners).
+func Stringify(v Value) string { return stringify(v) }
+
+// Truthy reports a value's truthiness (exported for runners).
+func Truthy(v Value) bool { return truthy(v) }
+
+// Get reads a variable from the program's final scope (e.g. a cgp.* setting).
+func (p *Program) Get(name string) (Value, bool) {
+	if p.Scope == nil {
+		return nil, false
+	}
+	return p.Scope.get(name)
+}
+
 // ExitError is returned by Run when the script calls exit.
 type ExitError struct{ Code int }
 

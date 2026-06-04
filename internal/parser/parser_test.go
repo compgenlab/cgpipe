@@ -325,3 +325,18 @@ calls.merged.vcf: acc {{
 		t.Fatal("no target found inside for loop")
 	}
 }
+
+func TestDottedVariableName(t *testing.T) {
+	id, ok := only(t, `x = job.stdout`).(*ast.Assign).Value.(*ast.Ident)
+	if !ok || id.Name != "job.stdout" {
+		t.Fatalf("job.stdout = %#v", only(t, `x = job.stdout`).(*ast.Assign).Value)
+	}
+	// method call on a dotted name still works
+	c, ok := only(t, `x = job.stdout.isdir()`).(*ast.Assign).Value.(*ast.Call)
+	if !ok || c.Method != "isdir" {
+		t.Fatalf("expected Call isdir, got %#v", only(t, `x = job.stdout.isdir()`).(*ast.Assign).Value)
+	}
+	if recv, ok := c.Recv.(*ast.Ident); !ok || recv.Name != "job.stdout" {
+		t.Fatalf("recv = %#v, want Ident job.stdout", c.Recv)
+	}
+}
