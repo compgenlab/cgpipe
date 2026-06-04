@@ -175,8 +175,6 @@ func (p *parser) parseStmt() ast.Stmt {
 			return p.parseInclude()
 		case "snippet":
 			return p.parseSnippet()
-		case "log":
-			return p.parseLog()
 		case "eval":
 			return p.parseEvalStmt()
 		case "sleep":
@@ -293,11 +291,6 @@ func (p *parser) parseSnippet() ast.Stmt {
 	name := p.expect(token.IDENT).Lit
 	body := p.parseBody()
 	return &ast.Snippet{PosV: pos, Name: name, Body: body.Raw}
-}
-
-func (p *parser) parseLog() ast.Stmt {
-	pos := p.advance().Pos // log
-	return &ast.Log{PosV: pos, Path: p.parseExpr(0)}
 }
 
 func (p *parser) parseEvalStmt() ast.Stmt {

@@ -7,7 +7,7 @@
 ## 1. Lexical structure
 
 ### 1.1 Source and encoding
-A pipeline is a UTF-8 text file. Lines are significant: the language is line-oriented at the statement level (one statement per line; no statement separator), though brace blocks span lines.
+A pipeline is a UTF-8 text file. Lines are significant: the language is line-oriented at the statement level (one statement per line; no statement separator), though brace blocks span lines. A newline **inside `( )` or `[ ]` is insignificant** (implicit line continuation), so a single expression — a call's arguments, a list literal — may be broken across lines; `{ }` is not continued (statements inside a block stay newline-separated).
 
 ### 1.2 Shebang
 A leading `#!` line is ignored by the parser:
@@ -148,7 +148,6 @@ Loop variables remain set after the loop (no separate scope).
 | Statement | Purpose |
 |-----------|---------|
 | `print expr [, expr …]` | Write to stdout. **Inside a body**, appends to the rendered script instead. |
-| `log filename`  | Open/replace the cgp log file (also `-l`). |
 | `include "path"` | Inline another `.cgp` file (global context). Resolved relative to the current file, then the cwd. |
 | `export name = expr` | Expose a value to a calling workflow as `${stage.name}` ([§13](#13-workflows-stage-and-export)). A no-op when the pipeline runs standalone. |
 | `eval expr`     | Evaluate a string-valued expr as cgp source at run time. |
@@ -228,6 +227,8 @@ For control flow that must wrap *shell* lines (loops/conditionals that emit shel
     }}
 
 The non-`%` lines between `% for … {` and `% }` are shell, emitted once per loop iteration with `${…}` resolved each time. (`%` as a control-line marker is distinct from `%` wildcards, which appear only in target declaration lines — see [§7.3](#73-wildcards).)
+
+A `%` statement whose expression has an open `(` or `[` continues onto the following `%` lines until the brackets balance (per [§1.1](#11-source-and-encoding)), so a list or call on `%` lines may span lines; consecutive `% for`/`% if` headers each open their own block.
 
 ### 6.5 Scoping
 A target captures the surrounding global context at definition time, like a closure. The body may *read* any variable in scope at definition; assignments inside the directive block are target-local and do not leak to the global scope. The loop variable in a body-defining `for` is captured per target.
@@ -346,6 +347,12 @@ The reserved targets:
 
 `shexec = true` runs the body directly on the submission host instead of submitting it (the usual choice for `mkdir`-style setup); only `@setup`/`@teardown` may be shexec, and `@postsubmit` always is. Per-target opt-out of `@pre`/`@post` via `nopre = true` / `nopost = true` directives.
 
+`@postsubmit` runs once for **each** submitted job, on the submit host, immediately after that job is submitted. Its body sees the just-submitted job's `${input}` / `${output}` / `${stem}`, plus **`${jobid}`** — the scheduler-assigned job id (empty under the shell runner, which has no ids). A typical use is recording submissions:
+
+    @postsubmit {{
+        echo "${output}	${jobid}" >> submissions.tsv
+    }}
+
 ### 8.1 The default goal (`@default`)
 `@default` declares what cgp builds when invoked with no explicit target. It is a reserved target whose **inputs are the goals**; it has **no body** (and therefore no `{{ }}`):
 
@@ -457,7 +464,7 @@ SQLite (`modernc.org/sqlite`, pure Go), single-writer per ledger. Schema (v1):
 - **Vacuum** (`cgp ledger vacuum`): keep every job referenced by `output_owner`, drop the rest (cascade to child tables), in one transaction. The last owner of each path survives even if it failed.
 
 ### 10.4 Restart
-Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. A `--force` flag rebuilds regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
+Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. The `-force` option rebuilds every target in the goal graph regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
 
 ### 10.5 Cross-run and cross-stage reuse
 When a ledger is configured and a scheduler runner is in use, an input that has **no in-run producer** and **isn't on disk yet** is looked up in the ledger: if its owning job is still active (per `squeue`/`qstat`), the new work is wired as a scheduler dependency (`afterok:<id>`) of that in-flight job instead of being treated as a "no rule to make" error or duplicated. This is what makes re-running a pipeline before it has finished safe, and it is also how a later workflow [stage](#13-workflows-stage-and-export) waits on a file an earlier stage's jobs are still queued to produce. With the shell runner each job has already completed (the file exists), so the lookup is unnecessary.
@@ -491,11 +498,9 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 
 | Variable | Purpose |
 |----------|---------|
-| `cgp.log` | cgp log file path (`-l`) |
-| `cgp.loglevel` | Verbosity (`-v`/`-vv`/`-vvv`) |
 | `cgp.ledger` | Ledger path; enables cross-run job tracking |
 | `cgp.run_id` | Run identifier (also `CGP_RUN_ID`) |
-| `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz` |
+| `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific |
 | `cgp.shell` | Default shell for rendered bodies |
 | `cgp.dryrun` | Set by `-dr` / `CGP_DRYRUN` |
@@ -621,9 +626,11 @@ A bare argument is a **goal** (a target to build); with none, cgp builds `@defau
 |--------|---------|
 | `-h` | Help. After a pipeline file, prints that script's help text ([§1.3](#13-comments-and-help-text)). |
 | `-dr` | Dry run — render the scripts instead of executing/submitting. |
-| `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq` (also `cgp.runner`). |
-| `-l PATH` | cgp log file (also `cgp.log`). |
+| `-force` | Rebuild every target in the goal graph, ignoring staleness ([§10.4](#104-restart)). |
+| `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` (also `cgp.runner`). |
 | `-manifest*` | Manifest fan-out ([§14](#14-manifests-and-fan-out)). |
+
+`-r graphviz` writes the dependency graph as Graphviz DOT to stdout (pipe to `dot -Tsvg`). `-r html` writes a **self-contained HTML status report** of the DAG to stdout: each output is colored by status — *done* (on disk), *running*/*queued* (its owning job is active in the scheduler, per the ledger), *failed* (owning job ended without producing it), or *pending* (not built). The report reads the ledger read-only, so it is safe to run while the pipeline is in flight.
 
 ### 15.1 `cgp sub` — one-off submission
 Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The command after `--` is treated as a body (`${input}`/`${output}` substitute):

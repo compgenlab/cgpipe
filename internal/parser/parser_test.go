@@ -271,9 +271,6 @@ func TestParseNewStatements(t *testing.T) {
 	if !ok || sn.Name != "common" {
 		t.Errorf("snippet = %#v", only(t, "snippet common {{\n  set -e\n}}"))
 	}
-	if _, ok := only(t, `log "run.log"`).(*ast.Log); !ok {
-		t.Error("log statement not parsed")
-	}
 	if _, ok := only(t, `eval "x = 1"`).(*ast.EvalStmt); !ok {
 		t.Error("eval not parsed")
 	}
@@ -288,12 +285,11 @@ func TestParseNewStatements(t *testing.T) {
 	}
 }
 
-func TestLogAssignmentVsStatement(t *testing.T) {
+// `log` is an ordinary identifier (no longer a statement keyword), so it can be
+// used as a variable name.
+func TestLogIsAnOrdinaryIdentifier(t *testing.T) {
 	if _, ok := only(t, `log = "x"`).(*ast.Assign); !ok {
 		t.Error(`log = "x" should be an assignment`)
-	}
-	if _, ok := only(t, `log "x"`).(*ast.Log); !ok {
-		t.Error(`log "x" should be a log statement`)
 	}
 }
 

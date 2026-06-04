@@ -84,14 +84,6 @@ func TestEvalStatement(t *testing.T) {
 	}
 }
 
-// §5.2 log sets the cgp log path.
-func TestLogStatement(t *testing.T) {
-	prog, _ := build(t, `log "logs/run.log"`, nil)
-	if prog.Log != "logs/run.log" {
-		t.Errorf("log path = %q", prog.Log)
-	}
-}
-
 // §5.2 dumpvars prints in-scope variables.
 func TestDumpvars(t *testing.T) {
 	mustContain(t, printed(t, "a = 1\nb = \"two\"\ndumpvars"), "a = 1", "b = two")

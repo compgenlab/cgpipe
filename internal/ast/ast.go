@@ -171,11 +171,6 @@ type (
 		Name string
 		Body string
 	}
-	// Log opens/replaces the cgp log file.
-	Log struct {
-		PosV token.Pos
-		Path Expr
-	}
 	// EvalStmt evaluates a string-valued expression as cgp source at run time.
 	EvalStmt struct {
 		PosV token.Pos
@@ -235,7 +230,6 @@ func (s *For) Pos() token.Pos      { return s.PosV }
 func (s *Target) Pos() token.Pos   { return s.PosV }
 func (s *Include) Pos() token.Pos  { return s.PosV }
 func (s *Snippet) Pos() token.Pos  { return s.PosV }
-func (s *Log) Pos() token.Pos      { return s.PosV }
 func (s *EvalStmt) Pos() token.Pos { return s.PosV }
 func (s *Dumpvars) Pos() token.Pos { return s.PosV }
 func (s *Showhelp) Pos() token.Pos { return s.PosV }
@@ -252,7 +246,6 @@ func (*For) stmtNode()      {}
 func (*Target) stmtNode()   {}
 func (*Include) stmtNode()  {}
 func (*Snippet) stmtNode()  {}
-func (*Log) stmtNode()      {}
 func (*EvalStmt) stmtNode() {}
 func (*Dumpvars) stmtNode() {}
 func (*Showhelp) stmtNode() {}

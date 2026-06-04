@@ -41,7 +41,6 @@ type Program struct {
 	Postsubmit  *Target
 	Snippets    map[string]string // name -> raw body (for @name invocation)
 	Help        string            // leading comment block
-	Log         string            // log path set via `log`
 	Stages      []StageDecl       // workflow stage declarations (raw templates)
 	Exports     map[string]Value  // values exposed via `export` (for a calling workflow)
 	Scope       *Scope
@@ -247,13 +246,6 @@ func (ip *interp) execStmt(s ast.Stmt) error {
 		return ip.execInclude(n)
 	case *ast.Snippet:
 		ip.prog.Snippets[n.Name] = n.Body
-		return nil
-	case *ast.Log:
-		v, err := ip.eval(n.Path)
-		if err != nil {
-			return err
-		}
-		ip.prog.Log = stringify(v)
 		return nil
 	case *ast.EvalStmt:
 		v, err := ip.eval(n.Code)
