@@ -1,8 +1,8 @@
-// Package graphviz renders a pipeline's dependency graph as Graphviz DOT instead
-// of running it — `cgp -r graphviz pipeline.cgp` writes the DOT to stdout, ready
-// for `dot -Tsvg`. Nodes are files (a target's outputs and inputs), edges point
-// input → output. Temp outputs (^) are dashed; source files (produced by no
-// target) are notes.
+// Package graphviz turns a pipeline's dependency graph into a structured Graph
+// and renders it as Graphviz DOT — `cgp -r graphviz pipeline.cgp` writes the DOT
+// to stdout, ready for `dot -Tsvg`. The same Graph backs the HTML status report.
+// Nodes are files (a target's outputs and inputs), edges point input → output;
+// temp outputs (^) are dashed, source files (produced by no target) are notes.
 package graphviz
 
 import (
@@ -14,35 +14,40 @@ import (
 	"github.com/compgen-io/cgp/internal/eval"
 )
 
-// Run writes the DOT representation of p's dependency graph to out. goals is
-// accepted for interface symmetry with the other runners but the whole defined
-// graph is emitted.
-func Run(p *eval.Program, goals []string, out io.Writer) error {
-	g := build(p)
-	_, err := io.WriteString(out, g)
-	return err
+// Node is a file in the dependency graph.
+type Node struct {
+	Name   string
+	Temp   bool // a ^ temp output
+	Source bool // produced by no target in the pipeline (a pipeline input)
 }
 
-// build returns the DOT text for the program's concrete dependency graph.
-func build(p *eval.Program) string {
+// Edge points from an input file to an output file that depends on it.
+type Edge struct{ From, To string }
+
+// Graph is the concrete file dependency graph (loops/@{} already expanded).
+type Graph struct {
+	Nodes []Node
+	Edges []Edge
+}
+
+// Build extracts the concrete dependency graph from a program. Reserved targets
+// (@pre/@post/…), opportunistic (no-output) targets, and wildcard rule templates
+// (% in an output) are excluded.
+func Build(p *eval.Program) Graph {
 	produced := map[string]bool{}
 	temp := map[string]bool{}
 	seen := map[string]bool{}
-	var files []string
+	var names []string
 	note := func(f string) {
 		if !seen[f] {
 			seen[f] = true
-			files = append(files, f)
+			names = append(names, f)
 		}
 	}
-
-	type edge struct{ from, to string }
-	var edges []edge
+	var edges []Edge
 	edgeSeen := map[string]bool{}
 
 	for _, t := range p.Targets {
-		// reserved targets (@pre/@post/…) and opportunistic (no outputs) and
-		// wildcard rule templates (% in an output) are not part of the file DAG.
 		if t.Special != "" || len(t.Outputs) == 0 || hasWildcard(t.Outputs) {
 			continue
 		}
@@ -59,35 +64,44 @@ func build(p *eval.Program) string {
 				key := in + "\x00" + o
 				if !edgeSeen[key] {
 					edgeSeen[key] = true
-					edges = append(edges, edge{in, o})
+					edges = append(edges, Edge{in, o})
 				}
 			}
 		}
 	}
+	sort.Strings(names)
+	g := Graph{Edges: edges}
+	for _, n := range names {
+		g.Nodes = append(g.Nodes, Node{Name: n, Temp: temp[n], Source: !produced[n]})
+	}
+	return g
+}
 
-	sort.Strings(files)
+// Run writes the DOT representation of p's dependency graph to out. goals is
+// accepted for interface symmetry with the other runners.
+func Run(p *eval.Program, goals []string, out io.Writer) error {
+	_, err := io.WriteString(out, DOT(Build(p)))
+	return err
+}
 
+// DOT renders a Graph as Graphviz DOT text.
+func DOT(g Graph) string {
 	var b strings.Builder
 	b.WriteString("digraph cgp {\n")
 	b.WriteString("  rankdir=LR;\n")
 	b.WriteString("  node [shape=box, style=rounded];\n")
-	for _, f := range files {
-		var attrs []string
+	for _, n := range g.Nodes {
 		switch {
-		case temp[f]:
-			attrs = append(attrs, "style=\"rounded,dashed\"")
-		case !produced[f]:
-			// a source file: produced by nothing in the pipeline
-			attrs = append(attrs, "shape=note")
-		}
-		if len(attrs) > 0 {
-			fmt.Fprintf(&b, "  %s [%s];\n", quote(f), strings.Join(attrs, ", "))
-		} else {
-			fmt.Fprintf(&b, "  %s;\n", quote(f))
+		case n.Temp:
+			fmt.Fprintf(&b, "  %s [style=\"rounded,dashed\"];\n", quote(n.Name))
+		case n.Source:
+			fmt.Fprintf(&b, "  %s [shape=note];\n", quote(n.Name))
+		default:
+			fmt.Fprintf(&b, "  %s;\n", quote(n.Name))
 		}
 	}
-	for _, e := range edges {
-		fmt.Fprintf(&b, "  %s -> %s;\n", quote(e.from), quote(e.to))
+	for _, e := range g.Edges {
+		fmt.Fprintf(&b, "  %s -> %s;\n", quote(e.From), quote(e.To))
 	}
 	b.WriteString("}\n")
 	return b.String()

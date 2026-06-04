@@ -95,10 +95,29 @@ func Open(path string) (*Ledger, error) {
 	return &Ledger{db: db, lock: lock}, nil
 }
 
-// Close closes the database and releases the lockfile.
+// OpenRead opens the ledger read-only WITHOUT taking the lockfile, so a status
+// reader (e.g. the HTML report) never blocks a running pipeline that holds the
+// write lock. It runs no DDL; if the database doesn't exist yet it errors.
+func OpenRead(path string) (*Ledger, error) {
+	dsn := "file:" + path + "?mode=ro&_pragma=busy_timeout(2000)&nolock=1"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Ledger{db: db}, nil
+}
+
+// Close closes the database and releases the lockfile (if held).
 func (l *Ledger) Close() error {
 	err := l.db.Close()
-	l.lock.release()
+	if l.lock != nil {
+		l.lock.release()
+	}
 	return err
 }
 

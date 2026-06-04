@@ -231,6 +231,42 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
+// The slurm scheduler exposes a normalized live State for the status report,
+// parsed from `scontrol show job` JobState.
+func TestSlurmState(t *testing.T) {
+	resp := t.TempDir()
+	installMocks(t, "slurm")
+	// canned scontrol responses keyed by job id (the mock serves these when
+	// CGP_TEST_RESPONSES is set)
+	t.Setenv("CGP_TEST_RESPONSES", resp)
+	if err := os.MkdirAll(filepath.Join(resp, "scontrol"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(id, body string) {
+		if err := os.WriteFile(filepath.Join(resp, "scontrol", id), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("1", "JobState=PENDING Reason=Resources")
+	write("2", "JobState=RUNNING Reason=None")
+	write("3", "JobState=COMPLETED Reason=None")
+	write("4", "JobState=FAILED Reason=NonZeroExitCode")
+	// id 5 has no response file ⇒ scontrol exits non-zero ⇒ unknown ("")
+
+	sch, _ := sched.For("slurm")
+	if sch.State == nil {
+		t.Fatal("slurm scheduler has no State func")
+	}
+	cases := []struct{ id, want string }{
+		{"1", "queued"}, {"2", "running"}, {"3", "done"}, {"4", "failed"}, {"5", ""},
+	}
+	for _, c := range cases {
+		if got := sch.State(c.id); got != c.want {
+			t.Errorf("State(%s) = %q, want %q", c.id, got, c.want)
+		}
+	}
+}
+
 // §10.5 Cross-run reuse: with a ledger, a second run that finds the output still
 // owned by an active job reuses it instead of resubmitting.
 func TestLedgerReuseAcrossRuns(t *testing.T) {

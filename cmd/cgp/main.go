@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,6 +23,7 @@ import (
 	"github.com/compgen-io/cgp/internal/parser"
 	"github.com/compgen-io/cgp/internal/runner"
 	"github.com/compgen-io/cgp/internal/runner/graphviz"
+	"github.com/compgen-io/cgp/internal/runner/report"
 	"github.com/compgen-io/cgp/internal/runner/sched"
 	"github.com/compgen-io/cgp/internal/runner/shell"
 )
@@ -79,7 +81,8 @@ options (single hyphen):
     -h           show this help
     -dr          dry run: render scripts instead of executing/submitting
     -force       rebuild every target in the goal graph, ignoring staleness
-    -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz
+    -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz, html
+                 (graphviz=DOT to stdout; html=status report reading the ledger)
                  (also set via cgp.runner in the script/config)
     -manifest FILE        run once per CGP manifest file (glob ok); also
     -manifest-tsv FILE    -manifest-csv / -manifest-json: run once per row,
@@ -286,12 +289,72 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 		}
 		return 0
 	}
+	if name == "html" {
+		return runReport(prog, file, os.Stdout)
+	}
 	sch, ok := sched.For(name)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, graphviz, %s)\n", name, strings.Join(sched.Names(), ", "))
+		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, graphviz, html, %s)\n", name, strings.Join(sched.Names(), ", "))
 		return 2
 	}
 	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Force: force, Pipeline: file, Cache: cache}); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// runReport renders an HTML status report of the pipeline DAG to out. Node
+// status is resolved from disk existence, the ledger's owning job, and the
+// (script-configured) scheduler's live state.
+func runReport(prog *eval.Program, file string, out io.Writer) int {
+	var sch *sched.Scheduler
+	if v, ok := prog.Get("cgp.runner"); ok {
+		if s, found := sched.For(eval.Stringify(v)); found {
+			sch = &s
+		}
+	}
+	var lg *ledger.Ledger
+	if v, ok := prog.Get("cgp.ledger"); ok && eval.Stringify(v) != "" {
+		if l, err := ledger.OpenRead(eval.Stringify(v)); err == nil {
+			lg = l
+			defer lg.Close()
+		}
+	}
+
+	statusOf := func(name string) report.State {
+		if _, err := os.Stat(name); err == nil {
+			return report.Done // present on disk ⇒ produced
+		}
+		if lg == nil {
+			return report.Pending
+		}
+		owner, ok, err := lg.OwnerOf(name)
+		if err != nil || !ok || owner == "" {
+			return report.Pending
+		}
+		if sch != nil && sch.State != nil {
+			switch sch.State(owner) {
+			case "queued":
+				return report.Queued
+			case "running":
+				return report.Running
+			case "done":
+				return report.Done
+			case "failed":
+				return report.Failed
+			}
+		}
+		if sch != nil && sch.IsActive != nil {
+			if sch.IsActive(owner) {
+				return report.Running
+			}
+			return report.Failed // owning job gone, output missing
+		}
+		return report.Running // owner exists but no scheduler to probe
+	}
+
+	if err := report.Run(graphviz.Build(prog), statusOf, file, out); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}

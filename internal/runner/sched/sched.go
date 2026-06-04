@@ -30,6 +30,7 @@ type Scheduler struct {
 	PrepareMem func(string) string   // optional mem normalization
 	ReleaseCmd func(string) []string // command to release a held job
 	IsActive   func(string) bool     // is a job id still queued/running? (for ledger reuse)
+	State      func(string) string   // normalized live state for reports: queued|running|done|failed|"" (unknown); optional
 }
 
 var schedulers = map[string]Scheduler{
@@ -39,6 +40,7 @@ var schedulers = map[string]Scheduler{
 		DepSep: ":", MailType: "END,FAIL", PrepareMem: slurmMem,
 		ReleaseCmd: func(id string) []string { return []string{"scontrol", "release", id} },
 		IsActive:   slurmActive,
+		State:      slurmState,
 	},
 	"sge": {
 		Name: "sge", Template: sgeTmpl,
@@ -85,6 +87,32 @@ func slurmActive(id string) bool {
 		return false
 	}
 	return reason != "DependencyNeverSatisfied"
+}
+
+// slurmState maps a SLURM JobState (from `scontrol show job`) to the report
+// vocabulary; "" means unknown (e.g. the job has aged out of scontrol).
+func slurmState(id string) string {
+	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	if err != nil {
+		return ""
+	}
+	state := ""
+	for _, tok := range strings.Fields(string(out)) {
+		if kv := strings.SplitN(tok, "=", 2); len(kv) == 2 && kv[0] == "JobState" {
+			state = kv[1]
+		}
+	}
+	switch state {
+	case "PENDING":
+		return "queued"
+	case "RUNNING", "CONFIGURING", "COMPLETING", "RESIZING":
+		return "running"
+	case "COMPLETED":
+		return "done"
+	case "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY", "BOOT_FAIL", "DEADLINE", "PREEMPTED":
+		return "failed"
+	}
+	return ""
 }
 
 // For returns the scheduler with the given name.
