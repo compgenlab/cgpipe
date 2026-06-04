@@ -106,6 +106,29 @@ func TestComments(t *testing.T) {
 	})
 }
 
+// A newline inside ( ) or [ ] is insignificant (implicit line continuation), so
+// an expression may span lines; newlines inside { } still separate statements.
+func TestImplicitLineContinuation(t *testing.T) {
+	// a list literal broken across lines lexes as one statement (no NEWLINE inside)
+	eq(t, kinds("x = [\n  1,\n  2,\n]\n"), []token.Kind{
+		token.IDENT, token.ASSIGN,
+		token.LBRACK, token.INT, token.COMMA, token.INT, token.COMMA, token.RBRACK,
+		token.NEWLINE,
+	})
+	// a parenthesized expression broken across lines
+	eq(t, kinds("y = (\n  2 +\n  3\n)\n"), []token.Kind{
+		token.IDENT, token.ASSIGN,
+		token.LPAREN, token.INT, token.PLUS, token.INT, token.RPAREN,
+		token.NEWLINE,
+	})
+	// braces are NOT continued: statements inside { } stay newline-separated
+	eq(t, kinds("if c {\n  x = 1\n}\n"), []token.Kind{
+		token.IF, token.IDENT, token.LBRACE, token.NEWLINE,
+		token.IDENT, token.ASSIGN, token.INT, token.NEWLINE,
+		token.RBRACE, token.NEWLINE,
+	})
+}
+
 func TestControlFlowBraces(t *testing.T) {
 	eq(t, kinds(`if !bam { exit }`), []token.Kind{
 		token.IF, token.NOT, token.IDENT, token.LBRACE, token.IDENT, token.RBRACE,

@@ -54,6 +54,23 @@ func TestIndexAndSlice(t *testing.T) {
 	}
 }
 
+// §4 An expression may span lines inside ( ) or [ ] (implicit line continuation).
+func TestMultiLineExpression(t *testing.T) {
+	src := `xs = [
+    "a",
+    "b",
+    "c",
+]
+total = (
+    1 +
+    2
+)
+print xs.length(), total`
+	if got := printed(t, src); got != "3 3\n" {
+		t.Errorf("multi-line expressions: out = %q, want \"3 3\"", got)
+	}
+}
+
 // §4.2 Negative slice bounds and nested indexing.
 func TestSliceNegativeAndNestedIndex(t *testing.T) {
 	if got := printed(t, "x = [1, 2, 3, 4]\nprint x[-2:]"); got != "3 4\n" {

@@ -103,6 +103,23 @@ func TestPercentForRange(t *testing.T) {
 	}
 }
 
+// §6.4 A run of consecutive % lines is parsed together, so a single cgp
+// statement may span several % lines (e.g. a list literal broken across lines).
+func TestPercentMultiLineStatement(t *testing.T) {
+	got := render(t, `out: in {{
+% nums = [10,
+%         20,
+%         30]
+% for n in nums {
+    echo ${n}
+% }
+}}`)
+	want := []string{"echo 10", "echo 20", "echo 30"}
+	if lines := shellLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("multi-line %% statement: lines = %v, want %v", lines, want)
+	}
+}
+
 // §6.2 The directive block is ordinary cgp code: control flow there sets job
 // settings conditionally, which the shell can then read.
 func TestDirectiveBlockControlFlow(t *testing.T) {

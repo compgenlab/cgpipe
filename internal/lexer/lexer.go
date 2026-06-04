@@ -23,6 +23,7 @@ type Lexer struct {
 	inBody       bool      // next Next() should capture a shell body
 	pendingRBody bool      // next Next() should emit the RBODY that closed a body
 	rbodyPos     token.Pos // position recorded for that RBODY
+	parenDepth   int       // open ( and [ nesting; a NEWLINE inside is insignificant
 }
 
 // New returns a Lexer over src; file is used only for token positions.
@@ -85,6 +86,12 @@ func (l *Lexer) lexCode() token.Token {
 	switch {
 	case c == '\n':
 		l.advance()
+		// Implicit line continuation: a newline inside ( ) or [ ] is insignificant,
+		// so an expression (call args, a list literal) may span lines. Inside { }
+		// newlines still separate statements, so brace depth is not counted here.
+		if l.parenDepth > 0 {
+			return l.lexCode()
+		}
 		return l.tok(token.NEWLINE, "", start)
 	case isIdentStart(c):
 		return l.lexIdent(start)
@@ -267,15 +274,23 @@ func (l *Lexer) lexOperator(start token.Pos) token.Token {
 		return l.tok(token.CARET, "", start)
 	case '(':
 		l.advance()
+		l.parenDepth++
 		return l.tok(token.LPAREN, "", start)
 	case ')':
 		l.advance()
+		if l.parenDepth > 0 {
+			l.parenDepth--
+		}
 		return l.tok(token.RPAREN, "", start)
 	case '[':
 		l.advance()
+		l.parenDepth++
 		return l.tok(token.LBRACK, "", start)
 	case ']':
 		l.advance()
+		if l.parenDepth > 0 {
+			l.parenDepth--
+		}
 		return l.tok(token.RBRACK, "", start)
 	case '{':
 		l.advance()

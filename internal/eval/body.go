@@ -364,9 +364,20 @@ func parseBlockNodes(lines []string, idx *int) (nodes []bodyNode, stop string, e
 				break
 			}
 		default:
-			// a bare cgp statement on a % line (e.g. an assignment)
-			nodes = append(nodes, stmtNode{ctrl})
-			*idx++
+			// A run of consecutive cgp statement lines (not block-control: for / if
+			// / closers). Collect the whole run and parse it together, so a single
+			// statement may span several % lines — e.g. a list literal broken across
+			// lines — and several statements may share the run.
+			var src []string
+			for *idx < len(lines) && isCtrlLine(lines[*idx]) {
+				c := ctrlContent(lines[*idx])
+				if strings.HasPrefix(c, "}") || strings.HasPrefix(c, "for ") || strings.HasPrefix(c, "if ") {
+					break
+				}
+				src = append(src, c)
+				*idx++
+			}
+			nodes = append(nodes, stmtNode{strings.Join(src, "\n")})
 		}
 	}
 	return nodes, "", nil
