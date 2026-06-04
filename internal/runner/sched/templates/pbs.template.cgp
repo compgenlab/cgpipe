@@ -1,0 +1,55 @@
+#!${shell}
+#PBS -N ${name}
+% if hold {
+#PBS -h
+% }
+% if env {
+#PBS -V
+% }
+% resources = []
+% nodespec = "nodes=1:ppn=" + procs
+% if gpu {
+% nodespec = nodespec + ":gpus=" + gpu
+% }
+% resources += nodespec
+% if walltime {
+% resources += "walltime=" + walltime
+% }
+% if mem {
+% resources += "mem=" + mem
+% }
+% if qos {
+% resources += "qos=" + qos
+% }
+#PBS -l ${",".join(resources)}
+% if depids {
+#PBS -W depend=afterok:${depids}
+% }
+% if queue {
+#PBS -q ${queue}
+% }
+% if account {
+#PBS -A ${account}
+% }
+% if mail {
+#PBS -m ${mailtype}
+#PBS -M ${mail}
+% }
+% if stdout {
+#PBS -o ${stdout}
+% }
+% if stderr {
+#PBS -e ${stderr}
+% }
+% for c in custom {
+#PBS ${c}
+% }
+#
+set -eo pipefail
+JOB_ID=$PBS_JOBID
+
+% for line in setup {
+${line}
+% }
+
+${_body}

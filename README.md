@@ -7,10 +7,25 @@ DSL, a persistent job ledger) while shipping as a single static binary with no
 JVM, fast startup, and an SQLite-backed ledger designed for fast restarts at
 scale.
 
-> **Status: early development (Phase 0).** The language is specified in
-> [`docs/language-spec.md`](docs/language-spec.md); the binaries here are a
-> compiling skeleton — pipeline evaluation is not implemented yet. The JVM
-> version remains available and supported at `compgen-io/cgpipe-jvm`.
+> **Status: early development.** The language is specified in
+> [`docs/language-spec.md`](docs/language-spec.md). `cgp` runs pipelines with the
+> local shell or a batch scheduler — the full language, dependency resolution
+> (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
+> the optional SQLite ledger (cross-run reuse of still-queued jobs) are
+> implemented, plus `cgp sub` for one-off job submission, config-file loading,
+> container/GPU wrapping, `-manifest*` fan-out (run a pipeline once per manifest
+> row/file), and multi-pipeline `stage` composition (chain standalone pipelines
+> via `export` / `${stage.x}`). `cgp convert` migrates a legacy cgpipe script to
+> the cgp language. The JVM version remains available and supported at
+> `compgen-io/cgpipe-jvm`.
+
+```sh
+cgp pipeline.cgp                 # build @default (or the first target)
+cgp pipeline.cgp out.bam         # build a specific target
+cgp pipeline.cgp -sample p42     # set a pipeline variable
+cgp pipeline.cgp -dr             # dry run: print the rendered shell scripts
+cgp convert old.cgp -o new.cgp   # migrate a legacy cgpipe script
+```
 
 ## Build
 
@@ -18,7 +33,6 @@ scale.
 go build ./...
 go test ./...
 go build -o bin/cgp ./cmd/cgp
-go build -o bin/cgsub ./cmd/cgsub
 ```
 
 Cross-compilation is a plain `GOOS`/`GOARCH` build (no CGO):
@@ -31,8 +45,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 
 | Path | Role |
 |------|------|
-| `cmd/cgp/`        | the `cgp` binary (run a pipeline/workflow) |
-| `cmd/cgsub/`      | the `cgsub` binary (submit a single one-off job) |
+| `cmd/cgp/`        | the `cgp` binary (run a pipeline; `cgp sub` submits one-off jobs) |
 | `internal/token/` | lexical tokens + source positions |
 | `internal/lexer/` | source → tokens (incl. the `{{ }}` shell-body capture mode) |
 | `internal/ast/`   | AST node types |
@@ -41,6 +54,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 | `internal/template/` | renders captured shell bodies (`${…}`, `%`-control lines) |
 | `internal/runner/` | submit a graph to a backend; `runner/shell` is the default |
 | `internal/ledger/` | optional SQLite job ledger (output → owning job) |
+| `internal/convert/` | best-effort migrator from legacy cgpipe scripts |
 | `docs/`           | language specification and (later) the docs site |
 
 ## License

@@ -1,10 +1,6 @@
-# cgp v1 — language specification
+# cgp — language specification
 
-> **Status:** Phase 0 draft. This is the reference the Phase 1 implementation is built against. It restates the cgpipe (JVM) language as it behaves today, with the deliberate refinements settled for the Go rewrite called out inline and collected under [Deliberate differences from JVM cgpipe](#deliberate-differences-from-jvm-cgpipe).
->
-> `cgp` is the Go rewrite of cgpipe. The historical JVM implementation lives at `compgen-io/cgpipe-jvm`. Where this document says "cgpipe," it means the JVM tool's established behavior; "cgp" means the new tool specified here.
-
-`cgp` is a small interpreted language whose purpose is to generate and submit job scripts. A pipeline file is read top to bottom in *global* context — every uncommented line is cgp code. Target definitions open a separate *body* context (raw shell with interpolation). Files use the `.cgp` extension.
+`cgp` is a small interpreted language for generating and running job scripts. A pipeline file is read top to bottom in *global* context — every uncommented line is cgp code. Target definitions open a separate *body* context (raw shell with interpolation). Files use the `.cgp` extension.
 
 ---
 
@@ -37,8 +33,8 @@ The first blank or non-comment line ends the help block.
 ### 1.4 Tokens
 Identifiers, numeric literals, string literals, operators, and the structural tokens `{`, `}`, `{{`, `}}`, `:`, `--`, `(`, `)`, `[`, `]`, `,`, `..`. Whitespace separates tokens and is otherwise insignificant except for (a) leading comment runs (help text) and (b) leading whitespace inside shell bodies, which is stripped on render.
 
-### 1.5 The two block delimiters — the lexer's mode flip
-This is the central lexical rule of cgp and the biggest change from cgpipe:
+### 1.5 The two block delimiters
+This is the central lexical rule of cgp:
 
 - **`{ ... }`** delimits a block of **cgp code** (`if`, `for`). The lexer is in token mode; braces are matched by counting.
 - **`{{ ... }}`** delimits a **shell body** (target bodies, `snippet`, and the special targets). The lexer switches to **capture mode**: the body is read as raw text and is *not* tokenized as cgp. A shell body is terminated by a **lone `}}` on its own line** (after leading-whitespace strip).
@@ -82,9 +78,9 @@ Set with `=`. No declarations; the only scopes are global and the per-target bod
     method  ?= "fast"
 
 ### 3.1 Command-line variables
-`-name value` on the command line is equivalent to `name = "value"` set before the script runs:
+A double-hyphen `--name value` on the command line sets the script variable `name` before the script runs. (Single-hyphen arguments like `-dr` are cgp's own options; double-hyphen arguments are always script variables.)
 
-    $ cgp pipeline.cgp -sample patient_42 -threads 16
+    $ cgp pipeline.cgp --sample patient_42 --threads 16
 
 Because CLI values are applied first, `?=` defaults do not override them.
 
@@ -131,7 +127,7 @@ Escaping: prefix `$` or `@` with `\` for a literal. If the string will be evalua
 ## 5. Statements and control flow
 
 ### 5.1 Control flow uses brace blocks
-`endif`/`done` are removed; `{ }` delimits the block.
+`{ }` delimits the block.
 
     if count > 100 {
         print "many"
@@ -154,6 +150,7 @@ Loop variables remain set after the loop (no separate scope).
 | `print expr [, expr …]` | Write to stdout. **Inside a body**, appends to the rendered script instead. |
 | `log filename`  | Open/replace the cgp log file (also `-l`). |
 | `include "path"` | Inline another `.cgp` file (global context). Resolved relative to the current file, then the cwd. |
+| `export name = expr` | Expose a value to a calling workflow as `${stage.name}` ([§13](#13-workflows-stage-and-export)). A no-op when the pipeline runs standalone. |
 | `eval expr`     | Evaluate a string-valued expr as cgp source at run time. |
 | `unset name`    | Remove a variable. |
 | `exit [code]`   | Stop the pipeline (`exit` ⇒ `exit 0`). |
@@ -161,7 +158,7 @@ Loop variables remain set after the loop (no separate scope).
 | `showhelp`      | Print the help-text block (same as `-h`). |
 | `sleep seconds` | Pause. Rarely needed. |
 
-`include` runs in global context — the included file's statements and targets become part of the current pipeline. It's the primary composition mechanism for shared defaults and target libraries. (cgpipe's body-only `import` is replaced by `snippet`/`@name` — see [§6.6](#66-snippets).)
+`include` runs in global context — the included file's statements and targets become part of the current pipeline. It's the primary composition mechanism for shared defaults and target libraries. (For sharing *body* fragments, use `snippet`/`@name` — see [§6.6](#66-snippets).)
 
 ---
 
@@ -211,7 +208,7 @@ A target body may begin with a **directive block** that sets per-job settings, s
       }}
 
 ### 6.3 Inline conditionals
-`${if cond; true_value; false_value}` substitutes one fragment or the other; the else-clause may be omitted (`${if cond; true_value}` ⇒ empty when false). This replaces cgpipe's inline `<% if %>…<% endif %>`:
+`${if cond; true_value; false_value}` substitutes one fragment or the other; the else-clause may be omitted (`${if cond; true_value}` ⇒ empty when false):
 
     bwa mem -t ${procs} ${if rg; "-R " + rg} ${ref} ${reads} > ${output}
 
@@ -230,13 +227,13 @@ For control flow that must wrap *shell* lines (loops/conditionals that emit shel
         fi
     }}
 
-The non-`%` lines between `% for … {` and `% }` are shell, emitted once per loop iteration with `${…}` resolved each time. This replaces cgpipe's `<% for %>…<% done %>`. (`%` as a control-line marker is distinct from `%` wildcards, which appear only in target declaration lines — see [§7.3](#73-wildcards).)
+The non-`%` lines between `% for … {` and `% }` are shell, emitted once per loop iteration with `${…}` resolved each time. (`%` as a control-line marker is distinct from `%` wildcards, which appear only in target declaration lines — see [§7.3](#73-wildcards).)
 
 ### 6.5 Scoping
 A target captures the surrounding global context at definition time, like a closure. The body may *read* any variable in scope at definition; assignments inside the directive block are target-local and do not leak to the global scope. The loop variable in a body-defining `for` is captured per target.
 
 ### 6.6 Snippets
-Shared body fragments are defined with `snippet name {{ }}` and invoked with `@name` inside a body (replacing cgpipe's `name::` definition and `<% import name %>`):
+Shared body fragments are defined with `snippet name {{ }}` and invoked with `@name` inside a body:
 
     snippet common {{
         set -euo pipefail
@@ -252,16 +249,16 @@ Shared body fragments are defined with `snippet name {{ }}` and invoked with `@n
 
 ## 7. Target declaration features
 
-### 7.1 Make-style substitutions, modernized
-cgpipe's terse `$<`/`$>`/`$%` are replaced by named forms (old forms accepted as deprecated aliases during migration):
+### 7.1 Build-variable substitutions
+Inside a body, these stand for the target's inputs and outputs:
 
-| cgpipe | cgp | Meaning |
-|--------|-----|---------|
-| `$<`  | `${input}`     | All inputs, space-joined |
-| `$>`  | `${output}`    | All outputs, space-joined |
-| `$%`  | `${stem}`      | Wildcard stem |
-| `$<1` | `${input[0]}`  | First input (0-based index) |
-| `$>1` | `${output[0]}` | First output |
+| Form | Meaning |
+|------|---------|
+| `${input}`     | All inputs, space-joined |
+| `${output}`    | All outputs, space-joined |
+| `${stem}`      | Wildcard stem |
+| `${input[0]}`  | First input (0-based index) |
+| `${output[0]}` | First output |
 
 There is no singular/plural distinction: `${input}` is always "the inputs as a value" (joins with spaces when substituted into a string); index with `[N]` for one element. `${input.length()}`, `${input.join(",")}`, and shell `for f in ${input}` all follow naturally.
 
@@ -326,7 +323,7 @@ Requesting `all` builds the three goals. (An empty `{{ }}` is also grammatically
 
 cgp's built-in/virtual targets all share one sigil. **The rule: a target name beginning with `@` is a reserved cgp target and never names a file on disk.** This is what lets reserved names coexist with real filenames — a pipeline can still produce a file literally called `pre` or `default`; only `@pre` / `@default` are reserved. (`@` here is in *target-header* position; it is distinct from `@{…}` list expansion and from `@name` snippet invocation inside a `{{ }}` body — see [§6.6](#66-snippets).)
 
-cgpipe's `__pre__`/`__post__`/etc. become these `@`-prefixed targets:
+The reserved targets:
 
 | Target | When it runs |
 |--------|--------------|
@@ -354,9 +351,9 @@ cgpipe's `__pre__`/`__post__`/etc. become these `@`-prefixed targets:
 
     @default: final.vcf report.html
 
-- **No phony file.** Because `@default` can never be a filename, nothing is stat-ed or expected on disk — strictly better than cgpipe's "first output, normally a never-created `.PHONY`" convention.
+- **No phony file.** Because `@default` can never be a filename, nothing is stat-ed or expected on disk.
 - **Forces its goals to build**, exactly as if they were requested on the command line (unlike an opportunistic `: inputs` job, which never forces its inputs).
-- **Fallback:** if no `@default` is declared, cgp builds the **first defined target** (Make/cgpipe compatibility), so trivial pipelines need nothing.
+- **Fallback:** if no `@default` is declared, cgp builds the **first defined target**, so trivial pipelines need nothing.
 - **CLI overrides:** `cgp p.cgp` builds the `@default` goals; `cgp p.cgp final.vcf` builds the named target(s) instead.
 - **Accumulates:** multiple `@default:` lines (across the file, `include`s, or dynamic generation) add to the goal set, so `@default: @{all_outputs}` after a loop works.
 
@@ -384,7 +381,7 @@ Dot syntax, on variables, literals, or chained results. Argument counts are chec
 | `abspath()` | — | string | Resolved absolute path |
 | `exists()` / `isfile()` / `isdir()` | — | bool | Filesystem test at evaluation time |
 
-> **Refinement:** `sub` uses Go's `regexp` (RE2) syntax rather than Java regex. To strip a literal `.bam`: `name.sub("\\.bam$","")`. The migration tool flags regex patterns that differ between the two engines.
+`sub` uses Go's `regexp` (RE2) syntax. To strip a literal `.bam`: `name.sub("\\.bam$","")`.
 
 ### 9.3 list
 
@@ -406,7 +403,7 @@ Only `type()`. No implicit coercion; an unknown method throws `Method not found`
 
 ## 10. The ledger (job tracking)
 
-> The ledger is cgpipe's "joblog," renamed and re-grounded. It is **optional** — a pipeline runs correctly without one.
+> The ledger is **optional** — a pipeline runs correctly without one.
 
 ### 10.1 Purpose and scope
 The ledger is a record of **which job owns (last produced) which output file**, plus that job's inputs and dependencies. Its core query is "who owns output path `X`?" It enables cross-run composition: cgp won't resubmit a job whose output is already pending in the scheduler, even across separate invocations, and it wires new downstream work as a scheduler dependency (`afterok:<id>`) of the in-flight job.
@@ -462,12 +459,18 @@ SQLite (`modernc.org/sqlite`, pure Go), single-writer per ledger. Schema (v1):
 ### 10.4 Restart
 Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. A `--force` flag rebuilds regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
 
+### 10.5 Cross-run and cross-stage reuse
+When a ledger is configured and a scheduler runner is in use, an input that has **no in-run producer** and **isn't on disk yet** is looked up in the ledger: if its owning job is still active (per `squeue`/`qstat`), the new work is wired as a scheduler dependency (`afterok:<id>`) of that in-flight job instead of being treated as a "no rule to make" error or duplicated. This is what makes re-running a pipeline before it has finished safe, and it is also how a later workflow [stage](#13-workflows-stage-and-export) waits on a file an earlier stage's jobs are still queued to produce. With the shell runner each job has already completed (the file exists), so the lookup is unnecessary.
+
+### 10.6 Lockfile
+The ledger SQLite database is opened with `nolock=1` and guarded by a separate NFS-safe lockfile (`O_CREAT|O_EXCL`) so it is safe on network filesystems without a client/server process. A stale lock left by a dead process on the same host is stolen automatically; otherwise cgp waits briefly and then errors. `cgp ledger unlock <db>` removes a lock by hand.
+
 ---
 
 ## 11. Configuration
 
 ### 11.1 Namespace and locations
-The configuration namespace is `cgp.*` (was `cgpipe.*`). User-scoped state lives under a single root, `~/.cgp/`:
+The configuration namespace is `cgp.*`. User-scoped state lives under a single root, `~/.cgp/`:
 
 | Path | Purpose |
 |------|---------|
@@ -481,7 +484,7 @@ The configuration namespace is `cgp.*` (was `cgpipe.*`). User-scoped state lives
 2. System config (`/etc/cgp/config`)
 3. User config (`~/.cgp/config`)
 4. Environment (`CGP_ENV` evaluated as cgp; `CGP_RUN_ID`, `CGP_DRYRUN`)
-5. Command-line `-name value` / `-t name=value`
+5. Command-line `--name value`
 6. The pipeline script (`=` always wins; `?=` respects upstream)
 
 ### 11.3 Selected `cgp.*` settings
@@ -499,14 +502,145 @@ The configuration namespace is `cgp.*` (was `cgpipe.*`). User-scoped state lives
 | `cgp.container.engine` | `docker`, `singularity`/`apptainer`; unset disables container wrapping |
 | `cgp.container.*` | Bind mounts, env passthrough, engine opts, etc. |
 
-> **Refinements vs cgpipe config defaults:** `global_hold` (hold all jobs until the pipeline submits cleanly) and host-env capture (cgpipe's `job.env`) are **not** defaults in cgp — they are opt-in via `~/.cgp/config`. This keeps the core small; belt-and-suspenders behavior is a choice.
+`global_hold` (hold all jobs until the pipeline submits cleanly) and host-environment capture are **not** defaults — enable them in `~/.cgp/config` if you want them. This keeps the core small; belt-and-suspenders behavior is opt-in.
 
 ### 11.4 Per-job directives (the `job.*` surface, prefix dropped in bodies)
 Set globally as `job.<name>` for defaults, or as a bare `<name>` directive inside a target body's directive block. Common: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`, `container`, `gpu`, plus the assembly flags `shexec`, `nopre`, `nopost`. (Full runner/job table belongs in a future Running Jobs chapter.)
 
 ---
 
-## 12. Worked example (cgp v1)
+## 12. Containers and GPUs
+
+A target's body can be wrapped to run inside a container without changing the body itself. Wrapping is enabled when **both** a container engine and a per-target image are set:
+
+- `cgp.container.engine` — `docker`, `singularity`, or `apptainer` (set in config or the script). Unset disables all wrapping.
+- `container = "<image>"` — a per-target directive naming the image. A target with no `container` runs unwrapped even when an engine is configured.
+
+      aligned.bam: reads.fq ref.fa {{
+          container = "biocontainers/bwa:0.7.17"
+          mem       = "16G"
+          --
+          bwa mem ${ref} ${reads} > ${output}
+      }}
+
+When wrapping is active, cgp writes the rendered body to a temp file and executes it inside the image, bind-mounting the input and output paths automatically, setting the working directory, and (for Docker) mapping the host user. Additional settings, available globally as `cgp.container.<name>` and/or per target as `container.<name>`:
+
+| Setting | Purpose |
+|---------|---------|
+| `container.bind` / `cgp.container.bind` | Extra bind mounts (repeatable / list) |
+| `container.env` / `cgp.container.env` | Environment variables to pass through |
+| `container.opts` (or `cgp.container.docker_opts` / `cgp.container.singularity_opts`) | Raw extra flags for the engine |
+| `container.body_dir` / `cgp.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
+| `container.shell` / `cgp.container.shell` | Shell used to run the body inside the image (default `sh`) |
+| `cgp.container.user_map` | Docker only: add `-u $(id -u):$(id -g)` (default on) |
+
+### 12.1 GPUs
+`gpu` requests GPUs for a target and drives both layers at once:
+
+    train.model: data.tfrecord {{
+        gpu = 2
+        --
+        train.py --data ${input} --out ${output}
+    }}
+
+- `gpu = true` ⇒ one GPU; `gpu = N` ⇒ N GPUs; `gpu = false`/unset ⇒ none. A global default is `cgp.gpu`.
+- On a scheduler it emits the resource request (e.g. SLURM `--gres=gpu:N`).
+- In a container it adds the engine's GPU flag (Docker `--gpus`, Singularity/Apptainer `--nv`).
+
+---
+
+## 13. Workflows: `stage` and `export`
+
+A **workflow** chains several standalone pipelines into one command, threading values between them. A `.cgp` file is a workflow if it contains `stage` statements; otherwise it is a pipeline. Each stage is itself an ordinary, independently runnable pipeline.
+
+    # wgs.cgp — a workflow
+    if !fastqs { print "ERROR: --fastqs required"; exit 1 }
+    if !ref    { print "ERROR: --ref required";    exit 1 }
+
+    stage align  align.cgp  --fastq ${fastqs} --ref ${ref}
+    stage post   post.cgp   --bam ${align.bam}
+    stage call   call.cgp   --bam ${post.cleaned_bam} --ref ${ref}
+
+### 13.1 Declaring stages
+`stage NAME FILE ARGS...` declares one stage. `ARGS` use the same `--name value` (or `--name=value`) convention as command-line variables ([§3.1](#31-command-line-variables)) — they are the variables the stage pipeline receives. `NAME`, `FILE`, and each arg are interpolated against the workflow's variables before the stage runs.
+
+Stages run in **declaration order**. Each stage's args may reference earlier stages' exports.
+
+### 13.2 Exposing values with `export`
+A stage pipeline exposes values to the workflow with a top-level `export name = expr` ([§5.2](#52-statement-keywords)):
+
+    # align.cgp — also runnable on its own
+    aligned.bam: ${fastq} ${ref} {{
+        bwa mem ${ref} ${fastq} > ${output}
+    }}
+    @default: aligned.bam
+    export bam = "aligned.bam"
+
+When `align.cgp` runs standalone, `export` does nothing. When it runs as the `align` stage, its exported `bam` becomes `${align.bam}` in the workflow, available to later stages. `export` is therefore non-invasive: adding the lines does not change standalone behavior.
+
+### 13.3 Cross-stage dependencies
+With the shell runner each stage completes before the next begins, so a later stage simply reads the earlier stage's files. With a scheduler runner an earlier stage's jobs may still be queued when a later stage submits; the cross-stage `afterok` wiring is resolved through the ledger ([§10.5](#105-cross-run-and-cross-stage-reuse)), so a scheduler workflow wants `cgp.ledger` configured.
+
+### 13.4 Export validation
+References to stage exports are checked two ways:
+
+- **Statically (best-effort):** at startup cgp scans each stage file for every *possible* `export` name (including names exported only inside `if`/`for` branches). A `${NAME.X}` reference to a declared stage `NAME` that exports no `X` anywhere is a typo and fails fast.
+- **At runtime (authoritative):** if an export was conditional and did not fire this run, the unset `${NAME.X}` reference errors when the stage's args are interpolated, naming the missing export.
+
+---
+
+## 14. Manifests and fan-out
+
+A single pipeline (or workflow) can be run once per row of a **manifest**, with the row's columns supplied as variables. The format is always explicit — cgp never guesses from the extension:
+
+| Flag | Manifest format |
+|------|-----------------|
+| `-manifest FILE` (alias `-manifest-cgp`) | A shell glob of `.cgp` manifest files; each matched file's variables become one run |
+| `-manifest-tsv FILE` | Tab-separated; the header row names the columns |
+| `-manifest-csv FILE` | Comma-separated; the header row names the columns |
+| `-manifest-json FILE` | A JSON array of objects; each object's keys become variables |
+
+    $ cgp align.cgp -manifest-tsv samples.tsv          # one run per data row
+    $ cgp wgs.cgp   -manifest /data/P*/manifest.cgp    # one workflow run per patient file
+
+Each row runs the whole pipeline (or, for a workflow, all of its stages). Explicit command-line `--name value` variables override columns of the same name. A single **stat cache is shared across all runs**, so an invariant input like a shared `ref.fa` is `stat`-ed once rather than once per row. (Each row's pipeline graph is re-evaluated per row — per-row variables legitimately change which targets and branches exist — but the *parse* of the file happens once.)
+
+---
+
+## 15. Command-line interface
+
+    cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
+    cgp sub [options] -- <command ...>
+    cgp ledger {vacuum|unlock} <db>
+    cgp convert <old.cgp> [-o out.cgp]
+    cgp version
+
+A bare argument is a **goal** (a target to build); with none, cgp builds `@default` (or the first target). `--name value` sets a script variable; single-hyphen flags are cgp's own options.
+
+| Option | Meaning |
+|--------|---------|
+| `-h` | Help. After a pipeline file, prints that script's help text ([§1.3](#13-comments-and-help-text)). |
+| `-dr` | Dry run — render the scripts instead of executing/submitting. |
+| `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq` (also `cgp.runner`). |
+| `-l PATH` | cgp log file (also `cgp.log`). |
+| `-manifest*` | Manifest fan-out ([§14](#14-manifests-and-fan-out)). |
+
+### 15.1 `cgp sub` — one-off submission
+Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The command after `--` is treated as a body (`${input}`/`${output}` substitute):
+
+    cgp sub -mem 8G -o out.bam -i in.bam -- 'samtools sort -o ${output} ${input}'
+
+Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, repeatable), `-i PATH` (declared input), `-d JOBID` (depend on a job id), `-after PATH` (depend on the active ledger owner of `PATH`), `-r`, `-ledger`, `-dr`.
+
+### 15.2 `cgp ledger`
+`cgp ledger vacuum <db>` keeps only the last owner of each path and drops the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <db>` removes a stale lockfile ([§10.6](#106-lockfile)).
+
+### 15.3 `cgp convert` — migrate an older script
+`cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgp-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgpipe.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgp-convert:` comment for you to review.
+
+---
+
+## 16. Worked example (cgp v1)
 
     #!/usr/bin/env cgp
     #
@@ -555,28 +689,8 @@ Set globally as `job.<name>` for defaults, or as a bare `<name>` directive insid
 
 ---
 
-## Deliberate differences from JVM cgpipe
+## Open items
 
-A consolidated list of every intentional change this spec makes. The migration tool (`cgpipe-to-cgp`, Phase 3) automates the syntactic ones.
+These language details are intentionally not yet pinned down:
 
-| Area | cgpipe (JVM) | cgp (this spec) |
-|------|--------------|-----------------|
-| Code blocks | indentation-delimited bodies; `if … endif`, `for … done` | `{ }` for cgp code (no `endif`/`done`); `{{ }}` for shell bodies, terminated by a lone `}}` line |
-| Per-job settings | `<% job.x = … %>` block in the body | directive block before `--`, `job.` prefix dropped |
-| Inline shell conditional | `<% if c %>frag<% endif %>` | `${if c; frag}` |
-| In-body control flow | `<% for … %> … <% done %>` | `%`-prefixed cgp lines (`% for … {` / `% }`) |
-| Make substitutions | `$<` `$>` `$%` `$<1` `$>1` | `${input}` `${output}` `${stem}` `${input[0]}` `${output[0]}` (old forms = deprecated aliases) |
-| Reserved targets | `__pre__`, `__post__`, `__setup__`, `__teardown__`, `__postsubmit__` | `@pre`, `@post`, `@setup`, `@teardown`, `@postsubmit` (uniform `@` sigil ⇒ never a filename) |
-| Default goal | first target listed (often a never-created phony file) | `@default: goals` reserved target — bodyless, no phony file; falls back to first target; CLI overrides |
-| Snippets | `name::` def + `<% import name %>` | `snippet name {{ }}` + `@name` |
-| Job tracking | flat-file joblog; recursive staleness walk | SQLite **ledger** (optional; ownership only, no state, no mtimes); mtime restart + run-scoped stat cache |
-| Restart | recursive graph walk per invocation | mtime-based + `--force`; no restart "modes" |
-| Temp cleanup | hand-rolled (`^` is a marker; no auto-delete) | unchanged — explicit, never automatic |
-| Config namespace | `cgpipe.*`, `~/.cgpiperc` | `cgp.*`, `~/.cgp/` (config, templates, cache) |
-| `global_hold` / env capture | on/available | opt-in via `~/.cgp/config`, not defaults |
-| regex (`sub`) | Java regex | Go `regexp` (RE2) |
-| Binary / files | `cgpipe`, `.cgp`/`.cgpipe`/`.mvp` | `cgp` (+ `cgsub` for one-off submits), `.cgp` |
-
-### Deferred / open
-- The directive/shell disambiguation **when `--` is omitted** (whole-body-is-shell vs. a space-around-`=` heuristic) is deferred until the lexer exists and can be tested against real scripts. Canonical mechanism is the explicit `--`.
-- `${{var}}` double-evaluation and `$(cmd)` parse-time substitution are carried over as-is; their interaction with deferred body rendering will be pinned down during implementation.
+- **Directive/shell disambiguation when `--` is omitted.** A body with no `--` is entirely shell; the explicit `--` is the canonical way to introduce a directive block. Whether to additionally warn on a directive-looking line in a no-`--` body is undecided.

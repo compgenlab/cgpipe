@@ -1,0 +1,50 @@
+#!${shell}
+#BATCHQ -name ${name}
+% if run_id {
+#BATCHQ -run-id ${run_id}
+% }
+% if hold {
+#BATCHQ -hold
+% }
+% if procs > 1 {
+#BATCHQ -procs ${procs}
+% }
+% if mem {
+#BATCHQ -mem ${mem}
+% }
+% if walltime {
+#BATCHQ -walltime ${walltime}
+% }
+% if depids {
+#BATCHQ -afterok ${depids}
+% }
+% if mail {
+#BATCHQ -mail ${mail}
+% }
+% if stdout {
+#BATCHQ -stdout ${stdout}
+% }
+% if stderr {
+#BATCHQ -stderr ${stderr}
+% }
+% for input in _inputs {
+#BATCHQ -input ${input}
+% }
+% for output in _outputs {
+#BATCHQ -output ${output}
+% }
+% for c in custom {
+#BATCHQ ${c}
+% }
+#BATCHQ -wd .
+% if env {
+#BATCHQ -env
+% }
+
+set -eo pipefail
+
+% for line in setup {
+${line}
+% }
+
+${_body}

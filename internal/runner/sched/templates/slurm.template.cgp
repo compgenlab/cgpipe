@@ -1,0 +1,67 @@
+#!${shell}
+#SBATCH -Q
+#SBATCH -J ${name}
+% if hold {
+#SBATCH -H
+% }
+% if env {
+#SBATCH --export=ALL
+% }
+% if walltime {
+#SBATCH -t ${walltime}
+% }
+% if procs > 1 {
+#SBATCH -c ${procs}
+#SBATCH -n 1
+% }
+% if mem {
+#SBATCH --mem=${mem}
+% }
+% if gpu {
+#SBATCH --gres=gpu:${gpu}
+% }
+% if depids {
+#SBATCH -d afterok:${depids}
+% }
+% if qos {
+#SBATCH --qos=${qos}
+% }
+% if queue {
+#SBATCH -p ${queue}
+% }
+% if account {
+#SBATCH -A ${account}
+% }
+% if nice {
+#SBATCH --nice=${nice}
+% }
+% if mail {
+#SBATCH --mail-type=${mailtype}
+#SBATCH --mail-user=${mail}
+% }
+% if stdout {
+% if stdout.isdir() {
+#SBATCH -o ${stdout}/slurm-%j.out
+% } else {
+#SBATCH -o ${stdout}
+% }
+% }
+% if stderr {
+% if stderr.isdir() {
+#SBATCH -e ${stderr}/slurm-%j.err
+% } else {
+#SBATCH -e ${stderr}
+% }
+% }
+% for c in custom {
+#SBATCH ${c}
+% }
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+% for line in setup {
+${line}
+% }
+
+${_body}
