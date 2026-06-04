@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -350,6 +351,34 @@ func TestForceFlagRebuilds(t *testing.T) {
 	second, _ := os.ReadFile(filepath.Join(dir, "out.txt"))
 	if len(second) <= len(first) {
 		t.Errorf("-force did not re-run the recipe (out.txt unchanged: %q)", string(second))
+	}
+}
+
+// §14/§11.3 A manifest run with -r graphviz/html emits ONE combined document
+// (a cluster/section per row), not one per row concatenated.
+func TestManifestCombinedGraphviz(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("samples.tsv", []byte("sample\nP001\nP002\n"), 0o644)
+	os.WriteFile("p.cgp", []byte("out.${sample}.txt: in.${sample}.txt {{\n    cp ${input} ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
+
+	var buf bytes.Buffer
+	stdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	code := run([]string{"p.cgp", "-manifest-tsv", "samples.tsv", "-r", "graphviz"})
+	w.Close()
+	os.Stdout = stdout
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	out := buf.String()
+	if strings.Count(out, "digraph") != 1 {
+		t.Errorf("want a single combined digraph, got:\n%s", out)
+	}
+	if !strings.Contains(out, `label="P001"`) || !strings.Contains(out, `label="P002"`) {
+		t.Errorf("missing per-sample clusters:\n%s", out)
 	}
 }
 

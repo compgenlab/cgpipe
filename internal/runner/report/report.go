@@ -42,28 +42,53 @@ const (
 	margin = 24
 )
 
-// Run renders an HTML status report of g to out. statusOf returns a node's State
-// (Pending when unknown). title labels the report.
+// Section is one labeled graph + its status resolver — one per manifest row in a
+// combined report (Label "" for a single-pipeline report).
+type Section struct {
+	Label    string
+	Graph    graphviz.Graph
+	StatusOf func(name string) State
+}
+
+// Run renders an HTML status report of a single graph to out.
 func Run(g graphviz.Graph, statusOf func(name string) State, title string, out io.Writer) error {
+	return RunCombined(title, []Section{{Graph: g, StatusOf: statusOf}}, out)
+}
+
+// RunCombined renders one self-contained HTML page with a section per Section —
+// used for a manifest run, where each row (sample) is its own labeled DAG.
+func RunCombined(title string, sections []Section, out io.Writer) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, htmlHead, html.EscapeString(title))
+	fmt.Fprintf(&b, "<h1>%s</h1>\n", html.EscapeString(title))
+	b.WriteString(legend())
+	for _, s := range sections {
+		if s.Label != "" {
+			fmt.Fprintf(&b, "<h2>%s</h2>\n", html.EscapeString(s.Label))
+		}
+		writeSection(&b, s.Graph, s.StatusOf)
+	}
+	b.WriteString("</body>\n</html>\n")
+	_, err := io.WriteString(out, b.String())
+	return err
+}
+
+// writeSection emits one graph's SVG (status-colored) and its summary table.
+func writeSection(b *strings.Builder, g graphviz.Graph, statusOf func(name string) State) {
 	pos, w, h := layout(g)
 	status := map[string]State{}
 	for _, n := range g.Nodes {
 		status[n.Name] = statusOf(n.Name)
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, htmlHead, html.EscapeString(title))
-	fmt.Fprintf(&b, "<h1>%s</h1>\n", html.EscapeString(title))
-	b.WriteString(legend())
-	fmt.Fprintf(&b, "<svg width=\"%d\" height=\"%d\" viewBox=\"0 0 %d %d\" class=\"dag\">\n", w, h, w, h)
-
+	fmt.Fprintf(b, "<svg width=\"%d\" height=\"%d\" viewBox=\"0 0 %d %d\" class=\"dag\">\n", w, h, w, h)
 	// edges first (so nodes sit on top)
 	for _, e := range g.Edges {
 		from, to := pos[e.From], pos[e.To]
 		x1, y1 := from.x+nodeW, from.y+nodeH/2
 		x2, y2 := to.x, to.y+nodeH/2
 		mx := (x1 + x2) / 2
-		fmt.Fprintf(&b, "  <path d=\"M%d,%d C%d,%d %d,%d %d,%d\" class=\"edge\"/>\n", x1, y1, mx, y1, mx, y2, x2, y2)
+		fmt.Fprintf(b, "  <path d=\"M%d,%d C%d,%d %d,%d %d,%d\" class=\"edge\"/>\n", x1, y1, mx, y1, mx, y2, x2, y2)
 	}
 	// nodes
 	for _, n := range g.Nodes {
@@ -73,11 +98,11 @@ func Run(g graphviz.Graph, statusOf func(name string) State, title string, out i
 		if n.Temp {
 			dash = " stroke-dasharray=\"5,3\""
 		}
-		fmt.Fprintf(&b, "  <g><rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" rx=\"6\" fill=\"%s\" stroke=\"%s\" stroke-width=\"2\"%s/>\n",
+		fmt.Fprintf(b, "  <g><rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" rx=\"6\" fill=\"%s\" stroke=\"%s\" stroke-width=\"2\"%s/>\n",
 			p.x, p.y, nodeW, nodeH, fill[st], stroke[st], dash)
-		fmt.Fprintf(&b, "    <text x=\"%d\" y=\"%d\" class=\"label\">%s</text>\n",
+		fmt.Fprintf(b, "    <text x=\"%d\" y=\"%d\" class=\"label\">%s</text>\n",
 			p.x+nodeW/2, p.y+nodeH/2-2, html.EscapeString(elide(n.Name, 26)))
-		fmt.Fprintf(&b, "    <text x=\"%d\" y=\"%d\" class=\"state\">%s</text></g>\n",
+		fmt.Fprintf(b, "    <text x=\"%d\" y=\"%d\" class=\"state\">%s</text></g>\n",
 			p.x+nodeW/2, p.y+nodeH/2+13, st)
 	}
 	b.WriteString("</svg>\n")
@@ -91,12 +116,9 @@ func Run(g graphviz.Graph, statusOf func(name string) State, title string, out i
 	sort.Strings(names)
 	for _, n := range names {
 		st := status[n]
-		fmt.Fprintf(&b, "<tr><td>%s</td><td class=\"s-%s\">%s</td></tr>\n", html.EscapeString(n), st, st)
+		fmt.Fprintf(b, "<tr><td>%s</td><td class=\"s-%s\">%s</td></tr>\n", html.EscapeString(n), st, st)
 	}
-	b.WriteString("</tbody></table>\n</body>\n</html>\n")
-
-	_, err := io.WriteString(out, b.String())
-	return err
+	b.WriteString("</tbody></table>\n")
 }
 
 type xy struct{ x, y int }

@@ -632,6 +632,8 @@ A bare argument is a **goal** (a target to build); with none, cgp builds `@defau
 
 `-r graphviz` writes the dependency graph as Graphviz DOT to stdout (pipe to `dot -Tsvg`). `-r html` writes a **self-contained HTML status report** of the DAG to stdout: each output is colored by status — *done* (on disk), *running*/*queued* (its owning job is active in the scheduler, per the ledger), *failed* (owning job ended without producing it), or *pending* (not built). The report reads the ledger read-only, so it is safe to run while the pipeline is in flight.
 
+Both build the graph reachable from the goals (instantiating any wildcard rules along the way), not every declared target. Combined with a manifest ([§14](#14-manifests-and-fan-out)), they produce **one** document covering all rows — graphviz a single `digraph` with a `subgraph cluster` per row, html a single page with a section per row (labeled by the row's `sample`/`id`/`name` column, else `row N`).
+
 ### 15.1 `cgp sub` — one-off submission
 Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The command after `--` is treated as a body (`${input}`/`${output}` substitute):
 

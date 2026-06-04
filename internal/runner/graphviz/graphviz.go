@@ -167,6 +167,40 @@ func DOT(g Graph) string {
 	return b.String()
 }
 
+// Labeled pairs a graph with a label (a manifest row's sample id).
+type Labeled struct {
+	Label string
+	Graph Graph
+}
+
+// DOTCombined renders several labeled graphs as one digraph, each in its own
+// `subgraph cluster_<i>` — used for a manifest run (one cluster per sample).
+func DOTCombined(secs []Labeled) string {
+	var b strings.Builder
+	b.WriteString("digraph cgp {\n")
+	b.WriteString("  rankdir=LR;\n")
+	b.WriteString("  node [shape=box, style=rounded];\n")
+	for i, s := range secs {
+		fmt.Fprintf(&b, "  subgraph cluster_%d {\n    label=%s;\n", i, quote(s.Label))
+		for _, n := range s.Graph.Nodes {
+			switch {
+			case n.Temp:
+				fmt.Fprintf(&b, "    %s [style=\"rounded,dashed\"];\n", quote(n.Name))
+			case n.Source:
+				fmt.Fprintf(&b, "    %s [shape=note];\n", quote(n.Name))
+			default:
+				fmt.Fprintf(&b, "    %s;\n", quote(n.Name))
+			}
+		}
+		for _, e := range s.Graph.Edges {
+			fmt.Fprintf(&b, "    %s -> %s;\n", quote(e.From), quote(e.To))
+		}
+		b.WriteString("  }\n")
+	}
+	b.WriteString("}\n")
+	return b.String()
+}
+
 func hasWildcard(outs []string) bool {
 	for _, o := range outs {
 		if strings.Contains(o, "%") {

@@ -229,6 +229,12 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
+	// The graphviz/html runners produce a single document; for a manifest run
+	// emit one combined document (a cluster/section per row) rather than one per
+	// row concatenated to stdout.
+	if runnerName == "graphviz" || runnerName == "html" {
+		return runManifestGraph(f, file, cfgs, vars, goals, runnerName, rows)
+	}
 	cache := runner.NewCache()
 	for _, row := range rows {
 		rv := map[string]eval.Value{}
@@ -304,10 +310,21 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 	return 0
 }
 
-// runReport renders an HTML status report of the pipeline DAG to out. Node
-// status is resolved from disk existence, the ledger's owning job, and the
-// (script-configured) scheduler's live state.
+// runReport renders an HTML status report of one pipeline's DAG to out.
 func runReport(prog *eval.Program, file string, goals []string, out io.Writer) int {
+	g := graphviz.Build(prog, goals)
+	if err := report.Run(g, precomputeStatus(prog, g), file, out); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// precomputeStatus resolves every node's status now (disk existence → the
+// ledger's owning job → the script-configured scheduler's live state) and
+// returns a lookup over that snapshot. The ledger is opened read-only and closed
+// here, so the snapshot does not hold the ledger open while rendering.
+func precomputeStatus(prog *eval.Program, g graphviz.Graph) func(string) report.State {
 	var sch *sched.Scheduler
 	if v, ok := prog.Get("cgp.runner"); ok {
 		if s, found := sched.For(eval.Stringify(v)); found {
@@ -321,8 +338,7 @@ func runReport(prog *eval.Program, file string, goals []string, out io.Writer) i
 			defer lg.Close()
 		}
 	}
-
-	statusOf := func(name string) report.State {
+	one := func(name string) report.State {
 		if _, err := os.Stat(name); err == nil {
 			return report.Done // present on disk ⇒ produced
 		}
@@ -353,12 +369,63 @@ func runReport(prog *eval.Program, file string, goals []string, out io.Writer) i
 		}
 		return report.Running // owner exists but no scheduler to probe
 	}
+	snap := map[string]report.State{}
+	for _, n := range g.Nodes {
+		snap[n.Name] = one(n.Name)
+	}
+	return func(name string) report.State { return snap[name] }
+}
 
-	if err := report.Run(graphviz.Build(prog, goals), statusOf, file, out); err != nil {
+// runManifestGraph emits a single combined graphviz/html document for a manifest
+// run — one cluster (graphviz) / section (html) per row, labeled by the row.
+func runManifestGraph(f *ast.File, file string, cfgs []eval.ConfigFile, baseVars map[string]eval.Value, goals []string, runnerName string, rows []map[string]eval.Value) int {
+	var dotSecs []graphviz.Labeled
+	var htmlSecs []report.Section
+	for i, row := range rows {
+		rv := map[string]eval.Value{}
+		for k, v := range row {
+			rv[k] = v
+		}
+		for k, v := range baseVars { // explicit CLI vars override columns
+			rv[k] = v
+		}
+		prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: rv})
+		if err != nil {
+			var ex *eval.ExitError
+			if errors.As(err, &ex) {
+				return ex.Code
+			}
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		label := rowLabel(row, i)
+		g := graphviz.Build(prog, goals)
+		if runnerName == "graphviz" {
+			dotSecs = append(dotSecs, graphviz.Labeled{Label: label, Graph: g})
+		} else {
+			htmlSecs = append(htmlSecs, report.Section{Label: label, Graph: g, StatusOf: precomputeStatus(prog, g)})
+		}
+	}
+	if runnerName == "graphviz" {
+		io.WriteString(os.Stdout, graphviz.DOTCombined(dotSecs))
+		return 0
+	}
+	if err := report.RunCombined(file, htmlSecs, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0
+}
+
+// rowLabel names a manifest row for a report cluster/section: a sample/id/name
+// column if present, else "row N".
+func rowLabel(row map[string]eval.Value, i int) string {
+	for _, key := range []string{"sample", "id", "name"} {
+		if v, ok := row[key]; ok {
+			return eval.Stringify(v)
+		}
+	}
+	return fmt.Sprintf("row %d", i+1)
 }
 
 var stageRefRe = regexp.MustCompile(`\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)`)
