@@ -16,7 +16,9 @@ import (
 	"github.com/compgen-io/cgp/internal/buildinfo"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
+	"github.com/compgen-io/cgp/internal/manifest"
 	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgen-io/cgp/internal/runner"
 	"github.com/compgen-io/cgp/internal/runner/sched"
 	"github.com/compgen-io/cgp/internal/runner/shell"
 )
@@ -74,6 +76,9 @@ options (single hyphen):
     -dr          dry run: render scripts instead of executing/submitting
     -r NAME      runner: shell (default), slurm, sge, pbs, batchq
                  (also set via cgp.runner in the script/config)
+    -manifest FILE        run once per CGP manifest file (glob ok); also
+    -manifest-tsv FILE    -manifest-csv / -manifest-json: run once per row,
+                          columns/keys become variables
 
 Script variables use a double hyphen: --name value (or --name=value). A bare
 argument is a goal (target) to build. With no goal, cgp builds @default (or
@@ -109,6 +114,7 @@ func run(args []string) int {
 	dryRun := false
 	showHelp := false
 	runnerName := ""
+	manifestPath, manifestFmt := "", ""
 
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -141,6 +147,23 @@ func run(args []string) int {
 				}
 				i++
 				runnerName = rest[i]
+			case "-manifest", "-manifest-cgp", "-manifest-tsv", "-manifest-csv", "-manifest-json":
+				if i+1 >= len(rest) {
+					fmt.Fprintf(os.Stderr, "cgp: option %s needs a value\n", a)
+					return 2
+				}
+				i++
+				manifestPath = rest[i]
+				switch a {
+				case "-manifest-tsv":
+					manifestFmt = "tsv"
+				case "-manifest-csv":
+					manifestFmt = "csv"
+				case "-manifest-json":
+					manifestFmt = "json"
+				default:
+					manifestFmt = "cgp"
+				}
 			default:
 				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
 				return 2
@@ -181,6 +204,37 @@ func run(args []string) int {
 		return 1
 	}
 
+	// No manifest: a single run.
+	if manifestPath == "" {
+		return runPipeline(f, file, cfgs, vars, goals, runnerName, dryRun, runner.NewCache())
+	}
+
+	// Manifest fan-out: run the pipeline once per row/file. A shared stat cache
+	// means common inputs (e.g. a reference) are stat'd once across all runs.
+	rows, err := loadManifest(manifestPath, manifestFmt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	cache := runner.NewCache()
+	for _, row := range rows {
+		rv := map[string]eval.Value{}
+		for k, v := range row {
+			rv[k] = v
+		}
+		for k, v := range vars { // explicit CLI variables override the manifest
+			rv[k] = v
+		}
+		if code := runPipeline(f, file, cfgs, rv, goals, runnerName, dryRun, cache); code != 0 {
+			return code
+		}
+	}
+	return 0
+}
+
+// runPipeline evaluates the (already-parsed) pipeline with the given variables
+// and runs it through the selected runner, sharing the stat cache.
+func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[string]eval.Value, goals []string, runnerName string, dryRun bool, cache *runner.Cache) int {
 	prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: vars})
 	if err != nil {
 		var ex *eval.ExitError
@@ -202,23 +256,66 @@ func run(args []string) int {
 	}
 
 	if name == "shell" {
-		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun}); err != nil {
+		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun, Cache: cache}); err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		return 0
 	}
-
 	sch, ok := sched.For(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, %s)\n", name, strings.Join(sched.Names(), ", "))
 		return 2
 	}
-	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Pipeline: file}); err != nil {
+	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Pipeline: file, Cache: cache}); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0
+}
+
+// loadManifest loads a manifest into rows of variables, one run per row.
+func loadManifest(path, format string) ([]map[string]eval.Value, error) {
+	switch format {
+	case "tsv":
+		return manifest.LoadDelimited(path, '\t')
+	case "csv":
+		return manifest.LoadDelimited(path, ',')
+	case "json":
+		return manifest.LoadJSON(path)
+	case "cgp":
+		return loadCGPManifest(path)
+	}
+	return nil, fmt.Errorf("unknown manifest format %q", format)
+}
+
+// loadCGPManifest globs pattern and evaluates each matched .cgp file (which sets
+// variables); each file becomes one run's variable set.
+func loadCGPManifest(pattern string) ([]map[string]eval.Value, error) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no manifest files match %q", pattern)
+	}
+	var rows []map[string]eval.Value
+	for _, m := range matches {
+		b, err := os.ReadFile(m)
+		if err != nil {
+			return nil, err
+		}
+		mf, err := parser.Parse(string(b), m)
+		if err != nil {
+			return nil, err
+		}
+		mp, err := eval.Run(mf, eval.Options{File: m})
+		if err != nil {
+			return nil, fmt.Errorf("manifest %s: %w", m, err)
+		}
+		rows = append(rows, mp.Vars())
+	}
+	return rows, nil
 }
 
 const subUsage = `cgp sub — submit a one-off command as a job

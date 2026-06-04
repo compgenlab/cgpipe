@@ -7,7 +7,6 @@ package runner
 import (
 	"fmt"
 	"math"
-	"os"
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/eval"
@@ -25,11 +24,15 @@ type Backend interface {
 type Options struct {
 	Goals []string // explicit targets; empty => program default / first target
 	Dir   string   // working directory for file-existence / mtime checks
+	Cache *Cache   // shared stat cache (created per-build if nil)
 }
 
 // Build resolves the program's goals and drives the backend over the stale
 // targets in dependency order.
 func Build(p *eval.Program, b Backend, opts Options) error {
+	if opts.Cache == nil {
+		opts.Cache = NewCache()
+	}
 	r := &driver{
 		prog:      p,
 		backend:   b,
@@ -107,7 +110,7 @@ type driver struct {
 func (r *driver) buildGoal(goal string) error {
 	t := r.producerFor(goal)
 	if t == nil {
-		if !exists(r.path(goal)) {
+		if !r.statExists(goal) {
 			return fmt.Errorf("no rule to make %q and it does not exist", goal)
 		}
 		return nil
@@ -141,7 +144,7 @@ func (r *driver) submit(t *eval.Target) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if sub.willRun || !exists(r.path(in)) {
+		if sub.willRun || !r.statExists(in) {
 			id, err := r.submit(pt)
 			if err != nil {
 				return "", err
@@ -188,7 +191,7 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 			}
 			continue
 		}
-		m, ok := mtime(r.path(in))
+		m, ok := r.statMtime(in)
 		if !ok {
 			return resolved{}, fmt.Errorf("no rule to make %q (needed by %v)", in, t.Outputs)
 		}
@@ -200,7 +203,7 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 	willRun := anyInputRebuilt
 	if !willRun {
 		for _, o := range t.Outputs {
-			if !t.Temp[o] && !exists(r.path(o)) {
+			if !t.Temp[o] && !r.statExists(o) {
 				willRun = true
 				break
 			}
@@ -208,7 +211,7 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 	}
 	if !willRun {
 		for _, o := range t.Outputs {
-			if m, ok := mtime(r.path(o)); ok && m < inNewest {
+			if m, ok := r.statMtime(o); ok && m < inNewest {
 				willRun = true
 				break
 			}
@@ -220,7 +223,7 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 		minOut := int64(math.MaxInt64)
 		any := false
 		for _, o := range t.Outputs {
-			if m, ok := mtime(r.path(o)); ok {
+			if m, ok := r.statMtime(o); ok {
 				any = true
 				if m < minOut {
 					minOut = m
@@ -308,12 +311,9 @@ func Label(t *eval.Target) string {
 	return "(opportunistic)"
 }
 
-func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+func (r *driver) statExists(p string) bool { return r.opts.Cache.stat(r.path(p)).exists }
 
-func mtime(path string) (int64, bool) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return 0, false
-	}
-	return fi.ModTime().UnixNano(), true
+func (r *driver) statMtime(p string) (int64, bool) {
+	s := r.opts.Cache.stat(r.path(p))
+	return s.mtime, s.exists
 }

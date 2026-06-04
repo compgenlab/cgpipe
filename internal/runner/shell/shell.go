@@ -12,12 +12,13 @@ import (
 
 // Options configures a shell run.
 type Options struct {
-	Goals  []string  // explicit targets to build; empty => program default
-	DryRun bool      // render scripts instead of executing
-	Dir    string    // working directory for jobs (default: current)
-	Out    io.Writer // dry-run output (default os.Stdout)
-	Stdout io.Writer // job stdout (default os.Stdout)
-	Stderr io.Writer // job stderr (default os.Stderr)
+	Goals  []string      // explicit targets to build; empty => program default
+	DryRun bool          // render scripts instead of executing
+	Dir    string        // working directory for jobs (default: current)
+	Cache  *runner.Cache // shared stat cache (for manifest fan-out)
+	Out    io.Writer     // dry-run output (default os.Stdout)
+	Stdout io.Writer     // job stdout (default os.Stdout)
+	Stderr io.Writer     // job stderr (default os.Stderr)
 }
 
 // Run builds the program's goals with the local shell: stale targets are
@@ -33,7 +34,7 @@ func Run(p *eval.Program, opts Options) error {
 		opts.Stderr = os.Stderr
 	}
 	b := &backend{prog: p, opts: opts}
-	return runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir})
+	return runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir, Cache: opts.Cache})
 }
 
 // SubmitOne renders and runs a single target with bash (used by `cgp sub`).

@@ -101,8 +101,9 @@ type Options struct {
 	Goals    []string
 	DryRun   bool
 	Dir      string
-	Pipeline string    // pipeline filename, recorded in the ledger
-	Out      io.Writer // submission scripts (dry-run) and job-id output
+	Pipeline string        // pipeline filename, recorded in the ledger
+	Cache    *runner.Cache // shared stat cache (for manifest fan-out)
+	Out      io.Writer     // submission scripts (dry-run) and job-id output
 }
 
 // Run builds the program's goals by submitting stale targets to the scheduler.
@@ -112,7 +113,7 @@ func Run(p *eval.Program, sch Scheduler, opts Options) error {
 		return err
 	}
 	defer b.closeLedger()
-	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir}); err != nil {
+	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir, Cache: opts.Cache}); err != nil {
 		return err
 	}
 	return b.finish()

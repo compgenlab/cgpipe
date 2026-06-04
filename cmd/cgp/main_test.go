@@ -112,6 +112,43 @@ func TestSubNoCommand(t *testing.T) {
 	}
 }
 
+func TestManifestTSVFanout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("samples.tsv", []byte("sample\tgreeting\nP001\thello\nP002\thej\n"), 0o644)
+	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
+
+	if code := run([]string{"p.cgp", "-manifest-tsv", "samples.tsv"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	for _, c := range []struct{ f, want string }{{"out.P001.txt", "hello\n"}, {"out.P002.txt", "hej\n"}} {
+		b, err := os.ReadFile(filepath.Join(dir, c.f))
+		if err != nil || string(b) != c.want {
+			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
+		}
+	}
+}
+
+func TestManifestCGPFanout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.MkdirAll("P001", 0o755)
+	os.MkdirAll("P002", 0o755)
+	os.WriteFile("P001/m.cgp", []byte("sample = \"P001\"\ngreeting = \"one\""), 0o644)
+	os.WriteFile("P002/m.cgp", []byte("sample = \"P002\"\ngreeting = \"two\""), 0o644)
+	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
+
+	if code := run([]string{"p.cgp", "-manifest", "P*/m.cgp"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	for _, c := range []struct{ f, want string }{{"out.P001.txt", "one\n"}, {"out.P002.txt", "two\n"}} {
+		b, err := os.ReadFile(filepath.Join(dir, c.f))
+		if err != nil || string(b) != c.want {
+			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
+		}
+	}
+}
+
 func TestRunMissingFile(t *testing.T) {
 	if code := run([]string{"does-not-exist.cgp"}); code != 1 {
 		t.Fatalf("run(missing) = %d, want 1", code)

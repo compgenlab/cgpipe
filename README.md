@@ -12,9 +12,10 @@ scale.
 > local shell or a batch scheduler — the full language, dependency resolution
 > (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
 > the optional SQLite ledger (cross-run reuse of still-queued jobs) are
-> implemented, plus `cgp sub` for one-off job submission. Workflow composition
-> (`stage`/`--manifest`) is not done yet. The JVM version remains available and
-> supported at `compgen-io/cgpipe-jvm`.
+> implemented, plus `cgp sub` for one-off job submission, config-file loading,
+> container/GPU wrapping, and `-manifest*` fan-out (run a pipeline once per
+> manifest row/file). Multi-pipeline `stage` composition is not done yet. The JVM
+> version remains available and supported at `compgen-io/cgpipe-jvm`.
 
 ```sh
 cgp pipeline.cgp                 # build @default (or the first target)
