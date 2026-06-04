@@ -129,6 +129,38 @@ func TestMethods(t *testing.T) {
 	}
 }
 
+// A range is its own type and answers type/length/contains/index from its two
+// bounds — it must never masquerade as (or be materialized into) a list. See
+// §9.4: a range stores only Lo and Hi.
+func TestRangeStaysARange(t *testing.T) {
+	if got := evalExprStr(t, `(1..100).type()`, nil); got != StrVal("range") {
+		t.Errorf("(1..100).type() = %v, want range (a range is not a list)", got)
+	}
+	if got := evalExprStr(t, `xs.type()`, map[string]Value{"xs": RangeVal{Lo: 1, Hi: 9}}); got != StrVal("range") {
+		t.Errorf("assigned range type = %v, want range", got)
+	}
+	// length/contains/index are computed from the bounds (no materialization).
+	if got := evalExprStr(t, `(5..1).length()`, nil); got != IntVal(5) {
+		t.Errorf("descending range length = %v, want 5", got)
+	}
+	if got := evalExprStr(t, `(1..10).contains(7)`, nil); got != BoolVal(true) {
+		t.Errorf("range.contains(7) = %v, want true", got)
+	}
+	if got := evalExprStr(t, `(1..10).contains(99)`, nil); got != BoolVal(false) {
+		t.Errorf("range.contains(99) = %v, want false", got)
+	}
+	if got := evalExprStr(t, `(10..20)[3]`, nil); got != IntVal(13) {
+		t.Errorf("(10..20)[3] = %v, want 13", got)
+	}
+	if got := evalExprStr(t, `(1..100)[-1]`, nil); got != IntVal(100) {
+		t.Errorf("(1..100)[-1] = %v, want 100", got)
+	}
+	// it still passes anywhere a list is accepted (join, slice → list)
+	if got := evalExprStr(t, `(1..3).join(",")`, nil); got != StrVal("1,2,3") {
+		t.Errorf("range.join = %v, want 1,2,3", got)
+	}
+}
+
 // ---- interpolation ----
 
 func TestInterpolation(t *testing.T) {

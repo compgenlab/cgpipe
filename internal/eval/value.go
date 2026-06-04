@@ -136,12 +136,49 @@ func callMethod(recv Value, name string, args []Value) (Value, error) {
 	case ListVal:
 		return listMethod([]Value(r), name, args)
 	case RangeVal:
-		return listMethod(r.slice(), name, args)
+		return rangeMethod(r, name, args)
 	}
 	if name == "type" && len(args) == 0 {
 		return StrVal(recv.typeName()), nil
 	}
 	return nil, fmt.Errorf("method not found: %s.%s()", recv.typeName(), name)
+}
+
+// count returns the number of values a range yields without materializing them.
+func (r RangeVal) count() int64 {
+	n := r.Hi - r.Lo
+	if n < 0 {
+		n = -n
+	}
+	return n + 1
+}
+
+// rangeMethod implements methods on a range. type/length/contains are answered
+// from the two bounds alone — a range stores only Lo and Hi, never one value
+// per element, so these stay O(1) even for 1..1_000_000. Other list-compatible
+// methods (a range "passes anywhere a list is accepted", §9.4) fall back to the
+// materialized slice.
+func rangeMethod(r RangeVal, name string, args []Value) (Value, error) {
+	switch name {
+	case "type":
+		return StrVal("range"), nil
+	case "length":
+		return IntVal(r.count()), nil
+	case "contains":
+		if len(args) != 1 {
+			return nil, fmt.Errorf("range.contains() takes 1 argument")
+		}
+		iv, ok := args[0].(IntVal)
+		if !ok {
+			return BoolVal(false), nil
+		}
+		x, lo, hi := int64(iv), r.Lo, r.Hi
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		return BoolVal(x >= lo && x <= hi), nil
+	}
+	return listMethod(r.slice(), name, args)
 }
 
 func stringMethod(s, name string, args []Value) (Value, error) {

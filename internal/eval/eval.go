@@ -630,6 +630,23 @@ func (ip *interp) evalIndex(n *ast.Index) (Value, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A range yields its i-th value arithmetically — no need to materialize the
+	// whole sequence to read one element.
+	if r, isRange := recv.(RangeVal); isRange {
+		cnt := int(r.count())
+		i := int(toInt(idx))
+		if i < 0 {
+			i += cnt
+		}
+		if i < 0 || i >= cnt {
+			return nil, fmt.Errorf("%s: index %d out of range (len %d)", n.Pos(), int(toInt(idx)), cnt)
+		}
+		step := int64(1)
+		if r.Lo > r.Hi {
+			step = -1
+		}
+		return IntVal(r.Lo + step*int64(i)), nil
+	}
 	items, ok := asList(recv)
 	if !ok {
 		if s, isStr := recv.(StrVal); isStr {
