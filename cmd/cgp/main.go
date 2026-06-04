@@ -21,6 +21,7 @@ import (
 	"github.com/compgen-io/cgp/internal/manifest"
 	"github.com/compgen-io/cgp/internal/parser"
 	"github.com/compgen-io/cgp/internal/runner"
+	"github.com/compgen-io/cgp/internal/runner/graphviz"
 	"github.com/compgen-io/cgp/internal/runner/sched"
 	"github.com/compgen-io/cgp/internal/runner/shell"
 )
@@ -78,7 +79,7 @@ options (single hyphen):
     -h           show this help
     -dr          dry run: render scripts instead of executing/submitting
     -force       rebuild every target in the goal graph, ignoring staleness
-    -r NAME      runner: shell (default), slurm, sge, pbs, batchq
+    -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz
                  (also set via cgp.runner in the script/config)
     -manifest FILE        run once per CGP manifest file (glob ok); also
     -manifest-tsv FILE    -manifest-csv / -manifest-json: run once per row,
@@ -278,9 +279,16 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 		}
 		return 0
 	}
+	if name == "graphviz" {
+		if err := graphviz.Run(prog, goals, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	sch, ok := sched.For(name)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, %s)\n", name, strings.Join(sched.Names(), ", "))
+		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, graphviz, %s)\n", name, strings.Join(sched.Names(), ", "))
 		return 2
 	}
 	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Force: force, Pipeline: file, Cache: cache}); err != nil {
