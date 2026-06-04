@@ -1,0 +1,15 @@
+#!/bin/bash
+# Mock SGE qstat. cgp's IsActive runs `qstat -j <id>` and inspects only the exit
+# code (0 = job exists).
+MOCK_NAME=qstat
+. "$(dirname "$0")/../lib.sh"
+capture_call status "$@"
+jobid=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -j) jobid="$2"; shift 2 ;;
+        *)  shift ;;
+    esac
+done
+serve_response qstat "$jobid" >/dev/null && exit 0
+exit 1

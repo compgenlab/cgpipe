@@ -1,0 +1,7 @@
+#!/bin/bash
+# Mock SGE qsub (cgp uses -terse semantics: print just the numeric job id).
+MOCK_NAME=qsub
+. "$(dirname "$0")/../lib.sh"
+capture_call submit "$@"
+next_jobid
+echo

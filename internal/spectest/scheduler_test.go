@@ -1,0 +1,223 @@
+package spectest
+
+import (
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/compgen-io/cgp/internal/runner/sched"
+)
+
+// pkgDir is the package directory (where testdata/ lives), captured before any
+// test chdirs elsewhere.
+var pkgDir string
+
+func init() { pkgDir, _ = os.Getwd() }
+
+// installMocks lays out the mock scheduler binaries for sched on a temp PATH and
+// points the capture env at a fresh directory. It returns the capture directory,
+// where each call writes submit-<n>.argv / submit-<n>.stdin / status-<n>.argv /
+// release-<n>.argv.
+func installMocks(t *testing.T, scheduler string) string {
+	t.Helper()
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	capture := filepath.Join(root, "capture")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(capture, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// lib.sh sits one level above binDir (the mocks source ../lib.sh).
+	copyExec(t, filepath.Join(pkgDir, "testdata", "mocks", "lib.sh"), filepath.Join(root, "lib.sh"))
+	srcDir := filepath.Join(pkgDir, "testdata", "mocks", scheduler)
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		t.Fatalf("read mocks for %s: %v", scheduler, err)
+	}
+	for _, e := range entries {
+		copyExec(t, filepath.Join(srcDir, e.Name()), filepath.Join(binDir, e.Name()))
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CGP_TEST_CAPTURE", capture)
+	t.Setenv("CGP_TEST_JOBID_BASE", "1001")
+	return capture
+}
+
+func copyExec(t *testing.T, src, dst string) {
+	t.Helper()
+	b, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read %s: %v", src, err)
+	}
+	if err := os.WriteFile(dst, b, 0o755); err != nil {
+		t.Fatalf("write %s: %v", dst, err)
+	}
+}
+
+// captured reads a capture artifact, e.g. captured(t, dir, "submit-1.stdin").
+func captured(t *testing.T, dir, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("read capture %s: %v", name, err)
+	}
+	return string(b)
+}
+
+// submitChain is a two-target pipeline: b.bam depends on a.bam, so a submits
+// first (job 1001) and b second (job 1002, depending on 1001).
+const submitChain = `a.bam: {{
+    name = "align"
+    mem  = "8G"
+    procs = 4
+    walltime = "12:00:00"
+    --
+    echo a > ${output}
+}}
+b.bam: a.bam {{
+    name = "post"
+    --
+    cp ${input} ${output}
+}}
+@default: b.bam`
+
+// §10/§15 Submitting a pipeline to each scheduler: the rendered script reaches
+// the submit tool on stdin, the job id is captured, and a dependent job carries
+// the upstream id in the scheduler's dependency directive.
+func TestSchedulerSubmissionMatrix(t *testing.T) {
+	cases := []struct {
+		sched     string
+		directive string // appears in a.bam's submission script
+		dep       string // appears in b.bam's script, wiring the 1001 dependency
+	}{
+		{"slurm", "#SBATCH -J align", "#SBATCH -d afterok:1001"},
+		{"sge", "#$ -N align", "#$ -hold_jid 1001"},
+		{"pbs", "#PBS -N align", "depend=afterok:1001.cluster1"},
+		{"batchq", "#BATCHQ -name align", "#BATCHQ -afterok 1001"},
+	}
+	for _, c := range cases {
+		t.Run(c.sched, func(t *testing.T) {
+			capture := installMocks(t, c.sched)
+			workdir := t.TempDir()
+			prog, _ := build(t, submitChain, nil)
+			sch, ok := sched.For(c.sched)
+			if !ok {
+				t.Fatalf("unknown scheduler %q", c.sched)
+			}
+			var out bytes.Buffer
+			if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out, Pipeline: "spec.cgp"}); err != nil {
+				t.Fatalf("submit: %v", err)
+			}
+			// a.bam submitted first; its rendered script (stdin) carries directives.
+			aScript := captured(t, capture, "submit-1.stdin")
+			mustContain(t, aScript, c.directive, "echo a > a.bam")
+			// b.bam submitted second; it depends on a's job id 1001.
+			bScript := captured(t, capture, "submit-2.stdin")
+			mustContain(t, bScript, c.dep)
+			// both job ids are reported on stdout.
+			if !strings.Contains(out.String(), "1001") || !strings.Contains(out.String(), "1002") {
+				t.Errorf("job ids not reported: %q", out.String())
+			}
+		})
+	}
+}
+
+// §10.5 Cross-run reuse: with a ledger, a second run that finds the output still
+// owned by an active job reuses it instead of resubmitting.
+func TestLedgerReuseAcrossRuns(t *testing.T) {
+	capture := installMocks(t, "slurm")
+	workdir := t.TempDir()
+	ledgerPath := filepath.Join(workdir, "ledger.db")
+	src := "cgp.ledger = \"" + ledgerPath + "\"\n" +
+		"a.bam: {{\n    name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
+	sch, _ := sched.For("slurm")
+
+	// Run 1: submits job 1001.
+	prog, _ := build(t, src, nil)
+	var out1 bytes.Buffer
+	if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out1, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+	if n := submitCount(t, capture); n != 1 {
+		t.Fatalf("after run 1: %d submits, want 1", n)
+	}
+
+	// Run 2: a.bam still absent (mock didn't run the body) so it's stale, but job
+	// 1001 is still active (scontrol reports RUNNING) ⇒ reuse, no new submit.
+	prog2, _ := build(t, src, nil)
+	var out2 bytes.Buffer
+	if err := sched.Run(prog2, sch, sched.Options{Dir: workdir, Out: &out2, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+	if n := submitCount(t, capture); n != 1 {
+		t.Errorf("after run 2: %d submits, want 1 (should reuse the active job)", n)
+	}
+	if !strings.Contains(out2.String(), "reuse") {
+		t.Errorf("run 2 should note reuse: %q", out2.String())
+	}
+}
+
+// submitCount returns how many submit calls the mock recorded.
+func submitCount(t *testing.T, capture string) int {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(capture, ".seq.submit"))
+	if err != nil {
+		return 0
+	}
+	return atoi(strings.TrimSpace(string(b)))
+}
+
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return n
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// §11.3 global_hold submits every job held, then releases each after the whole
+// pipeline submits cleanly.
+func TestGlobalHoldReleases(t *testing.T) {
+	capture := installMocks(t, "slurm")
+	workdir := t.TempDir()
+	src := "cgp.runner.slurm.global_hold = true\n" +
+		"a.bam: {{\n    name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
+	prog, _ := build(t, src, nil)
+	sch, _ := sched.For("slurm")
+	var out bytes.Buffer
+	if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	// submitted held (-H present in the submit argv)
+	mustContain(t, captured(t, capture, "submit-1.argv"), "-H")
+	// released afterwards (scontrol release 1001)
+	rel := captured(t, capture, "release-1.argv")
+	mustContain(t, rel, "release", "1001")
+}
+
+// §15 Submitting to a real batchq when one is installed — the point of batchq is
+// to exercise cgp's submission path for real. Skipped when batchq is absent.
+func TestRealBatchqIfPresent(t *testing.T) {
+	if _, err := exec.LookPath("batchq"); err != nil {
+		t.Skip("no real batchq on PATH; mock-backed coverage in TestSchedulerSubmissionMatrix")
+	}
+	workdir := t.TempDir()
+	src := "a.txt: {{\n    name = \"a\"\n    --\n    echo hi > ${output}\n}}\n@default: a.txt"
+	prog, _ := build(t, src, nil)
+	sch, _ := sched.For("batchq")
+	var out bytes.Buffer
+	if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("real batchq submit: %v", err)
+	}
+	if strings.TrimSpace(out.String()) == "" {
+		t.Error("real batchq submission returned no job id")
+	}
+}

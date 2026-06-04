@@ -1,0 +1,25 @@
+#!/bin/bash
+# Mock BatchQ multi-tool. cgp invokes `batchq submit` (script on stdin),
+# `batchq status <id>`, and `batchq release <id>`.
+MOCK_NAME=batchq
+. "$(dirname "$0")/../lib.sh"
+case "${1:-}" in
+    submit)
+        capture_call submit "$@"
+        next_jobid
+        echo
+        ;;
+    status)
+        capture_call status "$@"
+        serve_response batchq "${2:-}" >/dev/null && exit 0
+        exit 1
+        ;;
+    release)
+        capture_call release "$@"
+        exit 0
+        ;;
+    *)
+        echo "mock-batchq: unknown subcommand: ${1:-}" >&2
+        exit 2
+        ;;
+esac

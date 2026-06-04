@@ -1,0 +1,7 @@
+#!/bin/bash
+# Mock PBS qstat. cgp's IsActive runs `qstat <id>` and inspects only the exit code.
+MOCK_NAME=qstat
+. "$(dirname "$0")/../lib.sh"
+capture_call status "$@"
+serve_response qstat "${1:-}" >/dev/null && exit 0
+exit 1

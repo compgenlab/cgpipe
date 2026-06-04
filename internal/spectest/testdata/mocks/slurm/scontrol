@@ -1,0 +1,25 @@
+#!/bin/bash
+# Mock SLURM scontrol:
+#   scontrol -o show job <id>  -> cgp's IsActive parses JobState= / Reason=
+#   scontrol release <id>      -> hold release
+MOCK_NAME=scontrol
+. "$(dirname "$0")/../lib.sh"
+case "${1:-}" in
+    release)
+        capture_call release "$@"
+        exit 0
+        ;;
+    -o)
+        capture_call status "$@"
+        jobid="${4:-}"
+        if out=$(serve_response scontrol "$jobid"); then
+            if [ -n "$out" ]; then echo "$out"; else echo "JobState=RUNNING Reason=None"; fi
+            exit 0
+        fi
+        exit 1
+        ;;
+    *)
+        capture_call status "$@"
+        exit 1
+        ;;
+esac

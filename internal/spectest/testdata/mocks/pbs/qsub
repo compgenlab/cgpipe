@@ -1,0 +1,8 @@
+#!/bin/bash
+# Mock PBS qsub. Real PBS prints dotted ids like "1001.cluster1".
+MOCK_NAME=qsub
+MOCK_JOBID_FORMAT="%d.cluster1"
+. "$(dirname "$0")/../lib.sh"
+capture_call submit "$@"
+next_jobid
+echo

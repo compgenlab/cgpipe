@@ -1,0 +1,6 @@
+#!/bin/bash
+# Mock PBS qrls (release a held job).
+MOCK_NAME=qrls
+. "$(dirname "$0")/../lib.sh"
+capture_call release "$@"
+exit 0
