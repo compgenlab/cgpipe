@@ -77,6 +77,7 @@ usage:
 options (single hyphen):
     -h           show this help
     -dr          dry run: render scripts instead of executing/submitting
+    -force       rebuild every target in the goal graph, ignoring staleness
     -r NAME      runner: shell (default), slurm, sge, pbs, batchq
                  (also set via cgp.runner in the script/config)
     -manifest FILE        run once per CGP manifest file (glob ok); also
@@ -117,6 +118,7 @@ func run(args []string) int {
 	vars := map[string]eval.Value{}
 	var goals []string
 	dryRun := false
+	force := false
 	showHelp := false
 	runnerName := ""
 	manifestPath, manifestFmt := "", ""
@@ -143,6 +145,8 @@ func run(args []string) int {
 			switch a {
 			case "-dr":
 				dryRun = true
+			case "-force":
+				force = true
 			case "-h":
 				showHelp = true
 			case "-r":
@@ -211,7 +215,7 @@ func run(args []string) int {
 
 	// No manifest: a single run.
 	if manifestPath == "" {
-		return runPipeline(f, file, cfgs, vars, goals, runnerName, dryRun, runner.NewCache())
+		return runPipeline(f, file, cfgs, vars, goals, runnerName, dryRun, force, runner.NewCache())
 	}
 
 	// Manifest fan-out: run the pipeline once per row/file. A shared stat cache
@@ -230,7 +234,7 @@ func run(args []string) int {
 		for k, v := range vars { // explicit CLI variables override the manifest
 			rv[k] = v
 		}
-		if code := runPipeline(f, file, cfgs, rv, goals, runnerName, dryRun, cache); code != 0 {
+		if code := runPipeline(f, file, cfgs, rv, goals, runnerName, dryRun, force, cache); code != 0 {
 			return code
 		}
 	}
@@ -239,7 +243,7 @@ func run(args []string) int {
 
 // runPipeline evaluates the (already-parsed) pipeline with the given variables
 // and runs it through the selected runner, sharing the stat cache.
-func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[string]eval.Value, goals []string, runnerName string, dryRun bool, cache *runner.Cache) int {
+func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[string]eval.Value, goals []string, runnerName string, dryRun, force bool, cache *runner.Cache) int {
 	prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: vars})
 	if err != nil {
 		var ex *eval.ExitError
@@ -250,13 +254,13 @@ func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[stri
 		return 1
 	}
 	if len(prog.Stages) > 0 {
-		return orchestrate(prog, cfgs, runnerName, dryRun)
+		return orchestrate(prog, cfgs, runnerName, dryRun, force)
 	}
-	return dispatchRun(prog, file, goals, runnerName, dryRun, cache)
+	return dispatchRun(prog, file, goals, runnerName, dryRun, force, cache)
 }
 
 // dispatchRun runs an evaluated program through the selected runner.
-func dispatchRun(prog *eval.Program, file string, goals []string, runnerName string, dryRun bool, cache *runner.Cache) int {
+func dispatchRun(prog *eval.Program, file string, goals []string, runnerName string, dryRun, force bool, cache *runner.Cache) int {
 	name := runnerName
 	if name == "" {
 		if v, ok := prog.Get("cgp.runner"); ok {
@@ -268,7 +272,7 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 	}
 
 	if name == "shell" {
-		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun, Cache: cache}); err != nil {
+		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun, Force: force, Cache: cache}); err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
@@ -279,7 +283,7 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, %s)\n", name, strings.Join(sched.Names(), ", "))
 		return 2
 	}
-	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Pipeline: file, Cache: cache}); err != nil {
+	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Force: force, Pipeline: file, Cache: cache}); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
@@ -292,7 +296,7 @@ var stageRefRe = regexp.MustCompile(`\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_]
 // stage's exports (as ${name.export}) into the variables of later stages. Each
 // stage gets a fresh stat cache, since a later stage reads an earlier stage's
 // freshly produced outputs (so they must not be cached as missing).
-func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dryRun bool) int {
+func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dryRun, force bool) int {
 	wfVars := wf.Vars()
 	if code := validateStageRefs(wf, wfVars); code != 0 {
 		return code
@@ -357,7 +361,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
 			return 1
 		}
-		if code := dispatchRun(subProg, subfile, nil, runnerName, dryRun, runner.NewCache()); code != 0 {
+		if code := dispatchRun(subProg, subfile, nil, runnerName, dryRun, force, runner.NewCache()); code != 0 {
 			return code
 		}
 		for k, v := range subProg.Exports {

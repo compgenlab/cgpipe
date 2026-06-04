@@ -29,6 +29,7 @@ type Options struct {
 	Goals []string // explicit targets; empty => program default / first target
 	Dir   string   // working directory for file-existence / mtime checks
 	Cache *Cache   // shared stat cache (created per-build if nil)
+	Force bool     // rebuild every target in the goal graph regardless of staleness
 }
 
 // Build resolves the program's goals and drives the backend over the stale
@@ -251,7 +252,8 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 		}
 	}
 
-	willRun := anyInputRebuilt
+	// -force rebuilds every target in the goal graph regardless of mtime/existence.
+	willRun := anyInputRebuilt || r.opts.Force
 	if !willRun {
 		for _, o := range t.Outputs {
 			if !t.Temp[o] && !r.statExists(o) {

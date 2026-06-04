@@ -100,6 +100,7 @@ func Names() []string { return []string{"slurm", "sge", "pbs", "batchq"} }
 type Options struct {
 	Goals    []string
 	DryRun   bool
+	Force    bool // resubmit regardless of staleness
 	Dir      string
 	Pipeline string        // pipeline filename, recorded in the ledger
 	Cache    *runner.Cache // shared stat cache (for manifest fan-out)
@@ -113,7 +114,7 @@ func Run(p *eval.Program, sch Scheduler, opts Options) error {
 		return err
 	}
 	defer b.closeLedger()
-	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir, Cache: opts.Cache}); err != nil {
+	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir, Cache: opts.Cache, Force: opts.Force}); err != nil {
 		return err
 	}
 	return b.finish()

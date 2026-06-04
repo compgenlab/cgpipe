@@ -96,6 +96,27 @@ func TestRestartRebuildsOnChangedInput(t *testing.T) {
 	}
 }
 
+// §10.4 -force rebuilds even an up-to-date output.
+func TestForceRebuilds(t *testing.T) {
+	chdirTmp(t)
+	writeFile(t, "in.txt", "data")
+	touch(t, "in.txt", -10*time.Second)
+	src := `out.txt: in.txt {{
+    cat ${input} > ${output}
+    echo built >> build.log
+}}
+@default: out.txt`
+	prog, _ := build(t, src, nil)
+	// first run builds
+	runForce(t, prog, false)
+	// second run, up-to-date: a normal run skips, but -force rebuilds
+	prog2, _ := build(t, src, nil)
+	runForce(t, prog2, true)
+	if got := readFile(t, "build.log"); got != "built\nbuilt\n" {
+		t.Errorf("build.log = %q, want two builds (-force rebuilds up-to-date output)", got)
+	}
+}
+
 func mustRecord(t *testing.T, lg *ledger.Ledger, j ledger.Job) {
 	t.Helper()
 	if err := lg.Record(j); err != nil {

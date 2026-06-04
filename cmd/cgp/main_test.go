@@ -335,6 +335,24 @@ func TestLedgerVacuumCLI(t *testing.T) {
 	}
 }
 
+// §10.4 -force rebuilds an up-to-date output from the CLI.
+func TestForceFlagRebuilds(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    date +%N >> ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp"}); code != 0 {
+		t.Fatalf("run 1 = %d", code)
+	}
+	first, _ := os.ReadFile(filepath.Join(dir, "out.txt"))
+	if code := run([]string{"p.cgp", "-force"}); code != 0 {
+		t.Fatalf("run 2 -force = %d", code)
+	}
+	second, _ := os.ReadFile(filepath.Join(dir, "out.txt"))
+	if len(second) <= len(first) {
+		t.Errorf("-force did not re-run the recipe (out.txt unchanged: %q)", string(second))
+	}
+}
+
 func fileThere(dir, name string) bool {
 	_, err := os.Stat(filepath.Join(dir, name))
 	return err == nil

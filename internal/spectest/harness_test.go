@@ -111,6 +111,19 @@ func runReal(t *testing.T, src string, goals ...string) {
 	}
 }
 
+// runForce builds an already-evaluated program for real with the force flag set
+// to the given value (job output discarded).
+func runForce(t *testing.T, prog *eval.Program, force bool) {
+	t.Helper()
+	err := shell.Run(prog, shell.Options{
+		Force: force, Cache: runner.NewCache(),
+		Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("run (force=%v): %v", force, err)
+	}
+}
+
 // runRealErr builds src for real and returns the build error (nil on success).
 // Use it to assert on build-time failures like "no rule to make"/"no build path".
 func runRealErr(t *testing.T, src string, goals ...string) error {
