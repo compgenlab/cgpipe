@@ -167,21 +167,33 @@ func run(args []string) int {
 
 // runLedger handles `cgp ledger <subcommand> ...`.
 func runLedger(args []string) int {
-	if len(args) < 2 || args[0] != "vacuum" {
-		fmt.Fprintln(os.Stderr, "usage: cgp ledger vacuum <ledger.db>")
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: cgp ledger {vacuum|unlock} <ledger.db>")
 		return 2
 	}
-	lg, err := ledger.Open(args[1])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
+	switch args[0] {
+	case "vacuum":
+		lg, err := ledger.Open(args[1])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		defer lg.Close()
+		if err := lg.Vacuum(); err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		return 0
+	case "unlock":
+		if err := ledger.Unlock(args[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		return 0
+	default:
+		fmt.Fprintln(os.Stderr, "usage: cgp ledger {vacuum|unlock} <ledger.db>")
+		return 2
 	}
-	defer lg.Close()
-	if err := lg.Vacuum(); err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	return 0
 }
 
 // parseCLIValue parses a command-line value into a typed cgp value, falling back

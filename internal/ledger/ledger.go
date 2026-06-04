@@ -13,8 +13,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Ledger is a handle to a single ledger database (single-writer).
-type Ledger struct{ db *sql.DB }
+// Ledger is a handle to a single ledger database. Access is serialized across
+// processes by an NFS-safe lockfile (see lock.go), enforcing single-writer.
+type Ledger struct {
+	db   *sql.DB
+	lock *lockHandle
+}
 
 const schema = `
 CREATE TABLE IF NOT EXISTS jobs (
@@ -67,21 +71,36 @@ CREATE TABLE IF NOT EXISTS job_src (
 );
 `
 
-// Open opens (creating if needed) the ledger at path.
+// Open opens (creating if needed) the ledger at path, taking an exclusive
+// cross-process lockfile first (released by Close). Because the lockfile already
+// guarantees a single writer, SQLite's own (NFS-unreliable) file locking is
+// disabled with nolock=1.
 func Open(path string) (*Ledger, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	lock, err := acquireLock(path + ".lock")
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1) // single writer
+	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&nolock=1"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		lock.release()
+		return nil, err
+	}
+	db.SetMaxOpenConns(1) // single connection
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
+		lock.release()
 		return nil, fmt.Errorf("ledger schema: %w", err)
 	}
-	return &Ledger{db: db}, nil
+	return &Ledger{db: db, lock: lock}, nil
 }
 
-func (l *Ledger) Close() error { return l.db.Close() }
+// Close closes the database and releases the lockfile.
+func (l *Ledger) Close() error {
+	err := l.db.Close()
+	l.lock.release()
+	return err
+}
 
 // Job is one recorded submission.
 type Job struct {
