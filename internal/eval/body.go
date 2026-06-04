@@ -214,11 +214,11 @@ func (ip *interp) renderBodyText(raw string) (string, error) {
 		shell = lines[sep+1:]
 	}
 
-	for _, d := range directives {
-		if strings.TrimSpace(d) == "" {
-			continue
-		}
-		f, err := parser.Parse(d, "<directive>")
+	// Parse the directive block as one cgp program (not line by line) so ordinary
+	// multi-line control flow — if/for setting job settings — is allowed (§6.2),
+	// not just one assignment per line.
+	if dirSrc := strings.Join(directives, "\n"); strings.TrimSpace(dirSrc) != "" {
+		f, err := parser.Parse(dirSrc, "<directive>")
 		if err != nil {
 			return "", fmt.Errorf("directive: %w", err)
 		}

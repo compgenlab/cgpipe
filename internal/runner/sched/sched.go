@@ -234,6 +234,12 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// shexec: run the body directly on the submission host instead of submitting
+	// it (the usual choice for @setup/@teardown — e.g. mkdir). No scheduler job,
+	// so no job id and nothing recorded in the ledger.
+	if v, ok := vars["shexec"]; ok && eval.Truthy(v) {
+		return b.shExec(runner.Label(t), body)
+	}
 	if m, ok := vars["mem"]; ok && b.sch.PrepareMem != nil {
 		vars["mem"] = eval.StrVal(b.sch.PrepareMem(eval.Stringify(m)))
 	}
@@ -286,6 +292,23 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 		}
 	}
 	return id, nil
+}
+
+// shExec runs body on the submission host (for shexec targets). In dry-run it is
+// rendered, not executed.
+func (b *backend) shExec(label, body string) (string, error) {
+	if b.opts.DryRun {
+		fmt.Fprintf(b.opts.Out, "# [shexec] %s\n%s\n", label, body)
+		return "", nil
+	}
+	cmd := exec.Command(b.shell, "-c", body)
+	cmd.Dir = b.opts.Dir
+	cmd.Stdout = b.opts.Out
+	cmd.Stderr = b.opts.Out
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%s (shexec): %w", label, err)
+	}
+	return "", nil
 }
 
 func (b *backend) submitScript(label, script string) (string, error) {
