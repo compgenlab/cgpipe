@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -189,6 +190,34 @@ func TestWorkflowRuntimeMissingExport(t *testing.T) {
 	os.WriteFile("wf.cgp", []byte("stage a a.cgp\nstage b b.cgp --bam ${a.f}"), 0o644)
 	if code := run([]string{"wf.cgp"}); code == 0 {
 		t.Fatal("workflow should fail when a conditional export didn't fire at runtime")
+	}
+}
+
+func TestConvertToStdout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("old.cgp", []byte("#!/usr/bin/env cgpipe\nif !bam\n    exit 1\nendif\nout.bam: in.bam\n    sort -o $> $<\n"), 0o644)
+	if code := run([]string{"convert", "old.cgp"}); code != 0 {
+		t.Fatalf("cgp convert = %d, want 0", code)
+	}
+}
+
+func TestConvertToFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("old.cgp", []byte("out.bam: in.bam\n    sort -o $> $<\n"), 0o644)
+	if code := run([]string{"convert", "old.cgp", "-o", "new.cgp"}); code != 0 {
+		t.Fatalf("cgp convert -o = %d, want 0", code)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "new.cgp"))
+	if err != nil || !strings.Contains(string(b), "out.bam: in.bam {{") {
+		t.Fatalf("converted file = %q, err=%v", string(b), err)
+	}
+}
+
+func TestConvertNoInput(t *testing.T) {
+	if code := run([]string{"convert"}); code != 2 {
+		t.Fatalf("cgp convert with no input = %d, want 2", code)
 	}
 }
 
