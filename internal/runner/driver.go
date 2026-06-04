@@ -38,16 +38,30 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 		opts.Cache = NewCache()
 	}
 	r := &driver{
-		prog:      p,
-		backend:   b,
-		opts:      opts,
-		producer:  map[string]*eval.Target{},
-		memo:      map[*eval.Target]resolved{},
-		resolving: map[*eval.Target]bool{},
-		jobID:     map[*eval.Target]string{},
-		done:      map[*eval.Target]bool{},
+		prog:          p,
+		backend:       b,
+		opts:          opts,
+		candidates:    map[string][]*eval.Target{},
+		candCache:     map[string][]*eval.Target{},
+		wildInstances: map[string]*eval.Target{},
+		chosen:        map[string]*eval.Target{},
+		chosenSet:     map[string]bool{},
+		sat:           map[*eval.Target]bool{},
+		satActive:     map[*eval.Target]bool{},
+		memo:          map[*eval.Target]resolved{},
+		resolving:     map[*eval.Target]bool{},
+		jobID:         map[*eval.Target]string{},
+		done:          map[*eval.Target]bool{},
 	}
 	for _, t := range p.Targets {
+		// A target with no outputs is opportunistic: it runs after the goals, only
+		// if its inputs are already available, and never forces them to build.
+		if len(t.Outputs) == 0 {
+			if t.HasBody {
+				r.opportunistic = append(r.opportunistic, t)
+			}
+			continue
+		}
 		wild := false
 		for _, o := range t.Outputs {
 			if strings.Contains(o, "%") {
@@ -58,10 +72,10 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 			r.wildcards = append(r.wildcards, t)
 			continue
 		}
+		// Keep every definition for an output, in source order: an output may have
+		// more than one rule, and we pick the first whose inputs are satisfiable.
 		for _, o := range t.Outputs {
-			if _, dup := r.producer[o]; !dup {
-				r.producer[o] = t
-			}
+			r.candidates[o] = append(r.candidates[o], t)
 		}
 	}
 
@@ -86,6 +100,17 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 			return err
 		}
 	}
+	// Opportunistic jobs run after the goals are submitted (but before teardown):
+	// each runs only when every input is already available — on disk, produced by
+	// a job submitted this run, or owned by an active ledger job — and is silently
+	// skipped otherwise. They never force an input to build.
+	for _, opp := range r.opportunistic {
+		if r.opportunisticReady(opp) {
+			if _, err := r.runOpportunistic(opp); err != nil {
+				return err
+			}
+		}
+	}
 	if p.Teardown != nil && p.Teardown.HasBody {
 		if _, err := b.Submit(p.Teardown, nil); err != nil {
 			return err
@@ -100,11 +125,20 @@ type resolved struct {
 }
 
 type driver struct {
-	prog      *eval.Program
-	backend   Backend
-	opts      Options
-	producer  map[string]*eval.Target
-	wildcards []*eval.Target
+	prog    *eval.Program
+	backend Backend
+	opts    Options
+
+	candidates    map[string][]*eval.Target // explicit rules per output, source order
+	wildcards     []*eval.Target            // wildcard (%) rules
+	opportunistic []*eval.Target            // no-output targets, run after the goals
+	candCache     map[string][]*eval.Target // resolved candidate list per path (explicit + wildcard instances)
+	wildInstances map[string]*eval.Target   // (rule,stem) -> instantiated target, shared across sibling outputs
+	chosen        map[string]*eval.Target   // memoized chosen producer per path
+	chosenSet     map[string]bool           // whether chosen[path] has been computed (nil is a valid choice)
+	sat           map[*eval.Target]bool     // memoized satisfiability
+	satActive     map[*eval.Target]bool     // satisfiability recursion guard
+
 	memo      map[*eval.Target]resolved
 	resolving map[*eval.Target]bool
 	jobID     map[*eval.Target]string
@@ -257,22 +291,136 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 	return res, nil
 }
 
+// producerFor returns the rule chosen to build path: the first candidate (in
+// source order, explicit rules before wildcards) whose inputs are all
+// satisfiable. If none is satisfiable it falls back to the first candidate so
+// the eventual "no rule to make" error points somewhere sensible; nil only when
+// there is no candidate at all. The choice is memoized so resolve/submit/
+// available all agree on the same producer.
 func (r *driver) producerFor(path string) *eval.Target {
-	if t, ok := r.producer[path]; ok {
-		return t
+	if r.chosenSet[path] {
+		return r.chosen[path]
 	}
-	for _, rule := range r.wildcards {
-		if stem, ok := matchWildcard(rule, path); ok {
-			inst := instantiate(rule, stem)
-			for _, o := range inst.Outputs {
-				if _, dup := r.producer[o]; !dup {
-					r.producer[o] = inst
-				}
-			}
-			return inst
+	cands := r.candidatesFor(path)
+	var pick *eval.Target
+	for _, c := range cands {
+		if r.satisfiable(c) {
+			pick = c
+			break
 		}
 	}
-	return nil
+	if pick == nil && len(cands) > 0 {
+		pick = cands[0]
+	}
+	r.chosen[path] = pick
+	r.chosenSet[path] = true
+	return pick
+}
+
+// candidatesFor returns every rule that can produce path: the explicit
+// definitions (source order) followed by matching wildcard instantiations. A
+// wildcard instance is created once per (rule, stem) and shared, so sibling
+// outputs of a multi-output wildcard resolve to the same target.
+func (r *driver) candidatesFor(path string) []*eval.Target {
+	if c, ok := r.candCache[path]; ok {
+		return c
+	}
+	c := append([]*eval.Target{}, r.candidates[path]...)
+	for _, rule := range r.wildcards {
+		if stem, ok := matchWildcard(rule, path); ok {
+			key := fmt.Sprintf("%p\x00%s", rule, stem)
+			inst, ok := r.wildInstances[key]
+			if !ok {
+				inst = instantiate(rule, stem)
+				r.wildInstances[key] = inst
+			}
+			c = append(c, inst)
+		}
+	}
+	r.candCache[path] = c
+	return c
+}
+
+// satisfiable reports whether every input of t can be provided — on disk, by a
+// satisfiable producer (recursively), or by an active ledger job. A dependency
+// cycle is treated as unsatisfiable.
+func (r *driver) satisfiable(t *eval.Target) bool {
+	if v, ok := r.sat[t]; ok {
+		return v
+	}
+	if r.satActive[t] {
+		return false
+	}
+	r.satActive[t] = true
+	ok := true
+	for _, in := range t.Inputs {
+		if !r.inputSatisfiable(in) {
+			ok = false
+			break
+		}
+	}
+	delete(r.satActive, t)
+	r.sat[t] = ok
+	return ok
+}
+
+func (r *driver) inputSatisfiable(in string) bool {
+	if r.statExists(in) {
+		return true
+	}
+	for _, c := range r.candidatesFor(in) {
+		if r.satisfiable(c) {
+			return true
+		}
+	}
+	if _, ext := r.backend.ExternalDep(in); ext {
+		return true
+	}
+	return false
+}
+
+// opportunisticReady reports whether all of an opportunistic target's inputs are
+// already available (without building anything).
+func (r *driver) opportunisticReady(t *eval.Target) bool {
+	for _, in := range t.Inputs {
+		if !r.available(in) {
+			return false
+		}
+	}
+	return true
+}
+
+// available reports whether input is on disk, was produced by a job submitted
+// this run, or is owned by an active ledger job.
+func (r *driver) available(in string) bool {
+	if r.statExists(in) {
+		return true
+	}
+	if pt := r.producerFor(in); pt != nil && r.done[pt] {
+		return true
+	}
+	if _, ext := r.backend.ExternalDep(in); ext {
+		return true
+	}
+	return false
+}
+
+// runOpportunistic submits an opportunistic target, depending on the in-run jobs
+// (or active ledger jobs) that produce its inputs so a scheduler runs it last.
+func (r *driver) runOpportunistic(t *eval.Target) (string, error) {
+	var deps []string
+	for _, in := range t.Inputs {
+		if pt := r.producerFor(in); pt != nil {
+			if id := r.jobID[pt]; id != "" {
+				deps = append(deps, id)
+			}
+		} else if !r.statExists(in) {
+			if id, ok := r.backend.ExternalDep(in); ok && id != "" {
+				deps = append(deps, id)
+			}
+		}
+	}
+	return r.backend.Submit(t, deps)
 }
 
 func matchWildcard(rule *eval.Target, goal string) (string, bool) {

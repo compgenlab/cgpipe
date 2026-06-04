@@ -26,13 +26,7 @@ func TestWildcardStem(t *testing.T) {
 
 // §7.2 Multiple definitions for one output: the first whose inputs are all
 // satisfiable is used.
-//
-// GAP: the driver's producer map keeps only the first target defined for an
-// output and never falls back to a later, satisfiable rule — it errors with
-// "no rule to make <first rule's missing input>" instead. The assertion below
-// is the spec-correct behavior; un-skip it when the fallback is implemented.
 func TestMultipleDefinitionsFirstSatisfiable(t *testing.T) {
-	t.Skip("GAP §7.2: no fallback to the first *satisfiable* multiple-definition rule")
 	chdirTmp(t)
 	writeFile(t, "have_b.txt", "B")
 	// first rule needs a file nothing can produce; second is satisfiable.
@@ -46,6 +40,55 @@ out.txt: have_b.txt {{
 	runReal(t, src, "out.txt")
 	if got := readFile(t, "out.txt"); got != "B" {
 		t.Errorf("out.txt = %q, want the second (satisfiable) rule's output", got)
+	}
+}
+
+// §7.2 A blanket wildcard rule provides a build path for an output that no
+// explicit rule names — the canonical "index a .bam if the .bai is missing".
+func TestWildcardProvidesFallbackPath(t *testing.T) {
+	chdirTmp(t)
+	writeFile(t, "x.bam", "reads")
+	src := `%.bam.bai: %.bam {{
+    echo "index of ${input}" > ${output}
+}}
+@default: x.bam.bai`
+	runReal(t, src, "x.bam.bai")
+	if got := strings.TrimSpace(readFile(t, "x.bam.bai")); got != "index of x.bam" {
+		t.Errorf("x.bam.bai = %q, want \"index of x.bam\"", got)
+	}
+}
+
+// §7.2 When an explicit rule and a wildcard both could build an output and both
+// are satisfiable, the explicit rule wins (explicit candidates come first).
+func TestExplicitPreferredOverWildcard(t *testing.T) {
+	chdirTmp(t)
+	writeFile(t, "in.txt", "data")
+	writeFile(t, "special.src", "data") // makes the wildcard path satisfiable too
+	src := `special.out: in.txt {{
+    echo explicit > ${output}
+}}
+%.out: %.src {{
+    echo wildcard > ${output}
+}}
+@default: special.out`
+	runReal(t, src, "special.out")
+	if got := strings.TrimSpace(readFile(t, "special.out")); got != "explicit" {
+		t.Errorf("special.out = %q, want explicit (explicit rule precedes the wildcard)", got)
+	}
+}
+
+// §7.2 If no definition is satisfiable, it is still an error (no build path).
+func TestNoSatisfiablePathErrors(t *testing.T) {
+	chdirTmp(t)
+	src := `out.txt: missing_a.txt {{
+    cp ${input} ${output}
+}}
+out.txt: missing_b.txt {{
+    cp ${input} ${output}
+}}
+@default: out.txt`
+	if err := runRealErr(t, src); err == nil {
+		t.Fatal("expected a no-build-path error when no definition is satisfiable")
 	}
 }
 
@@ -82,15 +125,7 @@ all: a.txt b.txt
 
 // §7.6 An opportunistic target (leading `:`) runs after the pipeline, only if
 // all its inputs are available — and never forces them to build.
-//
-// GAP: the driver builds only producers (targets with outputs) and the
-// setup/goal/teardown phases; a no-output target is dropped when the producer
-// map is built, so opportunistic jobs never run. The companion
-// TestOpportunisticSkippedWhenInputMissing currently passes only because the
-// job never runs at all — when opportunistic jobs are implemented, both should
-// pass for the right reasons.
 func TestOpportunisticRunsWhenInputsAvailable(t *testing.T) {
-	t.Skip("GAP §7.6: opportunistic (no-output) targets are not yet run by the driver")
 	chdirTmp(t)
 	// prod.txt is built this run, so the opportunistic job's input becomes
 	// available and it runs.
@@ -109,10 +144,6 @@ func TestOpportunisticRunsWhenInputsAvailable(t *testing.T) {
 
 // §7.6 An opportunistic target is silently skipped when an input is missing and
 // nothing will produce it (it never forces the input to build).
-//
-// NOTE: this passes today partly vacuously — opportunistic jobs are not yet run
-// at all (see TestOpportunisticRunsWhenInputsAvailable) — but it also pins the
-// "missing input ⇒ no marker, no error" half of the contract for when they are.
 func TestOpportunisticSkippedWhenInputMissing(t *testing.T) {
 	chdirTmp(t)
 	src := `done.txt: {{
@@ -125,6 +156,32 @@ func TestOpportunisticSkippedWhenInputMissing(t *testing.T) {
 	runReal(t, src, "done.txt")
 	if exists("marker.txt") {
 		t.Error("opportunistic job ran despite a missing, unbuildable input")
+	}
+}
+
+// §7.6 The canonical guarded temp-cleanup idiom: an opportunistic job removes
+// the per-chunk temps once the final output has been built.
+func TestOpportunisticTempCleanup(t *testing.T) {
+	chdirTmp(t)
+	src := `^part.1.txt: {{
+    echo one > ${output}
+}}
+^part.2.txt: {{
+    echo two > ${output}
+}}
+merged.txt: part.1.txt part.2.txt {{
+    cat ${input} > ${output}
+}}
+: merged.txt part.1.txt part.2.txt {{
+    rm -f part.1.txt part.2.txt
+}}
+@default: merged.txt`
+	runReal(t, src, "merged.txt")
+	if !exists("merged.txt") {
+		t.Fatal("merge did not run")
+	}
+	if exists("part.1.txt") || exists("part.2.txt") {
+		t.Error("opportunistic cleanup did not remove the temp parts")
 	}
 }
 

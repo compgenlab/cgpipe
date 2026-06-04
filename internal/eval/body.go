@@ -65,20 +65,23 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 	}
 	ip := &interp{sc: sc, out: io.Discard, prog: p}
 
+	// Render the main body first: its directive block sets per-job settings —
+	// including nopre / nopost — into sc, which then decide @pre / @post wrapping.
+	main, err := ip.renderBodyText(t.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
 	var sections []string
-	if t.Special == "" && p.Pre != nil {
+	if t.Special == "" && p.Pre != nil && !scopeTruthy(sc, "nopre") {
 		s, err := ip.renderBodyText(p.Pre.Body)
 		if err != nil {
 			return nil, "", fmt.Errorf("@pre: %w", err)
 		}
 		sections = append(sections, s)
 	}
-	main, err := ip.renderBodyText(t.Body)
-	if err != nil {
-		return nil, "", err
-	}
 	sections = append(sections, main)
-	if t.Special == "" && p.Post != nil {
+	if t.Special == "" && p.Post != nil && !scopeTruthy(sc, "nopost") {
 		s, err := ip.renderBodyText(p.Post.Body)
 		if err != nil {
 			return nil, "", fmt.Errorf("@post: %w", err)
@@ -143,6 +146,15 @@ func (p *Program) settingList(name string) []string {
 		return valueList(v)
 	}
 	return nil
+}
+
+// scopeTruthy reports whether a (directive) setting is present and truthy in the
+// render scope — used for the nopre / nopost / shexec-style boolean directives.
+func scopeTruthy(sc *Scope, name string) bool {
+	if v, ok := sc.get(name); ok {
+		return truthy(v)
+	}
+	return false
 }
 
 func scopeStr(sc *Scope, name string) string {

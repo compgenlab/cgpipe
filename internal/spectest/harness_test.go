@@ -111,6 +111,17 @@ func runReal(t *testing.T, src string, goals ...string) {
 	}
 }
 
+// runRealErr builds src for real and returns the build error (nil on success).
+// Use it to assert on build-time failures like "no rule to make"/"no build path".
+func runRealErr(t *testing.T, src string, goals ...string) error {
+	t.Helper()
+	prog, _ := build(t, src, nil)
+	return shell.Run(prog, shell.Options{
+		Goals: goals, Cache: runner.NewCache(),
+		Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard,
+	})
+}
+
 // chdirTmp switches the test into a fresh temp directory and returns its path.
 func chdirTmp(t *testing.T) string {
 	t.Helper()

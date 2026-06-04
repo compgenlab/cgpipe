@@ -127,6 +127,33 @@ func TestSchedulerSubmissionMatrix(t *testing.T) {
 	}
 }
 
+// §7.6 On a scheduler an opportunistic job depends (afterok) on the jobs that
+// produced its inputs this run, so guarded cleanup runs after them.
+func TestOpportunisticSchedulerDep(t *testing.T) {
+	capture := installMocks(t, "slurm")
+	workdir := t.TempDir()
+	src := `prod.bam: {{
+    name = "prod"
+    --
+    echo x > ${output}
+}}
+: prod.bam {{
+    name = "cleanup"
+    --
+    rm -f prod.bam
+}}
+@default: prod.bam`
+	prog, _ := build(t, src, nil)
+	sch, _ := sched.For("slurm")
+	var out bytes.Buffer
+	if err := sched.Run(prog, sch, sched.Options{Dir: workdir, Out: &out, Pipeline: "spec.cgp"}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	// prod submits first (1001); the opportunistic cleanup (1002) depends on it.
+	cleanup := captured(t, capture, "submit-2.stdin")
+	mustContain(t, cleanup, "#SBATCH -d afterok:1001", "rm -f prod.bam")
+}
+
 // §10.5 Cross-run reuse: with a ledger, a second run that finds the output still
 // owned by an active job reuses it instead of resubmitting.
 func TestLedgerReuseAcrossRuns(t *testing.T) {

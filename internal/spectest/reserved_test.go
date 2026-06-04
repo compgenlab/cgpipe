@@ -23,13 +23,7 @@ out: in {{
 }
 
 // §8 A target opts out of @pre / @post with nopre / nopost directives.
-//
-// GAP: renderTargetScope always prepends @pre / appends @post for non-special
-// targets and never consults nopre / nopost. (It also decides the wrapping
-// before evaluating the directive block, so implementing this needs the
-// directives evaluated first.) Assertion below is the spec-correct behavior.
 func TestPrePostOptOut(t *testing.T) {
-	t.Skip("GAP §8: nopre / nopost directives do not suppress @pre / @post")
 	src := `@pre {{
     echo START
 }}
@@ -44,6 +38,43 @@ out: in {{
 	}
 	if !containsLine(lines, "work") {
 		t.Errorf("body missing: %v", lines)
+	}
+}
+
+// §8 nopost suppresses @post for that target only.
+func TestPostOptOut(t *testing.T) {
+	src := `@post {{
+    echo END
+}}
+out: in {{
+    nopost = true
+    --
+    work
+}}`
+	lines := shellLines(render(t, src))
+	if containsLine(lines, "echo END") {
+		t.Errorf("nopost did not suppress @post: %v", lines)
+	}
+}
+
+// §8 nopre on one target does not affect another target's @pre.
+func TestOptOutIsPerTarget(t *testing.T) {
+	src := `@pre {{
+    echo START
+}}
+skip: in {{
+    nopre = true
+    --
+    work-skip
+}}
+keep: in {{
+    work-keep
+}}`
+	if containsLine(shellLines(renderNamed(t, src, "skip")), "echo START") {
+		t.Error("nopre target wrongly got @pre")
+	}
+	if !containsLine(shellLines(renderNamed(t, src, "keep")), "echo START") {
+		t.Error("the other target lost its @pre")
 	}
 }
 
