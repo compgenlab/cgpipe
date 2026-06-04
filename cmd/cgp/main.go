@@ -290,7 +290,7 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 		return 0
 	}
 	if name == "html" {
-		return runReport(prog, file, os.Stdout)
+		return runReport(prog, file, goals, os.Stdout)
 	}
 	sch, ok := sched.For(name)
 	if !ok {
@@ -307,7 +307,7 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 // runReport renders an HTML status report of the pipeline DAG to out. Node
 // status is resolved from disk existence, the ledger's owning job, and the
 // (script-configured) scheduler's live state.
-func runReport(prog *eval.Program, file string, out io.Writer) int {
+func runReport(prog *eval.Program, file string, goals []string, out io.Writer) int {
 	var sch *sched.Scheduler
 	if v, ok := prog.Get("cgp.runner"); ok {
 		if s, found := sched.For(eval.Stringify(v)); found {
@@ -354,7 +354,7 @@ func runReport(prog *eval.Program, file string, out io.Writer) int {
 		return report.Running // owner exists but no scheduler to probe
 	}
 
-	if err := report.Run(graphviz.Build(prog), statusOf, file, out); err != nil {
+	if err := report.Run(graphviz.Build(prog, goals), statusOf, file, out); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}

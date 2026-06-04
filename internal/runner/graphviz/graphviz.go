@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgen-io/cgp/internal/runner"
 )
 
 // Node is a file in the dependency graph.
@@ -30,10 +31,41 @@ type Graph struct {
 	Edges []Edge
 }
 
-// Build extracts the concrete dependency graph from a program. Reserved targets
-// (@pre/@post/…), opportunistic (no-output) targets, and wildcard rule templates
-// (% in an output) are excluded.
-func Build(p *eval.Program) Graph {
+// Build extracts the concrete dependency graph reachable from goals (empty ⇒ the
+// program's @default, or its first target). It walks producer → inputs the same
+// way the build driver does, instantiating wildcard rules (`%.bam.bai: %.bam`)
+// for the goals that reach them. Reserved targets (@pre/@post/…) and
+// opportunistic (no-output) targets are not file nodes; a file produced by no
+// reached target is a source.
+func Build(p *eval.Program, goals []string) Graph {
+	explicit := map[string]*eval.Target{}
+	var wild []*eval.Target
+	for _, t := range p.Targets {
+		if t.Special != "" || len(t.Outputs) == 0 {
+			continue
+		}
+		if hasWildcard(t.Outputs) {
+			wild = append(wild, t)
+			continue
+		}
+		for _, o := range t.Outputs {
+			if _, dup := explicit[o]; !dup {
+				explicit[o] = t
+			}
+		}
+	}
+	producerFor := func(out string) *eval.Target {
+		if t, ok := explicit[out]; ok {
+			return t
+		}
+		for _, rule := range wild {
+			if stem, ok := runner.MatchWildcard(rule, out); ok {
+				return runner.Instantiate(rule, stem)
+			}
+		}
+		return nil
+	}
+
 	produced := map[string]bool{}
 	temp := map[string]bool{}
 	seen := map[string]bool{}
@@ -46,10 +78,18 @@ func Build(p *eval.Program) Graph {
 	}
 	var edges []Edge
 	edgeSeen := map[string]bool{}
+	done := map[string]bool{} // output paths whose producer has been expanded
 
-	for _, t := range p.Targets {
-		if t.Special != "" || len(t.Outputs) == 0 || hasWildcard(t.Outputs) {
-			continue
+	var visit func(out string)
+	visit = func(out string) {
+		note(out)
+		if done[out] {
+			return
+		}
+		done[out] = true
+		t := producerFor(out)
+		if t == nil {
+			return // a source file (no producer reached)
 		}
 		for _, o := range t.Outputs {
 			produced[o] = true
@@ -57,6 +97,7 @@ func Build(p *eval.Program) Graph {
 				temp[o] = true
 			}
 			note(o)
+			done[o] = true
 		}
 		for _, in := range t.Inputs {
 			note(in)
@@ -67,8 +108,13 @@ func Build(p *eval.Program) Graph {
 					edges = append(edges, Edge{in, o})
 				}
 			}
+			visit(in)
 		}
 	}
+	for _, g := range resolveGoals(p, goals) {
+		visit(g)
+	}
+
 	sort.Strings(names)
 	g := Graph{Edges: edges}
 	for _, n := range names {
@@ -77,10 +123,24 @@ func Build(p *eval.Program) Graph {
 	return g
 }
 
-// Run writes the DOT representation of p's dependency graph to out. goals is
-// accepted for interface symmetry with the other runners.
+// resolveGoals mirrors the driver: explicit goals, else @default, else the first
+// defined target.
+func resolveGoals(p *eval.Program, goals []string) []string {
+	if len(goals) > 0 {
+		return goals
+	}
+	if len(p.Default) > 0 {
+		return p.Default
+	}
+	if p.FirstOutput != "" {
+		return []string{p.FirstOutput}
+	}
+	return nil
+}
+
+// Run writes the DOT representation of the goal-reachable dependency graph to out.
 func Run(p *eval.Program, goals []string, out io.Writer) error {
-	_, err := io.WriteString(out, DOT(Build(p)))
+	_, err := io.WriteString(out, DOT(Build(p, goals)))
 	return err
 }
 

@@ -443,6 +443,18 @@ func (r *driver) runOpportunistic(t *eval.Target) (string, error) {
 	return r.doSubmit(t, deps)
 }
 
+// MatchWildcard reports whether rule's `%` pattern matches goal, returning the
+// stem. Exported for graph builders that resolve producers outside the driver.
+func MatchWildcard(rule *eval.Target, goal string) (string, bool) {
+	return matchWildcard(rule, goal)
+}
+
+// Instantiate concretizes a wildcard rule for the given stem (substituting `%`
+// in its outputs and inputs). Exported for graph builders.
+func Instantiate(rule *eval.Target, stem string) *eval.Target {
+	return instantiate(rule, stem)
+}
+
 func matchWildcard(rule *eval.Target, goal string) (string, bool) {
 	for _, p := range rule.Outputs {
 		i := strings.IndexByte(p, '%')

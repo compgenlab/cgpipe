@@ -57,8 +57,42 @@ merged.vcf: @{parts} {{
 	mustContain(t, got, `"a.vcf" -> "merged.vcf"`, `"b.vcf" -> "merged.vcf"`)
 }
 
-// §11.3 Reserved (@pre/@post) and wildcard-template targets are not nodes in the
-// concrete file DAG.
+// §11.3 The graph is goal-driven: a wildcard rule reached from a goal is
+// instantiated, so its concrete output/input appear; an unreached wildcard does
+// not.
+func TestGraphvizGoalDrivenWildcard(t *testing.T) {
+	got := dot(t, `%.bam.bai: %.bam {{
+    index ${input}
+}}
+x.bam: reads.fq {{
+    align ${input} > ${output}
+}}
+@default: x.bam.bai`)
+	// the wildcard instantiated for the goal x.bam.bai
+	mustContain(t, got,
+		`"x.bam" -> "x.bam.bai"`,
+		`"reads.fq" -> "x.bam"`,
+	)
+	// and the template form never appears as a literal node
+	mustNotContain(t, got, "%.bam.bai", `"%"`)
+}
+
+// §11.3 Only the goal-reachable subgraph is shown: a target not reached from the
+// goal is omitted.
+func TestGraphvizGoalScoped(t *testing.T) {
+	got := dot(t, `wanted.txt: a.txt {{
+    cp ${input} ${output}
+}}
+unrelated.txt: b.txt {{
+    cp ${input} ${output}
+}}
+@default: wanted.txt`)
+	mustContain(t, got, `"a.txt" -> "wanted.txt"`)
+	mustNotContain(t, got, "unrelated.txt", "b.txt")
+}
+
+// §11.3 Reserved (@pre/@post) and unreached wildcard-template targets are not
+// nodes in the concrete file DAG.
 func TestGraphvizSkipsReservedAndWildcards(t *testing.T) {
 	got := dot(t, `@pre {{
     echo start

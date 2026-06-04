@@ -37,7 +37,7 @@ final.txt: b.txt {{
 	}
 
 	var b strings.Builder
-	if err := report.Run(graphviz.Build(prog), statusOf, "my-pipeline", &b); err != nil {
+	if err := report.Run(graphviz.Build(prog, nil), statusOf, "my-pipeline", &b); err != nil {
 		t.Fatal(err)
 	}
 	out := b.String()
@@ -67,7 +67,7 @@ func TestHTMLReportPendingAndElide(t *testing.T) {
 }}
 @default: this_is_a_really_long_output_filename.txt`, nil)
 	var b strings.Builder
-	if err := report.Run(graphviz.Build(prog), func(string) report.State { return report.Pending }, "p", &b); err != nil {
+	if err := report.Run(graphviz.Build(prog, nil), func(string) report.State { return report.Pending }, "p", &b); err != nil {
 		t.Fatal(err)
 	}
 	out := b.String()
