@@ -269,6 +269,38 @@ func (stmtNode) bodyNode()  {}
 func (*forNode) bodyNode()  {}
 func (*ifNode) bodyNode()   {}
 
+// bracketDelta returns the net ( + [ minus ) + ] depth of a line, ignoring
+// brackets inside "…" string literals and after a # comment. Used to detect when
+// a % statement line has an open bracket and continues onto the next % line.
+func bracketDelta(s string) int {
+	depth := 0
+	inStr := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			if c == '\\' {
+				i++
+				continue
+			}
+			if c == '"' {
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '#':
+			return depth // comment runs to end of line
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		}
+	}
+	return depth
+}
+
 func isCtrlLine(line string) bool {
 	return strings.HasPrefix(strings.TrimLeft(line, " \t"), "%")
 }
@@ -364,18 +396,22 @@ func parseBlockNodes(lines []string, idx *int) (nodes []bodyNode, stop string, e
 				break
 			}
 		default:
-			// A run of consecutive cgp statement lines (not block-control: for / if
-			// / closers). Collect the whole run and parse it together, so a single
-			// statement may span several % lines — e.g. a list literal broken across
-			// lines — and several statements may share the run.
+			// A cgp statement on a % line. It may span several % lines when an
+			// expression has an open ( or [ — the open bracket is the continuation
+			// signal (no escape needed), so we gather following % lines until the
+			// brackets balance and parse the whole thing together. A balanced line
+			// (e.g. `for x {`, where braces don't count) is consumed alone, so this
+			// never swallows a following control header.
 			var src []string
+			depth := 0
 			for *idx < len(lines) && isCtrlLine(lines[*idx]) {
 				c := ctrlContent(lines[*idx])
-				if strings.HasPrefix(c, "}") || strings.HasPrefix(c, "for ") || strings.HasPrefix(c, "if ") {
+				src = append(src, c)
+				depth += bracketDelta(c)
+				*idx++
+				if depth <= 0 {
 					break
 				}
-				src = append(src, c)
-				*idx++
 			}
 			nodes = append(nodes, stmtNode{strings.Join(src, "\n")})
 		}

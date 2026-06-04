@@ -103,8 +103,9 @@ func TestPercentForRange(t *testing.T) {
 	}
 }
 
-// §6.4 A run of consecutive % lines is parsed together, so a single cgp
-// statement may span several % lines (e.g. a list literal broken across lines).
+// §6.4 A % statement may span several % lines when an expression has an open
+// bracket — a list literal or a call broken across lines — then the result is
+// used by the surrounding shell/control.
 func TestPercentMultiLineStatement(t *testing.T) {
 	got := render(t, `out: in {{
 % nums = [10,
@@ -117,6 +118,35 @@ func TestPercentMultiLineStatement(t *testing.T) {
 	want := []string{"echo 10", "echo 20", "echo 30"}
 	if lines := shellLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
 		t.Errorf("multi-line %% statement: lines = %v, want %v", lines, want)
+	}
+
+	// a call split across % lines (the open '(' is the continuation signal)
+	call := render(t, `out: in {{
+% joined = ",".join([
+%     "a",
+%     "b"])
+    echo ${joined}
+}}`)
+	if lines := shellLines(call); len(lines) != 1 || lines[0] != "echo a,b" {
+		t.Errorf("multi-line call statement: %v", lines)
+	}
+}
+
+// §6.4 Bracket-aware continuation does not swallow a following control header:
+// nested % for headers on consecutive lines still open separate loops.
+func TestPercentConsecutiveHeadersNotMerged(t *testing.T) {
+	got := render(t, `xs = ["a", "b"]
+ys = [1, 2]
+out: in {{
+% for x in xs {
+% for y in ys {
+    echo ${x}${y}
+% }
+% }
+}}`)
+	want := []string{"echo a1", "echo a2", "echo b1", "echo b2"}
+	if lines := shellLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("nested headers: lines = %v, want %v", lines, want)
 	}
 }
 
