@@ -145,6 +145,11 @@ func (p *parser) parseStmt() ast.Stmt {
 	case token.FOR:
 		return p.parseFor()
 	case token.AT:
+		// `@name` is a reserved target; `@{list}` is a normal target whose
+		// outputs lead with an @{…} list expansion ([spec §7.4]).
+		if p.peek().Kind == token.LBRACE {
+			return p.parseTarget()
+		}
 		return p.parseReservedTarget()
 	case token.CARET, token.COLON:
 		return p.parseTarget()

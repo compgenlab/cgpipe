@@ -226,6 +226,20 @@ func TestTargetInterpolatedWords(t *testing.T) {
 	}
 }
 
+func TestListExpansionTargetHeader(t *testing.T) {
+	// @{outs}: @{ins} is a normal target (list expansion), NOT a reserved @name.
+	tg := only(t, "@{outs}: @{ins} {{\n  cp ${input} ${output}\n}}").(*ast.Target)
+	if tg.Special != "" {
+		t.Fatalf("special = %q, want a normal target", tg.Special)
+	}
+	if len(tg.Outputs) != 1 || tg.Outputs[0] != "@{outs}" {
+		t.Fatalf("outputs = %v (the @{…} must survive raw to eval)", tg.Outputs)
+	}
+	if len(tg.Inputs) != 1 || tg.Inputs[0] != "@{ins}" {
+		t.Fatalf("inputs = %v", tg.Inputs)
+	}
+}
+
 func TestReservedTargetPre(t *testing.T) {
 	tg := only(t, "@pre {{\n  echo start\n}}").(*ast.Target)
 	if tg.Special != "pre" || tg.Body == nil {
