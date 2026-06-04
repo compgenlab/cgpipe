@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build (no CGO, cross-compiled)
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          version="${GITHUB_REF_NAME}"
+          ldflags="-s -w -X github.com/compgen-io/cgp/internal/buildinfo.Version=${version}"
+          dist="cgp-${version}-${GOOS}-${GOARCH}"
+          mkdir -p "dist/${dist}"
+          go build -trimpath -ldflags "${ldflags}" -o "dist/${dist}/cgp"    ./cmd/cgp
+          go build -trimpath -ldflags "${ldflags}" -o "dist/${dist}/cgsub"  ./cmd/cgsub
+          cp README.md LICENSE "dist/${dist}/"
+          tar -C dist -czf "dist/${dist}.tar.gz" "${dist}"
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz

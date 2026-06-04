@@ -1,0 +1,9 @@
+# build output
+/bin/
+/dist/
+*.test
+*.out
+
+# editor / OS
+.DS_Store
+*.swp
