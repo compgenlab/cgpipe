@@ -43,6 +43,16 @@ func Run(p *eval.Program, opts Options) error {
 		executed:  map[*eval.Target]bool{},
 	}
 	for _, t := range p.Targets {
+		isWild := false
+		for _, o := range t.Outputs {
+			if strings.Contains(o, "%") {
+				isWild = true
+			}
+		}
+		if isWild {
+			r.wildcards = append(r.wildcards, t)
+			continue
+		}
 		for _, o := range t.Outputs {
 			if _, dup := r.producer[o]; !dup {
 				r.producer[o] = t
@@ -88,13 +98,69 @@ type runner struct {
 	prog      *eval.Program
 	opts      Options
 	producer  map[string]*eval.Target
+	wildcards []*eval.Target
 	memo      map[*eval.Target]resolved
 	resolving map[*eval.Target]bool
 	executed  map[*eval.Target]bool
 }
 
+// producerFor returns the target that produces path: an exact match, or a
+// freshly instantiated wildcard (%) rule. nil if nothing produces it.
+func (r *runner) producerFor(path string) *eval.Target {
+	if t, ok := r.producer[path]; ok {
+		return t
+	}
+	for _, rule := range r.wildcards {
+		if stem, ok := matchWildcard(rule, path); ok {
+			inst := instantiate(rule, stem)
+			for _, o := range inst.Outputs {
+				if _, dup := r.producer[o]; !dup {
+					r.producer[o] = inst
+				}
+			}
+			return inst
+		}
+	}
+	return nil
+}
+
+func matchWildcard(rule *eval.Target, goal string) (string, bool) {
+	for _, p := range rule.Outputs {
+		i := strings.IndexByte(p, '%')
+		if i < 0 {
+			continue
+		}
+		prefix, suffix := p[:i], p[i+1:]
+		if len(goal) > len(prefix)+len(suffix) &&
+			strings.HasPrefix(goal, prefix) && strings.HasSuffix(goal, suffix) {
+			return goal[len(prefix) : len(goal)-len(suffix)], true
+		}
+	}
+	return "", false
+}
+
+func instantiate(rule *eval.Target, stem string) *eval.Target {
+	inst := &eval.Target{
+		Special: rule.Special,
+		Body:    rule.Body,
+		HasBody: rule.HasBody,
+		Stem:    stem,
+		Scope:   rule.Scope,
+		Temp:    map[string]bool{},
+	}
+	for _, o := range rule.Outputs {
+		ro := strings.ReplaceAll(o, "%", stem)
+		inst.Outputs = append(inst.Outputs, ro)
+		inst.Temp[ro] = rule.Temp[o]
+	}
+	for _, in := range rule.Inputs {
+		inst.Inputs = append(inst.Inputs, strings.ReplaceAll(in, "%", stem))
+	}
+	return inst
+}
+
 func (r *runner) buildGoal(goal string) error {
-	t := r.producer[goal]
+	t := r.producerFor(goal)
 	if t == nil {
 		if !exists(r.path(goal)) {
 			return fmt.Errorf("no rule to make %q and it does not exist", goal)
@@ -127,7 +193,7 @@ func (r *runner) resolve(t *eval.Target) (resolved, error) {
 	var inNewest int64
 	anyInputRebuilt := false
 	for _, in := range t.Inputs {
-		if pt := r.producer[in]; pt != nil {
+		if pt := r.producerFor(in); pt != nil {
 			sub, err := r.resolve(pt)
 			if err != nil {
 				return resolved{}, err
@@ -195,7 +261,7 @@ func (r *runner) execute(t *eval.Target) error {
 	r.executed[t] = true
 	// Ensure inputs that will run, or are missing, are built first.
 	for _, in := range t.Inputs {
-		if pt := r.producer[in]; pt != nil {
+		if pt := r.producerFor(in); pt != nil {
 			sub, err := r.resolve(pt)
 			if err != nil {
 				return err

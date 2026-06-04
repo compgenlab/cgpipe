@@ -249,6 +249,47 @@ func TestUnknownReservedTargetErrors(t *testing.T) {
 	}
 }
 
+func TestParseNewStatements(t *testing.T) {
+	if _, ok := only(t, `include "shared.cgp"`).(*ast.Include); !ok {
+		t.Error("include not parsed")
+	}
+	sn, ok := only(t, "snippet common {{\n  set -e\n}}").(*ast.Snippet)
+	if !ok || sn.Name != "common" {
+		t.Errorf("snippet = %#v", only(t, "snippet common {{\n  set -e\n}}"))
+	}
+	if _, ok := only(t, `log "run.log"`).(*ast.Log); !ok {
+		t.Error("log statement not parsed")
+	}
+	if _, ok := only(t, `eval "x = 1"`).(*ast.EvalStmt); !ok {
+		t.Error("eval not parsed")
+	}
+	if _, ok := only(t, `dumpvars`).(*ast.Dumpvars); !ok {
+		t.Error("dumpvars not parsed")
+	}
+	if _, ok := only(t, `showhelp`).(*ast.Showhelp); !ok {
+		t.Error("showhelp not parsed")
+	}
+	if _, ok := only(t, `sleep 2`).(*ast.Sleep); !ok {
+		t.Error("sleep not parsed")
+	}
+}
+
+func TestLogAssignmentVsStatement(t *testing.T) {
+	if _, ok := only(t, `log = "x"`).(*ast.Assign); !ok {
+		t.Error(`log = "x" should be an assignment`)
+	}
+	if _, ok := only(t, `log "x"`).(*ast.Log); !ok {
+		t.Error(`log "x" should be a log statement`)
+	}
+}
+
+func TestHelpTextExtraction(t *testing.T) {
+	f := mustParse(t, "#!/usr/bin/env cgp\n# Align reads.\n# Options: --ref FILE\n\nx = 1\n")
+	if f.Help != "Align reads.\nOptions: --ref FILE" {
+		t.Errorf("help = %q", f.Help)
+	}
+}
+
 func TestDynamicTargetInForLoop(t *testing.T) {
 	src := `chroms = ["1", "2"]
 acc = []

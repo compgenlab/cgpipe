@@ -3,11 +3,15 @@ package eval
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/ast"
 	"github.com/compgen-io/cgp/internal/parser"
 )
+
+// snippetRe matches a body line that is a lone @name snippet invocation.
+var snippetRe = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_]*)$`)
 
 // RenderTarget renders a target's shell body to executable script text,
 // including the global @pre / @post wrappers (for non-reserved targets). The
@@ -16,8 +20,8 @@ func (p *Program) RenderTarget(t *Target) (string, error) {
 	sc := t.Scope.clone()
 	sc.set("input", toStrList(t.Inputs))
 	sc.set("output", toStrList(t.Outputs))
-	sc.set("stem", StrVal(""))
-	ip := &interp{sc: sc, out: io.Discard, prog: &Program{}}
+	sc.set("stem", StrVal(t.Stem))
+	ip := &interp{sc: sc, out: io.Discard, prog: p}
 
 	var sections []string
 	if t.Special == "" && p.Pre != nil {
@@ -248,6 +252,20 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 	for _, n := range nodes {
 		switch x := n.(type) {
 		case shellNode:
+			if m := snippetRe.FindStringSubmatch(strings.TrimSpace(x.line)); m != nil {
+				body, ok := ip.prog.Snippets[m[1]]
+				if !ok {
+					return fmt.Errorf("unknown snippet: @%s", m[1])
+				}
+				sub, err := parseBodyNodes(strings.Split(body, "\n"))
+				if err != nil {
+					return err
+				}
+				if err := ip.renderNodes(sub, out); err != nil {
+					return err
+				}
+				continue
+			}
 			s, err := ip.interpolate(strings.TrimLeft(x.line, " \t"))
 			if err != nil {
 				return err

@@ -58,6 +58,7 @@ func run(args []string) int {
 	vars := map[string]eval.Value{}
 	var goals []string
 	dryRun := false
+	showHelp := false
 
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -82,8 +83,7 @@ func run(args []string) int {
 			case "-dr":
 				dryRun = true
 			case "-h":
-				fmt.Print(usage)
-				return 0
+				showHelp = true
 			default:
 				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
 				return 2
@@ -103,6 +103,15 @@ func run(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
+	}
+
+	if showHelp {
+		if f.Help != "" {
+			fmt.Println(f.Help)
+		} else {
+			fmt.Fprintf(os.Stderr, "cgp: %s has no help text\n", file)
+		}
+		return 0
 	}
 
 	prog, err := eval.Run(f, eval.Options{File: file, Vars: vars})

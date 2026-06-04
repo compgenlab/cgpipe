@@ -192,6 +192,19 @@ merged.txt: @{acc} {{
 	}
 }
 
+func TestWildcardRule(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "report.txt"), "data\n")
+	// %.gz : %  — the stem is "report.txt"; build it via a wildcard rule.
+	mustBuild(t, dir, `%.gz: % {{
+    echo ${stem} > ${output}
+}}
+@default: report.txt.gz`)
+	if got := read(t, filepath.Join(dir, "report.txt.gz")); got != "report.txt\n" {
+		t.Errorf("report.txt.gz = %q, want %q (wildcard stem)", got, "report.txt\n")
+	}
+}
+
 func TestNoRuleToMake(t *testing.T) {
 	dir := t.TempDir()
 	err := build(t, dir, "out.txt: dep.txt {{\n  cp ${input} ${output}\n}}", "out.txt")

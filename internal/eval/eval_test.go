@@ -3,6 +3,9 @@ package eval
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/compgen-io/cgp/internal/parser"
@@ -175,6 +178,90 @@ func TestCommandSubstitution(t *testing.T) {
 	}
 	if got != "hello" {
 		t.Errorf("$(printf hello) = %q", got)
+	}
+}
+
+func TestDoubleEval(t *testing.T) {
+	ip := testInterp(map[string]Value{
+		"tmpl": StrVal("hi ${name}"),
+		"name": StrVal("bob"),
+	})
+	got, err := ip.interpolate("${{tmpl}}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "hi bob" {
+		t.Errorf("double-eval = %q, want %q", got, "hi bob")
+	}
+}
+
+// ---- new statements ----
+
+func TestEvalStatement(t *testing.T) {
+	_, out := runSrc(t, "eval \"x = 41\"\nprint x + 1", nil)
+	if out != "42\n" {
+		t.Errorf("eval statement: out = %q", out)
+	}
+}
+
+func TestDumpvars(t *testing.T) {
+	_, out := runSrc(t, "a = 1\nb = \"two\"\ndumpvars", nil)
+	if !strings.Contains(out, "a = 1") || !strings.Contains(out, "b = two") {
+		t.Errorf("dumpvars out = %q", out)
+	}
+}
+
+func TestShowhelp(t *testing.T) {
+	f, err := parser.Parse("# Hello help line\nshowhelp\n", "t.cgp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if _, err := Run(f, Options{Out: &buf}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "Hello help line") {
+		t.Errorf("showhelp out = %q", buf.String())
+	}
+}
+
+func TestIncludeStatement(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "inc.cgp"), []byte(`shared = "yes"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	main := "include \"inc.cgp\"\nprint shared"
+	f, err := parser.Parse(main, filepath.Join(dir, "main.cgp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if _, err := Run(f, Options{File: filepath.Join(dir, "main.cgp"), Out: &buf}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "yes\n" {
+		t.Errorf("include: out = %q, want %q", buf.String(), "yes\n")
+	}
+}
+
+func TestSnippetDefinitionAndInvocation(t *testing.T) {
+	prog, _ := runSrc(t, `snippet common {{
+    set -euo pipefail
+}}
+out: in {{
+    @common
+    work ${input}
+}}`, nil)
+	if _, ok := prog.Snippets["common"]; !ok {
+		t.Fatal("snippet 'common' not registered")
+	}
+	rendered, err := prog.RenderTarget(prog.Targets[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"set -euo pipefail", "work in"}
+	if got := nonEmptyLines(rendered); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("rendered = %v, want %v", got, want)
 	}
 }
 
