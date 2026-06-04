@@ -59,6 +59,41 @@ func (p *Program) Get(name string) (Value, bool) {
 	return p.Scope.get(name)
 }
 
+// JobSpec describes a one-off command to submit (used by `cgp sub`).
+type JobSpec struct {
+	Command  string           // the shell command line (treated as a cgp body)
+	Name     string           // job name
+	Outputs  []string         // declared outputs (ledger ownership)
+	Inputs   []string         // declared inputs
+	Settings map[string]Value // job.* and cgp.* values (e.g. job.mem, cgp.ledger)
+}
+
+// NewJob builds a single-target Program from a one-off command. The command is
+// the target body, so ${input}/${output} substitution works; job.* settings are
+// available to scheduler templates.
+func NewJob(spec JobSpec) *Program {
+	sc := newScope()
+	for k, v := range spec.Settings {
+		sc.set(k, v)
+	}
+	if spec.Name != "" {
+		sc.set("job.name", StrVal(spec.Name))
+	}
+	t := &Target{
+		Outputs: spec.Outputs,
+		Inputs:  spec.Inputs,
+		Temp:    map[string]bool{},
+		Body:    spec.Command,
+		HasBody: true,
+		Scope:   sc.clone(),
+	}
+	p := &Program{Targets: []*Target{t}, Snippets: map[string]string{}, Scope: sc}
+	if len(t.Outputs) > 0 {
+		p.FirstOutput = t.Outputs[0]
+	}
+	return p
+}
+
 // ExitError is returned by Run when the script calls exit.
 type ExitError struct{ Code int }
 

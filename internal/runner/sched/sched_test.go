@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgen-io/cgp/internal/ledger"
 	"github.com/compgen-io/cgp/internal/parser"
 )
 
@@ -163,6 +164,58 @@ func TestLedgerReuse(t *testing.T) {
 	}
 	if !strings.Contains(out2.String(), "reuse") {
 		t.Errorf("run 2 output should note reuse:\n%s", out2.String())
+	}
+}
+
+// TestSubmitOneAfterDep checks that `cgp sub`-style submission resolves an
+// -after output to the active owning job in the ledger and wires it as afterok.
+func TestSubmitOneAfterDep(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	scripts := filepath.Join(dir, "scripts")
+	os.MkdirAll(bin, 0o755)
+	os.MkdirAll(scripts, 0o755)
+	counter := filepath.Join(dir, "counter")
+	sbatch := "#!/bin/bash\n" +
+		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n" +
+		"cat > \"$CGP_SCRIPTS/job.$n\"\n" +
+		"echo $n\n"
+	os.WriteFile(filepath.Join(bin, "sbatch"), []byte(sbatch), 0o755)
+	os.WriteFile(filepath.Join(bin, "scontrol"), []byte("#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CGP_COUNTER", counter)
+	t.Setenv("CGP_SCRIPTS", scripts)
+
+	ledgerPath := filepath.Join(dir, "ledger.db")
+	// Pre-record an existing job that owns dep.bam.
+	lg, err := ledger.Open(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lg.Record(ledger.Job{JobID: "777", Outputs: []string{"dep.bam"}})
+	lg.Close()
+
+	prog := eval.NewJob(eval.JobSpec{
+		Command:  "echo > ${output}",
+		Name:     "j",
+		Outputs:  []string{"out.bam"},
+		Settings: map[string]eval.Value{"cgp.ledger": eval.StrVal(ledgerPath)},
+	})
+	sch, _ := For("slurm")
+	var out bytes.Buffer
+	id, err := SubmitOne(prog, sch, prog.Targets[0], nil, []string{"dep.bam"}, Options{Dir: dir, Out: &out})
+	if err != nil {
+		t.Fatalf("SubmitOne: %v", err)
+	}
+	if id != "1001" {
+		t.Fatalf("job id = %q, want 1001", id)
+	}
+	script, err := os.ReadFile(filepath.Join(scripts, "job.1001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(script), "afterok:777") {
+		t.Errorf("submitted script missing afterok:777 (the -after owner):\n%s", script)
 	}
 }
 

@@ -35,8 +35,7 @@ jobs:
           ldflags="-s -w -X github.com/compgen-io/cgp/internal/buildinfo.Version=${version}"
           dist="cgp-${version}-${GOOS}-${GOARCH}"
           mkdir -p "dist/${dist}"
-          go build -trimpath -ldflags "${ldflags}" -o "dist/${dist}/cgp"    ./cmd/cgp
-          go build -trimpath -ldflags "${ldflags}" -o "dist/${dist}/cgsub"  ./cmd/cgsub
+          go build -trimpath -ldflags "${ldflags}" -o "dist/${dist}/cgp" ./cmd/cgp
           cp README.md LICENSE "dist/${dist}/"
           tar -C dist -czf "dist/${dist}.tar.gz" "${dist}"
 

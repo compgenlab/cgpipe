@@ -23,6 +23,8 @@ const usage = `cgp — run a .cgp pipeline
 
 usage:
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
+    cgp sub [options] -- <command ...>     (submit a one-off job; see cgp sub -h)
+    cgp ledger {vacuum|unlock} <db>
     cgp version
 
 options (single hyphen):
@@ -55,6 +57,8 @@ func run(args []string) int {
 		return 0
 	case "ledger":
 		return runLedger(args[1:])
+	case "sub":
+		return runSub(args[1:])
 	}
 
 	file := args[0]
@@ -159,6 +163,159 @@ func run(args []string) int {
 		return 2
 	}
 	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Pipeline: file}); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+const subUsage = `cgp sub — submit a one-off command as a job
+
+usage:
+    cgp sub [options] -- <command ...>
+
+options:
+    -name S        job name
+    -mem S         memory (e.g. 8G)
+    -procs N       cpus
+    -walltime S    wall-time limit
+    -o PATH        declared output (repeatable; recorded in the ledger)
+    -i PATH        declared input (repeatable)
+    -d JOBID       depend on an existing job id (repeatable)
+    -after PATH    depend on the active job that owns PATH in the ledger (repeatable)
+    -r NAME        runner: shell (default), slurm, sge, pbs, batchq
+    -ledger PATH   ledger database
+    -dr            dry run
+
+The command (everything after --) is treated as a cgp body: ${input}/${output}
+substitute; use $VAR for shell variables.
+`
+
+// runSub handles `cgp sub [options] -- command...`.
+func runSub(args []string) int {
+	var name string
+	var outs, ins, deps, after []string
+	var runnerName, ledgerPath string
+	dryRun := false
+	settings := map[string]eval.Value{}
+	var cmdParts []string
+
+	need := func(i int, flag string) (string, bool) {
+		if i+1 >= len(args) {
+			fmt.Fprintf(os.Stderr, "cgp sub: %s needs a value\n", flag)
+			return "", false
+		}
+		return args[i+1], true
+	}
+
+	i := 0
+	for i < len(args) {
+		a := args[i]
+		if a == "--" {
+			cmdParts = args[i+1:]
+			break
+		}
+		v, ok := "", false
+		switch a {
+		case "-dr":
+			dryRun = true
+		case "-h":
+			fmt.Print(subUsage)
+			return 0
+		case "-name":
+			if name, ok = need(i, a); !ok {
+				return 2
+			}
+			i++
+		case "-mem":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			settings["job.mem"] = eval.StrVal(v)
+			i++
+		case "-procs":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			settings["job.procs"] = parseCLIValue(v)
+			i++
+		case "-walltime":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			settings["job.walltime"] = eval.StrVal(v)
+			i++
+		case "-o":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			outs = append(outs, v)
+			i++
+		case "-i":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			ins = append(ins, v)
+			i++
+		case "-d":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			deps = append(deps, v)
+			i++
+		case "-after":
+			if v, ok = need(i, a); !ok {
+				return 2
+			}
+			after = append(after, v)
+			i++
+		case "-r":
+			if runnerName, ok = need(i, a); !ok {
+				return 2
+			}
+			i++
+		case "-ledger":
+			if ledgerPath, ok = need(i, a); !ok {
+				return 2
+			}
+			i++
+		default:
+			fmt.Fprintf(os.Stderr, "cgp sub: unknown option %s (put the command after --)\n", a)
+			return 2
+		}
+		i++
+	}
+
+	if len(cmdParts) == 0 {
+		fmt.Fprint(os.Stderr, subUsage)
+		return 2
+	}
+	if runnerName != "" {
+		settings["cgp.runner"] = eval.StrVal(runnerName)
+	}
+	if ledgerPath != "" {
+		settings["cgp.ledger"] = eval.StrVal(ledgerPath)
+	}
+
+	prog := eval.NewJob(eval.JobSpec{
+		Command: strings.Join(cmdParts, " "),
+		Name:    name, Outputs: outs, Inputs: ins, Settings: settings,
+	})
+	t := prog.Targets[0]
+
+	if runnerName == "" || runnerName == "shell" {
+		if err := shell.SubmitOne(prog, t, shell.Options{DryRun: dryRun}); err != nil {
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	sch, ok := sched.For(runnerName)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "cgp sub: unknown runner %q\n", runnerName)
+		return 2
+	}
+	if _, err := sched.SubmitOne(prog, sch, t, deps, after, sched.Options{DryRun: dryRun, Pipeline: "cgp sub"}); err != nil {
 		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}

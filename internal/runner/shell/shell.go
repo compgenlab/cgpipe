@@ -36,6 +36,22 @@ func Run(p *eval.Program, opts Options) error {
 	return runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir})
 }
 
+// SubmitOne renders and runs a single target with bash (used by `cgp sub`).
+func SubmitOne(p *eval.Program, t *eval.Target, opts Options) error {
+	if opts.Out == nil {
+		opts.Out = os.Stdout
+	}
+	if opts.Stdout == nil {
+		opts.Stdout = os.Stdout
+	}
+	if opts.Stderr == nil {
+		opts.Stderr = os.Stderr
+	}
+	b := &backend{prog: p, opts: opts}
+	_, err := b.Submit(t, nil)
+	return err
+}
+
 type backend struct {
 	prog *eval.Program
 	opts Options

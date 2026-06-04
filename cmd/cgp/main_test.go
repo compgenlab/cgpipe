@@ -74,6 +74,24 @@ func TestRunPipelineHelp(t *testing.T) {
 	}
 }
 
+func TestSubShellCreatesFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if code := run([]string{"sub", "-o", "out.txt", "--", "echo hi > ${output}"}); code != 0 {
+		t.Fatalf("cgp sub = %d, want 0", code)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "out.txt"))
+	if err != nil || string(b) != "hi\n" {
+		t.Fatalf("out.txt = %q, err=%v", string(b), err)
+	}
+}
+
+func TestSubNoCommand(t *testing.T) {
+	if code := run([]string{"sub", "-mem", "8G"}); code != 2 {
+		t.Fatalf("cgp sub with no command = %d, want 2", code)
+	}
+}
+
 func TestRunMissingFile(t *testing.T) {
 	if code := run([]string{"does-not-exist.cgp"}); code != 1 {
 		t.Fatalf("run(missing) = %d, want 1", code)

@@ -12,9 +12,9 @@ scale.
 > local shell or a batch scheduler — the full language, dependency resolution
 > (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
 > the optional SQLite ledger (cross-run reuse of still-queued jobs) are
-> implemented. Workflow composition (`stage`/`--manifest`) and `cgsub` are not
-> done yet. The JVM version remains available and supported at
-> `compgen-io/cgpipe-jvm`.
+> implemented, plus `cgp sub` for one-off job submission. Workflow composition
+> (`stage`/`--manifest`) is not done yet. The JVM version remains available and
+> supported at `compgen-io/cgpipe-jvm`.
 
 ```sh
 cgp pipeline.cgp                 # build @default (or the first target)
@@ -29,7 +29,6 @@ cgp pipeline.cgp -dr             # dry run: print the rendered shell scripts
 go build ./...
 go test ./...
 go build -o bin/cgp ./cmd/cgp
-go build -o bin/cgsub ./cmd/cgsub
 ```
 
 Cross-compilation is a plain `GOOS`/`GOARCH` build (no CGO):
@@ -42,8 +41,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 
 | Path | Role |
 |------|------|
-| `cmd/cgp/`        | the `cgp` binary (run a pipeline/workflow) |
-| `cmd/cgsub/`      | the `cgsub` binary (submit a single one-off job) |
+| `cmd/cgp/`        | the `cgp` binary (run a pipeline; `cgp sub` submits one-off jobs) |
 | `internal/token/` | lexical tokens + source positions |
 | `internal/lexer/` | source → tokens (incl. the `{{ }}` shell-body capture mode) |
 | `internal/ast/`   | AST node types |

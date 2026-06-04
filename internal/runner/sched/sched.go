@@ -107,6 +107,45 @@ type Options struct {
 
 // Run builds the program's goals by submitting stale targets to the scheduler.
 func Run(p *eval.Program, sch Scheduler, opts Options) error {
+	b, err := newBackend(p, sch, opts)
+	if err != nil {
+		return err
+	}
+	defer b.closeLedger()
+	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir}); err != nil {
+		return err
+	}
+	return b.finish()
+}
+
+// SubmitOne submits a single target with the given explicit dependency job ids,
+// plus dependencies derived from afterOutputs (the active ledger owner of each).
+// Used by `cgp sub`.
+func SubmitOne(p *eval.Program, sch Scheduler, t *eval.Target, explicitDeps, afterOutputs []string, opts Options) (string, error) {
+	b, err := newBackend(p, sch, opts)
+	if err != nil {
+		return "", err
+	}
+	defer b.closeLedger()
+
+	deps := append([]string{}, explicitDeps...)
+	if b.ledger != nil {
+		for _, out := range afterOutputs {
+			if owner, ok, err := b.ledger.OwnerOf(out); err == nil && ok && owner != "" {
+				if sch.IsActive == nil || sch.IsActive(owner) {
+					deps = append(deps, owner)
+				}
+			}
+		}
+	}
+	id, err := b.Submit(t, deps)
+	if err != nil {
+		return "", err
+	}
+	return id, b.finish()
+}
+
+func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) {
 	if opts.Out == nil {
 		opts.Out = os.Stdout
 	}
@@ -127,15 +166,17 @@ func Run(p *eval.Program, sch Scheduler, opts Options) error {
 	if v, ok := p.Get("cgp.ledger"); ok && eval.Stringify(v) != "" && !opts.DryRun {
 		lg, err := ledger.Open(eval.Stringify(v))
 		if err != nil {
-			return fmt.Errorf("ledger: %w", err)
+			return nil, fmt.Errorf("ledger: %w", err)
 		}
-		defer lg.Close()
 		b.ledger = lg
 	}
-	if err := runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir}); err != nil {
-		return err
+	return b, nil
+}
+
+func (b *backend) closeLedger() {
+	if b.ledger != nil {
+		b.ledger.Close()
 	}
-	return b.finish()
 }
 
 type backend struct {
