@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/ast"
+	"github.com/compgen-io/cgp/internal/container"
 	"github.com/compgen-io/cgp/internal/parser"
 )
 
@@ -84,7 +85,101 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 		}
 		sections = append(sections, s)
 	}
-	return sc, strings.Join(sections, "\n"), nil
+	body := strings.Join(sections, "\n")
+	body = p.wrapContainer(sc, t, body)
+	return sc, body, nil
+}
+
+// wrapContainer wraps the body to run inside a container when cgp.container.engine
+// and a per-target image (container = …) are both set.
+func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
+	engine := p.settingStr("cgp.container.engine")
+	image := scopeStr(sc, "container")
+	if engine == "" || image == "" {
+		return body
+	}
+	optsKey := "cgp.container.docker_opts"
+	if e := strings.ToLower(engine); e == "singularity" || e == "apptainer" {
+		optsKey = "cgp.container.singularity_opts"
+	}
+	gpu := scopeStr(sc, "gpu")
+	if gpu == "" {
+		gpu = p.settingStr("cgp.gpu")
+	}
+	if gpu == "true" {
+		gpu = "1"
+	} else if gpu == "false" {
+		gpu = ""
+	}
+	userMap := true
+	if v, ok := p.Get("cgp.container.user_map"); ok {
+		userMap = truthy(v)
+	}
+	return container.Wrap(body, container.Spec{
+		Engine:     engine,
+		Image:      image,
+		WorkingDir: scopeStr(sc, "wd"),
+		BodyDir:    firstNonEmpty(scopeStr(sc, "container.body_dir"), p.settingStr("cgp.container.body_dir")),
+		Shell:      firstNonEmpty(scopeStr(sc, "container.shell"), p.settingStr("cgp.container.shell")),
+		GPU:        gpu,
+		UserMap:    userMap,
+		Binds:      append(scopeList(sc, "container.bind"), p.settingList("cgp.container.bind")...),
+		Inputs:     t.Inputs,
+		Outputs:    t.Outputs,
+		Env:        append(scopeList(sc, "container.env"), p.settingList("cgp.container.env")...),
+		Opts:       append(scopeList(sc, "container.opts"), p.settingList(optsKey)...),
+	})
+}
+
+func (p *Program) settingStr(name string) string {
+	if v, ok := p.Get(name); ok {
+		return stringify(v)
+	}
+	return ""
+}
+
+func (p *Program) settingList(name string) []string {
+	if v, ok := p.Get(name); ok {
+		return valueList(v)
+	}
+	return nil
+}
+
+func scopeStr(sc *Scope, name string) string {
+	if v, ok := sc.get(name); ok {
+		if _, unset := v.(UnsetVal); !unset {
+			return stringify(v)
+		}
+	}
+	return ""
+}
+
+func scopeList(sc *Scope, name string) []string {
+	if v, ok := sc.get(name); ok {
+		return valueList(v)
+	}
+	return nil
+}
+
+func valueList(v Value) []string {
+	if items, ok := asList(v); ok {
+		out := make([]string, len(items))
+		for i, e := range items {
+			out[i] = stringify(e)
+		}
+		return out
+	}
+	if _, unset := v.(UnsetVal); unset {
+		return nil
+	}
+	return []string{stringify(v)}
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // renderBodyText resolves one raw {{ }} body into shell text: directives before

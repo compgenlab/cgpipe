@@ -219,6 +219,16 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	if m, ok := vars["mem"]; ok && b.sch.PrepareMem != nil {
 		vars["mem"] = eval.StrVal(b.sch.PrepareMem(eval.Stringify(m)))
 	}
+	// Normalize a boolean gpu (gpu = true) to a count for the scheduler directive.
+	if v, ok := vars["gpu"]; ok {
+		if b, isBool := v.(eval.BoolVal); isBool {
+			if bool(b) {
+				vars["gpu"] = eval.IntVal(1)
+			} else {
+				delete(vars, "gpu")
+			}
+		}
+	}
 	setDefault(vars, "procs", eval.IntVal(1))
 	setDefault(vars, "name", eval.StrVal(jobName(t)))
 	setDefault(vars, "custom", eval.ListVal{})

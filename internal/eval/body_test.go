@@ -124,6 +124,20 @@ out: in {{
 	}
 }
 
+func TestRenderContainerWrap(t *testing.T) {
+	got := renderFirst(t, `cgp.container.engine = "docker"
+out.bam: in.bam {{
+    container = "biocontainers/samtools:1.9"
+    --
+    samtools sort ${input} > ${output}
+}}`)
+	for _, want := range []string{"docker run --rm", "biocontainers/samtools:1.9", "samtools sort in.bam > out.bam"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("container-wrapped render missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func nonEmptyLines(s string) []string {
 	var out []string
 	for _, ln := range strings.Split(s, "\n") {
