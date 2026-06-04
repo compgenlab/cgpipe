@@ -150,6 +150,7 @@ Loop variables remain set after the loop (no separate scope).
 | `print expr [, expr …]` | Write to stdout. **Inside a body**, appends to the rendered script instead. |
 | `log filename`  | Open/replace the cgp log file (also `-l`). |
 | `include "path"` | Inline another `.cgp` file (global context). Resolved relative to the current file, then the cwd. |
+| `export name = expr` | Expose a value to a calling workflow as `${stage.name}` ([§13](#13-workflows-stage-and-export)). A no-op when the pipeline runs standalone. |
 | `eval expr`     | Evaluate a string-valued expr as cgp source at run time. |
 | `unset name`    | Remove a variable. |
 | `exit [code]`   | Stop the pipeline (`exit` ⇒ `exit 0`). |
@@ -458,6 +459,12 @@ SQLite (`modernc.org/sqlite`, pure Go), single-writer per ledger. Schema (v1):
 ### 10.4 Restart
 Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. A `--force` flag rebuilds regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
 
+### 10.5 Cross-run and cross-stage reuse
+When a ledger is configured and a scheduler runner is in use, an input that has **no in-run producer** and **isn't on disk yet** is looked up in the ledger: if its owning job is still active (per `squeue`/`qstat`), the new work is wired as a scheduler dependency (`afterok:<id>`) of that in-flight job instead of being treated as a "no rule to make" error or duplicated. This is what makes re-running a pipeline before it has finished safe, and it is also how a later workflow [stage](#13-workflows-stage-and-export) waits on a file an earlier stage's jobs are still queued to produce. With the shell runner each job has already completed (the file exists), so the lookup is unnecessary.
+
+### 10.6 Lockfile
+The ledger SQLite database is opened with `nolock=1` and guarded by a separate NFS-safe lockfile (`O_CREAT|O_EXCL`) so it is safe on network filesystems without a client/server process. A stale lock left by a dead process on the same host is stolen automatically; otherwise cgp waits briefly and then errors. `cgp ledger unlock <db>` removes a lock by hand.
+
 ---
 
 ## 11. Configuration
@@ -502,7 +509,138 @@ Set globally as `job.<name>` for defaults, or as a bare `<name>` directive insid
 
 ---
 
-## 12. Worked example (cgp v1)
+## 12. Containers and GPUs
+
+A target's body can be wrapped to run inside a container without changing the body itself. Wrapping is enabled when **both** a container engine and a per-target image are set:
+
+- `cgp.container.engine` — `docker`, `singularity`, or `apptainer` (set in config or the script). Unset disables all wrapping.
+- `container = "<image>"` — a per-target directive naming the image. A target with no `container` runs unwrapped even when an engine is configured.
+
+      aligned.bam: reads.fq ref.fa {{
+          container = "biocontainers/bwa:0.7.17"
+          mem       = "16G"
+          --
+          bwa mem ${ref} ${reads} > ${output}
+      }}
+
+When wrapping is active, cgp writes the rendered body to a temp file and executes it inside the image, bind-mounting the input and output paths automatically, setting the working directory, and (for Docker) mapping the host user. Additional settings, available globally as `cgp.container.<name>` and/or per target as `container.<name>`:
+
+| Setting | Purpose |
+|---------|---------|
+| `container.bind` / `cgp.container.bind` | Extra bind mounts (repeatable / list) |
+| `container.env` / `cgp.container.env` | Environment variables to pass through |
+| `container.opts` (or `cgp.container.docker_opts` / `cgp.container.singularity_opts`) | Raw extra flags for the engine |
+| `container.body_dir` / `cgp.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
+| `container.shell` / `cgp.container.shell` | Shell used to run the body inside the image (default `sh`) |
+| `cgp.container.user_map` | Docker only: add `-u $(id -u):$(id -g)` (default on) |
+
+### 12.1 GPUs
+`gpu` requests GPUs for a target and drives both layers at once:
+
+    train.model: data.tfrecord {{
+        gpu = 2
+        --
+        train.py --data ${input} --out ${output}
+    }}
+
+- `gpu = true` ⇒ one GPU; `gpu = N` ⇒ N GPUs; `gpu = false`/unset ⇒ none. A global default is `cgp.gpu`.
+- On a scheduler it emits the resource request (e.g. SLURM `--gres=gpu:N`).
+- In a container it adds the engine's GPU flag (Docker `--gpus`, Singularity/Apptainer `--nv`).
+
+---
+
+## 13. Workflows: `stage` and `export`
+
+A **workflow** chains several standalone pipelines into one command, threading values between them. A `.cgp` file is a workflow if it contains `stage` statements; otherwise it is a pipeline. Each stage is itself an ordinary, independently runnable pipeline.
+
+    # wgs.cgp — a workflow
+    if !fastqs { print "ERROR: --fastqs required"; exit 1 }
+    if !ref    { print "ERROR: --ref required";    exit 1 }
+
+    stage align  align.cgp  --fastq ${fastqs} --ref ${ref}
+    stage post   post.cgp   --bam ${align.bam}
+    stage call   call.cgp   --bam ${post.cleaned_bam} --ref ${ref}
+
+### 13.1 Declaring stages
+`stage NAME FILE ARGS...` declares one stage. `ARGS` use the same `--name value` (or `--name=value`) convention as command-line variables ([§3.1](#31-command-line-variables)) — they are the variables the stage pipeline receives. `NAME`, `FILE`, and each arg are interpolated against the workflow's variables before the stage runs.
+
+Stages run in **declaration order**. Each stage's args may reference earlier stages' exports.
+
+### 13.2 Exposing values with `export`
+A stage pipeline exposes values to the workflow with a top-level `export name = expr` ([§5.2](#52-statement-keywords)):
+
+    # align.cgp — also runnable on its own
+    aligned.bam: ${fastq} ${ref} {{
+        bwa mem ${ref} ${fastq} > ${output}
+    }}
+    @default: aligned.bam
+    export bam = "aligned.bam"
+
+When `align.cgp` runs standalone, `export` does nothing. When it runs as the `align` stage, its exported `bam` becomes `${align.bam}` in the workflow, available to later stages. `export` is therefore non-invasive: adding the lines does not change standalone behavior.
+
+### 13.3 Cross-stage dependencies
+With the shell runner each stage completes before the next begins, so a later stage simply reads the earlier stage's files. With a scheduler runner an earlier stage's jobs may still be queued when a later stage submits; the cross-stage `afterok` wiring is resolved through the ledger ([§10.5](#105-cross-run-and-cross-stage-reuse)), so a scheduler workflow wants `cgp.ledger` configured.
+
+### 13.4 Export validation
+References to stage exports are checked two ways:
+
+- **Statically (best-effort):** at startup cgp scans each stage file for every *possible* `export` name (including names exported only inside `if`/`for` branches). A `${NAME.X}` reference to a declared stage `NAME` that exports no `X` anywhere is a typo and fails fast.
+- **At runtime (authoritative):** if an export was conditional and did not fire this run, the unset `${NAME.X}` reference errors when the stage's args are interpolated, naming the missing export.
+
+---
+
+## 14. Manifests and fan-out
+
+A single pipeline (or workflow) can be run once per row of a **manifest**, with the row's columns supplied as variables. The format is always explicit — cgp never guesses from the extension:
+
+| Flag | Manifest format |
+|------|-----------------|
+| `-manifest FILE` (alias `-manifest-cgp`) | A shell glob of `.cgp` manifest files; each matched file's variables become one run |
+| `-manifest-tsv FILE` | Tab-separated; the header row names the columns |
+| `-manifest-csv FILE` | Comma-separated; the header row names the columns |
+| `-manifest-json FILE` | A JSON array of objects; each object's keys become variables |
+
+    $ cgp align.cgp -manifest-tsv samples.tsv          # one run per data row
+    $ cgp wgs.cgp   -manifest /data/P*/manifest.cgp    # one workflow run per patient file
+
+Each row runs the whole pipeline (or, for a workflow, all of its stages). Explicit command-line `--name value` variables override columns of the same name. A single **stat cache is shared across all runs**, so an invariant input like a shared `ref.fa` is `stat`-ed once rather than once per row. (Each row's pipeline graph is re-evaluated per row — per-row variables legitimately change which targets and branches exist — but the *parse* of the file happens once.)
+
+---
+
+## 15. Command-line interface
+
+    cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
+    cgp sub [options] -- <command ...>
+    cgp ledger {vacuum|unlock} <db>
+    cgp convert <old.cgp> [-o out.cgp]
+    cgp version
+
+A bare argument is a **goal** (a target to build); with none, cgp builds `@default` (or the first target). `--name value` sets a script variable; single-hyphen flags are cgp's own options.
+
+| Option | Meaning |
+|--------|---------|
+| `-h` | Help. After a pipeline file, prints that script's help text ([§1.3](#13-comments-and-help-text)). |
+| `-dr` | Dry run — render the scripts instead of executing/submitting. |
+| `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq` (also `cgp.runner`). |
+| `-l PATH` | cgp log file (also `cgp.log`). |
+| `-manifest*` | Manifest fan-out ([§14](#14-manifests-and-fan-out)). |
+
+### 15.1 `cgp sub` — one-off submission
+Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The command after `--` is treated as a body (`${input}`/`${output}` substitute):
+
+    cgp sub -mem 8G -o out.bam -i in.bam -- 'samtools sort -o ${output} ${input}'
+
+Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, repeatable), `-i PATH` (declared input), `-d JOBID` (depend on a job id), `-after PATH` (depend on the active ledger owner of `PATH`), `-r`, `-ledger`, `-dr`.
+
+### 15.2 `cgp ledger`
+`cgp ledger vacuum <db>` keeps only the last owner of each path and drops the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <db>` removes a stale lockfile ([§10.6](#106-lockfile)).
+
+### 15.3 `cgp convert` — migrate an older script
+`cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgp-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgpipe.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgp-convert:` comment for you to review.
+
+---
+
+## 16. Worked example (cgp v1)
 
     #!/usr/bin/env cgp
     #
