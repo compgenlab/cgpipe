@@ -70,18 +70,23 @@ type parser struct {
 	declEndIndex int // token index of the last declaration terminator (set by scanDeclEnd)
 }
 
-type parseError struct {
-	pos token.Pos
-	msg string
+// Error is a parse error carrying the source position where parsing failed.
+// Its Error() string is "file:line:col: msg" — unchanged from before this type
+// was exported, so error output and tests are unaffected. Tools (e.g. the LSP
+// server) can type-assert to *Error to recover the structured token.Pos rather
+// than parsing the message string.
+type Error struct {
+	Pos token.Pos
+	Msg string
 }
 
-func (e *parseError) Error() string { return fmt.Sprintf("%s: %s", e.pos, e.msg) }
+func (e *Error) Error() string { return fmt.Sprintf("%s: %s", e.Pos, e.Msg) }
 
 type bailout struct{}
 
 func (p *parser) fail(pos token.Pos, format string, args ...any) {
 	if p.err == nil {
-		p.err = &parseError{pos: pos, msg: fmt.Sprintf(format, args...)}
+		p.err = &Error{Pos: pos, Msg: fmt.Sprintf(format, args...)}
 	}
 	panic(bailout{})
 }
