@@ -186,6 +186,22 @@ func TestInterpolation(t *testing.T) {
 	check("\\${sample}", "${sample}")       // escaped: literal, no interpolation
 }
 
+// A bad ${…} names the offending expression and the character it choked on,
+// instead of a bare "<expr>:1:N: unexpected ILLEGAL".
+func TestBadExpressionErrorIsHelpful(t *testing.T) {
+	_, err := testInterp(nil).interpolate("x=${a?b}")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `bad expression "a?b"`) {
+		t.Errorf("error should name the expression: %q", msg)
+	}
+	if !strings.Contains(msg, `ILLEGAL("?")`) {
+		t.Errorf("error should name the offending char: %q", msg)
+	}
+}
+
 func TestInterpolationAtBraceWords(t *testing.T) {
 	ip := testInterp(map[string]Value{"xs": ListVal{StrVal("a"), StrVal("b")}})
 	got, err := ip.expandTemplate("p_@{xs}.txt")

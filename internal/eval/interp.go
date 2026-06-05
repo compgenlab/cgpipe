@@ -189,7 +189,8 @@ func (ip *interp) resolveAtBrace(inside string) ([]string, error) {
 func (ip *interp) evalString(src string) (Value, error) {
 	e, err := parser.ParseExpr(src)
 	if err != nil {
-		return nil, err
+		// name the offending expression — a bare "<expr>:1:N" is too cryptic.
+		return nil, fmt.Errorf("bad expression %q: %w", src, err)
 	}
 	return ip.eval(e)
 }

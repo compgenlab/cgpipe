@@ -152,7 +152,9 @@ type Token struct {
 
 func (t Token) String() string {
 	switch t.Kind {
-	case IDENT, INT, FLOAT, STRING, BODY:
+	case IDENT, INT, FLOAT, STRING, BODY, ILLEGAL:
+		// ILLEGAL carries the offending character(s) in Lit; show them so the
+		// error names what it choked on rather than a bare "ILLEGAL".
 		return fmt.Sprintf("%s(%q)", t.Kind, t.Lit)
 	default:
 		return t.Kind.String()
