@@ -1,0 +1,44 @@
+{
+  "name": "cgp",
+  "displayName": "cgp",
+  "description": "Language support for cgp pipeline scripts (syntax highlighting + language server).",
+  "version": "0.1.0",
+  "publisher": "compgen-io",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/compgen-io/cgp"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "cgp",
+        "aliases": [
+          "cgp",
+          "CGP"
+        ],
+        "extensions": [
+          ".cgp",
+          ".cgp2"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cgp",
+        "scopeName": "source.cgp",
+        "path": "./syntaxes/cgp.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.shell.cgp": "shellscript"
+        }
+      }
+    ]
+  }
+}

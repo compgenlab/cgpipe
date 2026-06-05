@@ -1,0 +1,205 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "cgp",
+  "scopeName": "source.cgp",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#body" },
+    { "include": "#string" },
+    { "include": "#target" },
+    { "include": "#number" },
+    { "include": "#keyword" },
+    { "include": "#reserved-target" },
+    { "include": "#builtin" },
+    { "include": "#interpolation" },
+    { "include": "#function-call" },
+    { "include": "#operator" },
+    { "include": "#identifier" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.shebang.cgp",
+          "match": "\\A#!.*$"
+        },
+        {
+          "name": "comment.line.number-sign.cgp",
+          "match": "#.*$"
+        }
+      ]
+    },
+
+    "body": {
+      "name": "meta.embedded.block.shell.cgp",
+      "begin": "\\{\\{",
+      "beginCaptures": {
+        "0": { "name": "punctuation.section.embedded.begin.cgp" }
+      },
+      "end": "^\\s*\\}\\}\\s*$",
+      "endCaptures": {
+        "0": { "name": "punctuation.section.embedded.end.cgp" }
+      },
+      "patterns": [
+        {
+          "name": "keyword.control.directive.cgp",
+          "match": "^\\s*--\\s*$"
+        },
+        {
+          "name": "keyword.control.percent.cgp",
+          "match": "^\\s*%.*$"
+        },
+        { "include": "#interpolation" },
+        {
+          "name": "constant.character.escape.cgp",
+          "match": "\\\\[$@]"
+        },
+        { "include": "source.shell" }
+      ]
+    },
+
+    "string": {
+      "name": "string.quoted.double.cgp",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.cgp" }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.cgp" }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.cgp",
+          "match": "\\\\."
+        },
+        { "include": "#interpolation" }
+      ]
+    },
+
+    "interpolation": {
+      "name": "meta.interpolation.cgp",
+      "begin": "(\\$|@)(\\{)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.template-expression.cgp" },
+        "2": { "name": "punctuation.definition.template-expression.begin.cgp" }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.template-expression.end.cgp" }
+      },
+      "patterns": [
+        { "include": "#expression" }
+      ]
+    },
+
+    "expression": {
+      "patterns": [
+        { "include": "#string" },
+        { "include": "#number" },
+        { "include": "#keyword" },
+        { "include": "#function-call" },
+        { "include": "#operator" },
+        { "include": "#identifier" }
+      ]
+    },
+
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.cgp",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.cgp",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.cgp",
+          "match": "\\b(if|elif|else|for|in)\\b"
+        },
+        {
+          "name": "constant.language.boolean.cgp",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+
+    "builtin": {
+      "name": "support.function.builtin.cgp",
+      "match": "(?<![\\w.])(print|exit|unset|include|snippet|eval|sleep|dumpvars|showhelp|export|stage)\\b"
+    },
+
+    "reserved-target": {
+      "name": "entity.name.function.target.reserved.cgp",
+      "match": "@(pre|post|setup|teardown|postsubmit|default)\\b"
+    },
+
+    "target": {
+      "match": "^\\s*(?!(?:if|elif|else|for|in|true|false|print|exit|unset|include|snippet|eval|sleep|dumpvars|showhelp|export|stage)\\b)([^\\n:#=]+?)\\s*(:)(?=\\s|$)",
+      "captures": {
+        "1": {
+          "name": "entity.name.tag.target.cgp",
+          "patterns": [
+            { "include": "#interpolation" },
+            {
+              "name": "keyword.operator.tempout.cgp",
+              "match": "\\^"
+            },
+            {
+              "name": "entity.name.function.target.reserved.cgp",
+              "match": "@(pre|post|setup|teardown|postsubmit|default)\\b"
+            }
+          ]
+        },
+        "2": { "name": "punctuation.separator.target.cgp" }
+      }
+    },
+
+    "function-call": {
+      "patterns": [
+        {
+          "match": "\\.\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.method.cgp" }
+          }
+        },
+        {
+          "match": "([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "name": "entity.name.function.cgp"
+        }
+      ]
+    },
+
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.cgp",
+          "match": "\\*\\*|\\.\\.|==|!=|<=|>=|&&|\\|\\||\\?=|\\+="
+        },
+        {
+          "name": "keyword.operator.assignment.cgp",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.cgp",
+          "match": "[-+*/%<>!@^]"
+        },
+        {
+          "name": "punctuation.accessor.cgp",
+          "match": "\\."
+        }
+      ]
+    },
+
+    "identifier": {
+      "name": "variable.other.cgp",
+      "match": "[A-Za-z_][A-Za-z0-9_]*"
+    }
+  }
+}
