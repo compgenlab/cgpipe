@@ -202,6 +202,34 @@ func TestBadExpressionErrorIsHelpful(t *testing.T) {
 	}
 }
 
+// A ${…} span is matched by skipping quoted strings and balancing braces, so a
+// nested ${…} can sit inside a quoted ${if …} branch, and a `;` inside a branch
+// string does not split the clauses.
+func TestNestedInterpolationInIfBranch(t *testing.T) {
+	ip := testInterp(map[string]Value{
+		"flag": BoolVal(true), "off": BoolVal(false),
+		"y": StrVal("Y"), "genes": StrVal("g.bed"), "basic": StrVal("b.bed"),
+	})
+	check := func(raw, want string) {
+		t.Helper()
+		got, err := ip.interpolate(raw)
+		if err != nil {
+			t.Fatalf("interpolate %q: %v", raw, err)
+		}
+		if got != want {
+			t.Errorf("interpolate %q = %q, want %q", raw, got, want)
+		}
+	}
+	check(`${if flag; "x-${y}-z"}`, "x-Y-z")                    // nested ${} in the true branch
+	check(`${if off; "t"; "f-${y}"}`, "f-Y")                    // nested ${} in the false branch
+	check(`${if flag; "a;b;c"}`, "a;b;c")                       // ; inside a branch string is kept
+	check(`${if flag; "awk '{print $1}'"}`, "awk '{print $1}'") // } inside a branch string is opaque
+	check(`${if off; "x"}`, "")                                 // else-less, false ⇒ empty
+	// the reported real-world shape: two ${if} each with a nested ${}
+	check(`${if genes; "--tab GENE:${genes},4"} ${if basic; "--tab BASIC_GENE:${basic},4"}`,
+		"--tab GENE:g.bed,4 --tab BASIC_GENE:b.bed,4")
+}
+
 func TestInterpolationAtBraceWords(t *testing.T) {
 	ip := testInterp(map[string]Value{"xs": ListVal{StrVal("a"), StrVal("b")}})
 	got, err := ip.expandTemplate("p_@{xs}.txt")

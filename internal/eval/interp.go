@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/compgen-io/cgp/internal/lexer"
 	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgen-io/cgp/internal/token"
 )
 
 var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
@@ -68,7 +70,7 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 			buf.WriteString(s)
 			i = i + 3 + end + 2
 		case c == '$' && i+1 < len(raw) && raw[i+1] == '{':
-			end := strings.IndexByte(raw[i+2:], '}')
+			end := braceSpan(raw[i+2:])
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated ${ in %q", raw)
 			}
@@ -90,7 +92,7 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 			buf.WriteString(out)
 			i = i + 2 + end + 1
 		case c == '@' && i+1 < len(raw) && raw[i+1] == '{':
-			end := strings.IndexByte(raw[i+2:], '}')
+			end := braceSpan(raw[i+2:])
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated @{ in %q", raw)
 			}
@@ -121,12 +123,71 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 	return result, nil
 }
 
+// braceSpan returns the byte offset in s of the `}` that closes a ${…} or @{…}
+// whose opening has already been consumed. It runs the cgp lexer, which already
+// tokenizes a double-quoted string as a single STRING token — so braces (and a
+// nested ${…}) inside a string are part of that token and never seen as
+// structural — and balances real `{ }`. It returns the first depth-0 `}` token's
+// offset, or -1 if the span is unterminated/unlexable. This is what lets a nested
+// ${…} sit inside a quoted ${if …} branch, e.g. ${if x; "a-${y}-b"}.
+func braceSpan(s string) int {
+	lx := lexer.New(s, "<expr>")
+	depth := 0
+	for {
+		t := lx.Next()
+		switch t.Kind {
+		case token.EOF:
+			return -1 // no closing brace (truly unterminated)
+		case token.LBRACE:
+			depth++
+		case token.RBRACE:
+			if depth == 0 {
+				return t.Pos.Off
+			}
+			depth--
+		}
+		// An ILLEGAL token (e.g. the `?` in ${var?}) is not fatal here: the lexer
+		// advances past it, and the offending character is reported later by
+		// ParseExpr when the extracted expression is parsed.
+	}
+}
+
+// splitClauses splits the body of a ${if cond; a; b} on the `;` separators that
+// the lexer reports as SEMI tokens at brace depth zero — so a `;` inside a
+// string literal (a single STRING token) or a nested ${…} does not split. The
+// returned clause strings are slices of the original (their own ${…} are
+// resolved later, when each clause is evaluated).
+func splitClauses(s string) []string {
+	lx := lexer.New(s, "<expr>")
+	var parts []string
+	depth, start := 0, 0
+	for {
+		t := lx.Next()
+		switch t.Kind {
+		case token.EOF:
+			return append(parts, s[start:])
+		case token.LBRACE:
+			depth++
+		case token.RBRACE:
+			if depth > 0 {
+				depth--
+			}
+		case token.SEMI:
+			if depth == 0 {
+				parts = append(parts, s[start:t.Pos.Off])
+				start = t.Pos.Off + 1
+			}
+		}
+		// ILLEGAL tokens are ignored (the lexer advances past them).
+	}
+}
+
 func (ip *interp) resolveDollarBrace(inside string) (string, error) {
 	trimmed := strings.TrimSpace(inside)
 
 	// inline conditional: ${if cond; true; false}
 	if strings.HasPrefix(trimmed, "if ") {
-		clauses := strings.Split(trimmed[3:], ";")
+		clauses := splitClauses(trimmed[3:])
 		if len(clauses) < 2 {
 			return "", fmt.Errorf("malformed ${if …}: %q", inside)
 		}
