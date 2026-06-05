@@ -257,6 +257,26 @@ func TestCommandSubstitution(t *testing.T) {
 	}
 }
 
+// The $( … ) span is found with shell quoting rules, so a ) inside quotes does
+// not close it, and nested $( … ) balance.
+func TestCommandSubstitutionQuotingAndNesting(t *testing.T) {
+	ip := testInterp(nil)
+	check := func(raw, want string) {
+		t.Helper()
+		got, err := ip.interpolate(raw)
+		if err != nil {
+			t.Fatalf("interpolate %q: %v", raw, err)
+		}
+		if got != want {
+			t.Errorf("interpolate %q = %q, want %q", raw, got, want)
+		}
+	}
+	check(`$(echo ")")`, ")")           // ) inside double quotes
+	check(`$(echo '(x)')`, "(x)")       // parens inside single quotes
+	check(`$(echo a)-$(echo b)`, "a-b") // two separate $()
+	check(`$(echo $(echo hi))`, "hi")   // nested $()
+}
+
 func TestDoubleEval(t *testing.T) {
 	ip := testInterp(map[string]Value{
 		"tmpl": StrVal("hi ${name}"),

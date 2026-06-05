@@ -81,7 +81,7 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 			buf.WriteString(s)
 			i = i + 2 + end + 1
 		case c == '$' && i+1 < len(raw) && raw[i+1] == '(':
-			end := strings.IndexByte(raw[i+2:], ')')
+			end := parenSpan(raw[i+2:])
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated $( in %q", raw)
 			}
@@ -150,6 +150,44 @@ func braceSpan(s string) int {
 		// advances past it, and the offending character is reported later by
 		// ParseExpr when the extracted expression is parsed.
 	}
+}
+
+// parenSpan returns the byte offset in s of the `)` that closes a $( … ) whose
+// opening `$(` has already been consumed. The content is shell, not cgp, so it
+// is scanned with shell quoting rules — single quotes are literal (no escapes),
+// double quotes honor \-escapes, and a backslash escapes the next byte outside
+// quotes — while nested `( )` are balanced. Returns -1 if unterminated. Exotic
+// shell that bash also parses (here-docs, # comments, ${…}) is not handled; for
+// those, use a cgp variable or \$(…) to defer to the runtime shell.
+func parenSpan(s string) int {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++ // skip the escaped byte
+		case '\'':
+			i++ // single-quoted: literal until the next single quote
+			for i < len(s) && s[i] != '\'' {
+				i++
+			}
+		case '"':
+			i++ // double-quoted: \-escapes apply
+			for i < len(s) && s[i] != '"' {
+				if s[i] == '\\' {
+					i++
+				}
+				i++
+			}
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return i
+			}
+			depth--
+		}
+	}
+	return -1
 }
 
 // splitClauses splits the body of a ${if cond; a; b} on the `;` separators that
