@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- sampleA.sorted.bam sampleA.flagstat ----
+
+samtools sort -o sampleA.sorted.bam sampleA.bam    # stem=sampleA
+samtools flagstat sampleA.sorted.bam > sampleA.flagstat
+echo "outputs: sampleA.sorted.bam sampleA.flagstat"
+
+

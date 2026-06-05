@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.txt ----
+
+
+set -euo pipefail
+umask 077
+
+wc -l in.txt > out.txt
+
+

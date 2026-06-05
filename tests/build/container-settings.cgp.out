@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.bam ----
+__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
+trap 'rm -f "$__cgp_body"' EXIT
+cat > "$__cgp_body" <<'__CGP_BODY__'
+run in.bam > out.bam
+__CGP_BODY__
+
+docker run --rm \
+    -v /tmp:/tmp \
+    -v __WORKDIR__:__WORKDIR__ \
+    -v /data:/data \
+    -v /refs:/refs \
+    -w __WORKDIR__ \
+    -u $(id -u):$(id -g) \
+    -e SAMPLE \
+    --shm-size=1g \
+    img:1 \
+    bash "$__cgp_body"
+
+

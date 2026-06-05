@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- @setup ----
+mkdir -p logs
+
+
+# ---- out.txt ----
+
+echo hi > out.txt
+
+
+# ---- @teardown ----
+echo "pipeline complete"
+
+

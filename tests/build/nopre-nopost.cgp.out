@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- wrapped.txt ----
+
+echo "==> wrapped.txt"
+
+
+echo a > wrapped.txt
+
+
+echo "<== wrapped.txt"
+
+
+# ---- bare.txt ----
+echo b > bare.txt
+
+

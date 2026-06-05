@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- reads.sai ----
+
+bwa aln ref.fa reads.fastq > reads.sai   # stem=reads
+
+

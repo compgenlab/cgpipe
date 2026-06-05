@@ -3,6 +3,8 @@
 /dist/
 *.test
 *.out
+# ...but the fixture-suite golden files (tests/**/*.cgp.out) are checked in.
+!tests/**/*.cgp.out
 
 # editor / OS
 .DS_Store
