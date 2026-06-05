@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/ast"
@@ -43,7 +42,10 @@ func loadConfigs() ([]eval.ConfigFile, error) {
 	addFile := func(path string) error {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return nil // a missing config file is fine
+			if os.IsNotExist(err) {
+				return nil // a missing config file is fine
+			}
+			return err // surface real errors (e.g. permission denied) instead of silently skipping
 		}
 		return addSrc(path, filepath.Dir(path), string(b))
 	}
@@ -162,12 +164,12 @@ func run(args []string) int {
 			// builds a list.
 			nv := a[2:]
 			if eq := strings.IndexByte(nv, '='); eq >= 0 {
-				addCLIVar(vars, cliVarName(nv[:eq]), parseCLIValue(nv[eq+1:]))
+				addCLIVar(vars, cliVarName(nv[:eq]), eval.ParseScalar(nv[eq+1:]))
 				continue
 			}
 			if i+1 < len(rest) && !isOptionToken(rest[i+1]) {
 				i++
-				addCLIVar(vars, cliVarName(nv), parseCLIValue(rest[i]))
+				addCLIVar(vars, cliVarName(nv), eval.ParseScalar(rest[i]))
 			} else {
 				addCLIVar(vars, cliVarName(nv), eval.BoolVal(true))
 			}
@@ -504,7 +506,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 			}
 			nv := a[2:]
 			if eq := strings.IndexByte(nv, '='); eq >= 0 {
-				addCLIVar(subVars, cliVarName(nv[:eq]), parseCLIValue(nv[eq+1:]))
+				addCLIVar(subVars, cliVarName(nv[:eq]), eval.ParseScalar(nv[eq+1:]))
 				continue
 			}
 			// next token is the value, unless it's another --flag (then boolean)
@@ -515,7 +517,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 					fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
 					return 1
 				}
-				addCLIVar(subVars, cliVarName(nv), parseCLIValue(val))
+				addCLIVar(subVars, cliVarName(nv), eval.ParseScalar(val))
 			} else {
 				addCLIVar(subVars, cliVarName(nv), eval.BoolVal(true))
 			}
@@ -705,7 +707,7 @@ func runSub(args []string) int {
 			if v, ok = need(i, a); !ok {
 				return 2
 			}
-			settings["job.procs"] = parseCLIValue(v)
+			settings["job.procs"] = eval.ParseScalar(v)
 			i++
 		case "-walltime":
 			if v, ok = need(i, a); !ok {
@@ -1027,24 +1029,6 @@ func runLedgerSearch(args []string) int {
 		return 1
 	}
 	return 0
-}
-
-// parseCLIValue parses a command-line value into a typed cgp value, falling back
-// to a string (matching cgp's "parse numbers/bools when possible" rule).
-func parseCLIValue(s string) eval.Value {
-	if s == "true" {
-		return eval.BoolVal(true)
-	}
-	if s == "false" {
-		return eval.BoolVal(false)
-	}
-	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return eval.IntVal(i)
-	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return eval.FloatVal(f)
-	}
-	return eval.StrVal(s)
 }
 
 // cliVarName normalizes a command-line variable name: hyphens become underscores

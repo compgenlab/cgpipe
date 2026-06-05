@@ -121,8 +121,13 @@ func For(name string) (Scheduler, bool) {
 	return s, ok
 }
 
+// schedulerNames is the supported scheduler names in display order. It is the
+// source of truth for Names() and is kept in sync with the schedulers map by
+// TestSchedulerNamesMatchMap.
+var schedulerNames = []string{"slurm", "sge", "pbs", "batchq"}
+
 // Names lists the supported scheduler names.
-func Names() []string { return []string{"slurm", "sge", "pbs", "batchq"} }
+func Names() []string { return schedulerNames }
 
 // Options configure a scheduler run.
 type Options struct {
@@ -187,7 +192,14 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 	if v, ok := p.Get("cgp.runner." + sch.Name + ".global_hold"); ok {
 		gh = eval.Truthy(v)
 	}
-	b := &backend{prog: p, sch: sch, opts: opts, shell: shell, globalHold: gh, user: os.Getenv("USER")}
+	// Effective working directory recorded in the ledger so a later status read /
+	// restart can resolve the job's relative paths: the explicit Dir if set,
+	// otherwise the process cwd (the directory cgp was launched from).
+	wd := opts.Dir
+	if wd == "" {
+		wd, _ = os.Getwd()
+	}
+	b := &backend{prog: p, sch: sch, opts: opts, shell: shell, globalHold: gh, user: os.Getenv("USER"), wd: wd}
 	if v, ok := p.Get("cgp.run_id"); ok {
 		b.runID = eval.Stringify(v)
 	}
@@ -218,6 +230,7 @@ type backend struct {
 	ledger     *ledger.Ledger
 	runID      string
 	user       string
+	wd         string // effective working directory recorded in the ledger
 	dryN       int
 	ids        []string
 	held       []string
@@ -316,8 +329,8 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 		setDefault(vars, "mailtype", eval.StrVal(b.sch.MailType))
 	}
 	vars["_body"] = eval.StrVal(body)
-	vars["_inputs"] = strList(t.Inputs)
-	vars["_outputs"] = strList(t.Outputs)
+	vars["_inputs"] = eval.StrList(t.Inputs)
+	vars["_outputs"] = eval.StrList(t.Outputs)
 	if len(deps) > 0 {
 		vars["depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
 	}
@@ -339,7 +352,7 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	if b.ledger != nil && id != "" && len(t.Outputs) > 0 {
 		if err := b.ledger.Record(ledger.Job{
 			JobID: id, RunID: b.runID, Name: eval.Stringify(vars["name"]), Pipeline: b.opts.Pipeline,
-			WorkingDir: b.opts.Dir, User: b.user, SubmitTime: time.Now().Unix(),
+			WorkingDir: b.wd, User: b.user, SubmitTime: time.Now().Unix(),
 			Outputs: t.Outputs, Temp: t.Temp, Inputs: t.Inputs, Deps: deps,
 			Script: body, Settings: jobSettings(vars),
 		}); err != nil {
@@ -448,14 +461,6 @@ func dedupeIDs(ids []string) []string {
 		}
 		seen[id] = true
 		out = append(out, id)
-	}
-	return out
-}
-
-func strList(ss []string) eval.ListVal {
-	out := make(eval.ListVal, len(ss))
-	for i, s := range ss {
-		out[i] = eval.StrVal(s)
 	}
 	return out
 }

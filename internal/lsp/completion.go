@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"github.com/compgen-io/cgp/internal/ast"
 	"github.com/compgen-io/cgp/internal/lexer"
 	"github.com/compgen-io/cgp/internal/token"
 )
@@ -14,7 +15,7 @@ func completions(src, file string) []completionItem {
 	for _, k := range []string{"if", "elif", "else", "for", "in", "true", "false"} {
 		items = append(items, completionItem{Label: k, Kind: ciKeyword, Documentation: keywordDocs[k]})
 	}
-	for _, b := range builtinList {
+	for _, b := range ast.BuiltinStmts {
 		items = append(items, completionItem{
 			Label:         b,
 			Kind:          ciFunction,
@@ -22,7 +23,7 @@ func completions(src, file string) []completionItem {
 			Documentation: builtinDocs[b],
 		})
 	}
-	for _, r := range []string{"pre", "post", "setup", "teardown", "postsubmit", "default"} {
+	for _, r := range ast.ReservedTargets {
 		items = append(items, completionItem{
 			Label:         "@" + r,
 			Kind:          ciKeyword,

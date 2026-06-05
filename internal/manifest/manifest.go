@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"strconv"
 
 	"github.com/compgen-io/cgp/internal/eval"
 )
@@ -40,7 +39,7 @@ func LoadDelimited(path string, comma rune) ([]map[string]eval.Value, error) {
 		row := make(map[string]eval.Value, len(header))
 		for i, col := range header {
 			if i < len(rec) {
-				row[col] = parseScalar(rec[i])
+				row[col] = eval.ParseScalar(rec[i])
 			} else {
 				row[col] = eval.StrVal("")
 			}
@@ -70,22 +69,6 @@ func LoadJSON(path string) ([]map[string]eval.Value, error) {
 		rows[i] = row
 	}
 	return rows, nil
-}
-
-func parseScalar(s string) eval.Value {
-	switch s {
-	case "true":
-		return eval.BoolVal(true)
-	case "false":
-		return eval.BoolVal(false)
-	}
-	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return eval.IntVal(i)
-	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return eval.FloatVal(f)
-	}
-	return eval.StrVal(s)
 }
 
 func jsonValue(v any) eval.Value {

@@ -9,6 +9,17 @@ import (
 	"strings"
 )
 
+// maxLoopIterations caps while-form for-loops (`for cond { … }` in global code and
+// `% for cond` in a body) as a runaway-loop backstop. Shared by the global
+// statement evaluator (execFor in eval.go) and the body renderer (renderNodes in
+// body.go).
+//
+// Future work: those two interpreters duplicate the if/for control-flow logic.
+// Unifying them is deferred — the body path also interleaves shell-line emission,
+// per-target render scope, and snippet expansion, so a full merge is high-risk.
+// For now they share this constant plus the value helpers (asList, truthy).
+const maxLoopIterations = 1_000_000
+
 // Value is a cgp runtime value.
 type Value interface{ typeName() string }
 
@@ -89,11 +100,39 @@ func truthy(v Value) bool {
 	case ListVal:
 		return len(x) > 0
 	case RangeVal:
-		return len(x.slice()) > 0
+		return x.count() > 0 // a range always yields ≥1 value; avoids materializing it
 	case UnsetVal:
 		return false
 	}
 	return true
+}
+
+// ParseScalar parses an external scalar string (a command-line value or a
+// manifest cell) into a typed value: true/false become bools, integer and float
+// literals become numbers, and anything else stays a string.
+func ParseScalar(s string) Value {
+	switch s {
+	case "true":
+		return BoolVal(true)
+	case "false":
+		return BoolVal(false)
+	}
+	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return IntVal(i)
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return FloatVal(f)
+	}
+	return StrVal(s)
+}
+
+// StrList converts a slice of strings into a ListVal of StrVals.
+func StrList(ss []string) ListVal {
+	out := make(ListVal, len(ss))
+	for i, s := range ss {
+		out[i] = StrVal(s)
+	}
+	return out
 }
 
 // asList coerces lists and ranges to a slice of values for iteration.

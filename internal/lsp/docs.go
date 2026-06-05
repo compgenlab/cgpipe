@@ -1,26 +1,22 @@
 package lsp
 
 // Short Markdown descriptions surfaced by hover and completion. They summarize
-// the language constructs documented in docs/language-spec.md.
-
-// builtinList is the statement-leading built-ins, in a stable order for completion.
-var builtinList = []string{
-	"print", "exit", "unset", "include", "snippet",
-	"eval", "sleep", "dumpvars", "showhelp", "export", "stage",
-}
+// the language constructs documented in docs/language-spec.md. The keys are kept
+// in sync with the canonical ast.BuiltinStmts / ast.ReservedTargets lists by the
+// drift-guard test (docs_test.go).
 
 var builtinDocs = map[string]string{
 	"print":    "`print <expr>...` — evaluate the expressions and write them to stdout, space-separated.",
 	"exit":     "`exit [code]` — stop the pipeline immediately; the optional integer becomes cgp's exit status.",
 	"unset":    "`unset <name>` — remove a variable binding.",
 	"include":  "`include <path>` — splice another cgp file into this one.",
-	"snippet":  "`snippet <name> { ... }` — define a reusable block of statements.",
+	"snippet":  "`snippet <name> {{ ... }}` — define a reusable shell-body fragment, invoked as `@name` inside a `{{ }}` body.",
 	"eval":     "`eval <string>` — parse and run cgp source produced at runtime.",
 	"sleep":    "`sleep <seconds>` — pause execution.",
 	"dumpvars": "`dumpvars` — print all currently-defined variables (debugging aid).",
 	"showhelp": "`showhelp` — print the script's leading comment block as help text.",
-	"export":   "`export <name>` — mark a variable for export into job environments.",
-	"stage":    "`stage <name> ...` — run a named workflow stage (see §13).",
+	"export":   "`export <name> = <value>` — expose a value from this (stage) pipeline to a calling workflow, referenced there as `${stage.name}`.",
+	"stage":    "`stage <name> <pipeline-file> [--arg value ...]` — declare a workflow stage that runs another pipeline; its exports are available as `${name.export}`.",
 }
 
 var keywordDocs = map[string]string{

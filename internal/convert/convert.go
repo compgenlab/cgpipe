@@ -23,6 +23,7 @@ package convert
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -517,33 +518,11 @@ func hasMakeVar(s string) bool {
 	return strings.Contains(s, "$<") || strings.Contains(s, "$>") || strings.Contains(s, "$%")
 }
 
-// decr returns n-1 for a small positive integer string (1-based -> 0-based).
+// decr returns n-1 for a positive integer string (1-based -> 0-based); anything
+// else (0 or non-numeric) is returned unchanged.
 func decr(n string) string {
-	switch n {
-	case "1":
-		return "0"
-	case "2":
-		return "1"
-	case "3":
-		return "2"
-	case "4":
-		return "3"
-	case "5":
-		return "4"
-	case "6":
-		return "5"
-	case "7":
-		return "6"
-	case "8":
-		return "7"
-	case "9":
-		return "8"
-	}
-	// general case
-	var v int
-	fmt.Sscanf(n, "%d", &v)
-	if v > 0 {
-		return fmt.Sprintf("%d", v-1)
+	if v, err := strconv.Atoi(n); err == nil && v > 0 {
+		return strconv.Itoa(v - 1)
 	}
 	return n
 }

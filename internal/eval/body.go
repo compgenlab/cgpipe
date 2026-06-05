@@ -50,8 +50,8 @@ func (p *Program) RenderPostsubmit(job *Target, jobID string) (string, error) {
 	if job.Scope != nil {
 		sc = job.Scope.clone()
 	}
-	sc.set("input", toStrList(job.Inputs))
-	sc.set("output", toStrList(job.Outputs))
+	sc.set("input", StrList(job.Inputs))
+	sc.set("output", StrList(job.Outputs))
 	sc.set("stem", StrVal(job.Stem))
 	sc.set("jobid", StrVal(jobID))
 	ip := &interp{sc: sc, out: io.Discard, prog: p}
@@ -75,8 +75,8 @@ func (p *Program) RenderText(tmpl string, vars map[string]Value) (string, error)
 // side effect, and returns the scope and the rendered body (with @pre/@post).
 func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 	sc := t.Scope.clone()
-	sc.set("input", toStrList(t.Inputs))
-	sc.set("output", toStrList(t.Outputs))
+	sc.set("input", StrList(t.Inputs))
+	sc.set("output", StrList(t.Outputs))
 	sc.set("stem", StrVal(t.Stem))
 	for k, v := range t.Scope.vars {
 		if bare, ok := strings.CutPrefix(k, "job."); ok && !sc.has(bare) {
@@ -256,14 +256,6 @@ func (ip *interp) renderBodyText(raw string) (string, error) {
 		return "", err
 	}
 	return strings.Join(out, "\n"), nil
-}
-
-func toStrList(ss []string) ListVal {
-	out := make(ListVal, len(ss))
-	for i, s := range ss {
-		out[i] = StrVal(s)
-	}
-	return out
 }
 
 // ---- body node tree (%-control lines wrapping shell lines) ----
@@ -502,7 +494,7 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 				}
 				items, ok := asList(v)
 				if !ok {
-					return fmt.Errorf("%% for…in requires a list/range")
+					return fmt.Errorf("%% for…in requires a list or range, got %s", v.typeName())
 				}
 				for _, e := range items {
 					ip.sc.set(x.varName, e)
@@ -511,10 +503,9 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 					}
 				}
 			} else {
-				const cap = 1_000_000
 				for i := 0; ; i++ {
-					if i >= cap {
-						return fmt.Errorf("%% for-loop exceeded %d iterations", cap)
+					if i >= maxLoopIterations {
+						return fmt.Errorf("%% for-loop exceeded %d iterations", maxLoopIterations)
 					}
 					v, err := ip.eval(x.cond)
 					if err != nil {

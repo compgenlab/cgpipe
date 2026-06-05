@@ -150,21 +150,32 @@ func DOT(g Graph) string {
 	b.WriteString("digraph cgp {\n")
 	b.WriteString("  rankdir=LR;\n")
 	b.WriteString("  node [shape=box, style=rounded];\n")
-	for _, n := range g.Nodes {
-		switch {
-		case n.Temp:
-			fmt.Fprintf(&b, "  %s [style=\"rounded,dashed\"];\n", quote(n.Name))
-		case n.Source:
-			fmt.Fprintf(&b, "  %s [shape=note];\n", quote(n.Name))
-		default:
-			fmt.Fprintf(&b, "  %s;\n", quote(n.Name))
-		}
-	}
-	for _, e := range g.Edges {
-		fmt.Fprintf(&b, "  %s -> %s;\n", quote(e.From), quote(e.To))
-	}
+	writeNodes(&b, "  ", g.Nodes)
+	writeEdges(&b, "  ", g.Edges)
 	b.WriteString("}\n")
 	return b.String()
+}
+
+// writeNodes emits a graph's node declarations at the given indent: temp outputs
+// are dashed, source files (no producer) are notes, others are plain boxes.
+func writeNodes(b *strings.Builder, indent string, nodes []Node) {
+	for _, n := range nodes {
+		switch {
+		case n.Temp:
+			fmt.Fprintf(b, "%s%s [style=\"rounded,dashed\"];\n", indent, quote(n.Name))
+		case n.Source:
+			fmt.Fprintf(b, "%s%s [shape=note];\n", indent, quote(n.Name))
+		default:
+			fmt.Fprintf(b, "%s%s;\n", indent, quote(n.Name))
+		}
+	}
+}
+
+// writeEdges emits a graph's input → output edges at the given indent.
+func writeEdges(b *strings.Builder, indent string, edges []Edge) {
+	for _, e := range edges {
+		fmt.Fprintf(b, "%s%s -> %s;\n", indent, quote(e.From), quote(e.To))
+	}
 }
 
 // Labeled pairs a graph with a label (a manifest row's sample id).
@@ -182,19 +193,8 @@ func DOTCombined(secs []Labeled) string {
 	b.WriteString("  node [shape=box, style=rounded];\n")
 	for i, s := range secs {
 		fmt.Fprintf(&b, "  subgraph cluster_%d {\n    label=%s;\n", i, quote(s.Label))
-		for _, n := range s.Graph.Nodes {
-			switch {
-			case n.Temp:
-				fmt.Fprintf(&b, "    %s [style=\"rounded,dashed\"];\n", quote(n.Name))
-			case n.Source:
-				fmt.Fprintf(&b, "    %s [shape=note];\n", quote(n.Name))
-			default:
-				fmt.Fprintf(&b, "    %s;\n", quote(n.Name))
-			}
-		}
-		for _, e := range s.Graph.Edges {
-			fmt.Fprintf(&b, "    %s -> %s;\n", quote(e.From), quote(e.To))
-		}
+		writeNodes(&b, "    ", s.Graph.Nodes)
+		writeEdges(&b, "    ", s.Graph.Edges)
 		b.WriteString("  }\n")
 	}
 	b.WriteString("}\n")

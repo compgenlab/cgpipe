@@ -353,3 +353,16 @@ b.bam: a.bam {{
 		t.Errorf("job.1002 missing afterok:1001:\n%s", job2)
 	}
 }
+
+// TestSchedulerNamesMatchMap guards against drift between the Names() display
+// list and the schedulers definition map.
+func TestSchedulerNamesMatchMap(t *testing.T) {
+	if len(schedulerNames) != len(schedulers) {
+		t.Fatalf("schedulerNames has %d entries, schedulers map has %d", len(schedulerNames), len(schedulers))
+	}
+	for _, n := range schedulerNames {
+		if _, ok := schedulers[n]; !ok {
+			t.Errorf("Names() lists %q but it is not in the schedulers map", n)
+		}
+	}
+}

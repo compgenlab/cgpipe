@@ -401,10 +401,9 @@ func (ip *interp) execFor(n *ast.For) error {
 		return nil
 	}
 	// while form
-	const cap = 1_000_000
 	for i := 0; ; i++ {
-		if i >= cap {
-			return fmt.Errorf("%s: for-loop exceeded %d iterations", n.Pos(), cap)
+		if i >= maxLoopIterations {
+			return fmt.Errorf("%s: for-loop exceeded %d iterations", n.Pos(), maxLoopIterations)
 		}
 		v, err := ip.eval(n.Cond)
 		if err != nil {
@@ -795,6 +794,9 @@ func applyBinary(op token.Kind, l, r Value) (Value, error) {
 			}
 			return IntVal(a % b), nil
 		case token.POW:
+			if r, ok := intPow(a, b); ok {
+				return IntVal(r), nil
+			}
 			return IntVal(int64(math.Pow(float64(a), float64(b)))), nil
 		case token.LT:
 			return BoolVal(a < b), nil
@@ -811,10 +813,32 @@ func applyBinary(op token.Kind, l, r Value) (Value, error) {
 }
 
 func valueEqual(l, r Value) bool {
+	// Two ints compare exactly as int64; mixed int/float (and float/float) compare
+	// as float64 so 1 == 1.0. (Comparing large int64s via float64 would lose
+	// precision above 2^53, hence the dedicated int path.)
+	if li, lok := l.(IntVal); lok {
+		if ri, rok := r.(IntVal); rok {
+			return li == ri
+		}
+	}
 	if isNumeric(l) && isNumeric(r) {
 		return toFloat(l) == toFloat(r)
 	}
 	return stringify(l) == stringify(r)
+}
+
+// intPow computes base**exp exactly for a non-negative exponent (no float
+// rounding). ok is false for a negative exponent, where the caller falls back to
+// floating-point. Overflow wraps as ordinary int64 arithmetic.
+func intPow(base, exp int64) (int64, bool) {
+	if exp < 0 {
+		return 0, false
+	}
+	result := int64(1)
+	for i := int64(0); i < exp; i++ {
+		result *= base
+	}
+	return result, true
 }
 
 func isNumeric(v Value) bool {
