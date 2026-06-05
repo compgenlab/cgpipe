@@ -56,6 +56,9 @@ func TestArithmetic(t *testing.T) {
 		"17 % 5":      2,
 		"20 / 6":      3,
 		"-3 + 5":      2,
+		"-2 ** 2":     -4, // unary minus binds looser than ** : -(2**2)
+		"-2 * 3":      -6, // ... but tighter than * : (-2)*3
+		"- -2":        2,  // double negation
 	}
 	for src, want := range cases {
 		if got := evalExprStr(t, src, nil); got != IntVal(want) {

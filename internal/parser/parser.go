@@ -542,10 +542,20 @@ func (p *parser) parseExpr(minBP int) ast.Expr {
 }
 
 func (p *parser) parseUnary() ast.Expr {
-	if p.cur().Kind == token.NOT || p.cur().Kind == token.MINUS {
+	if p.cur().Kind == token.NOT {
 		pos := p.cur().Pos
-		op := p.advance().Kind
-		return &ast.Unary{PosV: pos, Op: op, X: p.parseUnary()}
+		p.advance()
+		return &ast.Unary{PosV: pos, Op: token.NOT, X: p.parseUnary()}
+	}
+	if p.cur().Kind == token.MINUS {
+		pos := p.cur().Pos
+		p.advance()
+		// Unary minus binds looser than ** so -2**2 parses as -(2**2), matching
+		// the Python/Ruby/Fortran convention. Parsing the operand at **'s binding
+		// power lets it absorb a trailing ** chain but nothing lower-precedence,
+		// so -2*3 still parses as (-2)*3.
+		powBP, _ := binPower(token.POW)
+		return &ast.Unary{PosV: pos, Op: token.MINUS, X: p.parseExpr(powBP)}
 	}
 	return p.parsePostfix()
 }

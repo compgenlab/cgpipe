@@ -97,7 +97,7 @@ Because CLI values are applied first, `?=` defaults do not override them.
 ## 4. Expressions
 
 ### 4.1 Operators
-- **Arithmetic:** `+ - * / % **` (power). Standard precedence; parenthesize for clarity.
+- **Arithmetic:** `+ - * / % **` (power). Standard precedence (highest to lowest: `**`, then `* / %`, then `+ -`); `**` is right-associative. Unary minus binds looser than `**`, so `-2**2` is `-(2**2)` = `-4` (as in Python/Ruby); parenthesize for clarity.
 - `+` also concatenates strings; `*` repeats strings and lists (`"x" * 3` → `xxx`).
 - **Comparison:** `== != < <= > >=`
 - **Logic:** `&& || !`
