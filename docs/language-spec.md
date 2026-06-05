@@ -489,18 +489,20 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 
 | Path | Purpose |
 |------|---------|
+| `<cgp dir>/.cgprc` | Server-wide global config, next to the installed `cgp` binary (lowest priority) |
+| `/etc/cgp/config`  | System (site-wide) config |
 | `~/.cgp/config`    | User config (itself a cgp script) |
 | `~/.cgp/templates/`| Custom runner templates |
 | `~/.cgp/cache/`    | Cache / state |
-| `/etc/cgp/config`  | System (site-wide) config |
 
 ### 11.2 Resolution order (later wins)
 1. Built-in defaults
-2. System config (`/etc/cgp/config`)
-3. User config (`~/.cgp/config`)
-4. Environment (`CGP_ENV` evaluated as cgp; `CGP_RUN_ID`, `CGP_DRYRUN`)
-5. Command-line `--name value`
-6. The pipeline script (`=` always wins; `?=` respects upstream)
+2. Global config next to the binary (`<cgp dir>/.cgprc`)
+3. System config (`/etc/cgp/config`)
+4. User config (`~/.cgp/config`)
+5. Environment (`CGP_ENV` evaluated as cgp; `CGP_RUN_ID`, `CGP_DRYRUN`)
+6. Command-line `--name value`
+7. The pipeline script (`=` always wins; `?=` respects upstream)
 
 ### 11.3 Selected `cgp.*` settings
 
@@ -510,6 +512,7 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 | `cgp.run_id` | Run identifier (also `CGP_RUN_ID`) |
 | `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific |
+| `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of emitting it (default off) |
 | `cgp.shell` | Default shell for rendered bodies |
 | `cgp.dryrun` | Set by `-dr` / `CGP_DRYRUN` |
 | `cgp.container.engine` | `docker`, `singularity`/`apptainer`; unset disables container wrapping |
@@ -629,6 +632,8 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
     cgp version
 
 A bare argument is a **goal** (a target to build); with none, cgp builds `@default` (or the first target). `--name value` sets a script variable; single-hyphen flags are cgp's own options.
+
+The default runner is `shell`, which **assembles the stale targets into one runnable bash script (dependency order) and writes it to stdout — it does not execute.** Pipe it to `bash`, redirect it to a file, or set `cgp.runner.shell.autoexec = true` (e.g. in `~/.cgp/config`) to have cgp run it directly. The scheduler runners (`slurm`/`sge`/`pbs`/`batchq`) submit; `-dr` makes any runner render without executing/submitting.
 
 | Option | Meaning |
 |--------|---------|

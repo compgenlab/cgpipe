@@ -103,7 +103,7 @@ func runReal(t *testing.T, src string, goals ...string) {
 	t.Helper()
 	prog, _ := build(t, src, nil)
 	err := shell.Run(prog, shell.Options{
-		Goals: goals, Cache: runner.NewCache(),
+		Goals: goals, AutoExec: true, Cache: runner.NewCache(),
 		Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard,
 	})
 	if err != nil {
@@ -116,7 +116,7 @@ func runReal(t *testing.T, src string, goals ...string) {
 func runForce(t *testing.T, prog *eval.Program, force bool) {
 	t.Helper()
 	err := shell.Run(prog, shell.Options{
-		Force: force, Cache: runner.NewCache(),
+		AutoExec: true, Force: force, Cache: runner.NewCache(),
 		Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard,
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func runRealErr(t *testing.T, src string, goals ...string) error {
 	t.Helper()
 	prog, _ := build(t, src, nil)
 	return shell.Run(prog, shell.Options{
-		Goals: goals, Cache: runner.NewCache(),
+		Goals: goals, AutoExec: true, Cache: runner.NewCache(),
 		Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard,
 	})
 }

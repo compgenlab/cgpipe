@@ -47,6 +47,15 @@ func loadConfigs() ([]eval.ConfigFile, error) {
 		}
 		return addSrc(path, filepath.Dir(path), string(b))
 	}
+	// Server-wide global config next to the installed cgp binary (lowest priority).
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		if err := addFile(filepath.Join(filepath.Dir(exe), ".cgprc")); err != nil {
+			return nil, err
+		}
+	}
 	if err := addFile("/etc/cgp/config"); err != nil {
 		return nil, err
 	}
@@ -307,7 +316,11 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 	}
 
 	if name == "shell" {
-		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun, Force: force, Cache: cache}); err != nil {
+		autoexec := false
+		if v, ok := prog.Get("cgp.runner.shell.autoexec"); ok {
+			autoexec = eval.Truthy(v)
+		}
+		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun, AutoExec: autoexec, Force: force, Cache: cache}); err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
