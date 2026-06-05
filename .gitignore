@@ -9,3 +9,8 @@
 # editor / OS
 .DS_Store
 *.swp
+
+# vscode extension build artifacts
+/editor/vscode/node_modules/
+/editor/vscode/out/
+/editor/vscode/*.vsix

@@ -84,6 +84,7 @@ usage:
     cgp sub [options] -- <command ...>     (submit a one-off job; see cgp sub -h)
     cgp ledger {dump|search|vacuum|unlock} <db>   (see cgp ledger)
     cgp convert <old.cgp> [-o out.cgp]     (migrate a legacy cgpipe script)
+    cgp lsp                                (run the language server over stdio; for editors)
     cgp version
 
 options (single hyphen):
@@ -134,6 +135,8 @@ func run(args []string) int {
 		return runSub(args[1:])
 	case "convert":
 		return runConvert(args[1:])
+	case "lsp":
+		return runLSP(args[1:])
 	}
 
 	// Pipeline run. cgp options (single hyphen) and script variables (--name)
