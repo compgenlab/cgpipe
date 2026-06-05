@@ -89,7 +89,7 @@ func truthy(v Value) bool {
 	case ListVal:
 		return len(x) > 0
 	case RangeVal:
-		return len(x.slice()) > 0
+		return x.count() > 0 // a range always yields ≥1 value; avoids materializing it
 	case UnsetVal:
 		return false
 	}

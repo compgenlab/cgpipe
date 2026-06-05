@@ -56,9 +56,10 @@ func TestArithmetic(t *testing.T) {
 		"17 % 5":      2,
 		"20 / 6":      3,
 		"-3 + 5":      2,
-		"-2 ** 2":     -4, // unary minus binds looser than ** : -(2**2)
-		"-2 * 3":      -6, // ... but tighter than * : (-2)*3
-		"- -2":        2,  // double negation
+		"-2 ** 2":     -4,                // unary minus binds looser than ** : -(2**2)
+		"-2 * 3":      -6,                // ... but tighter than * : (-2)*3
+		"- -2":        2,                 // double negation
+		"3 ** 34":     16677181699666569, // exact: above 2^53, float Pow would round
 	}
 	for src, want := range cases {
 		if got := evalExprStr(t, src, nil); got != IntVal(want) {
@@ -93,6 +94,8 @@ func TestComparisonsAndLogic(t *testing.T) {
 		"!0":               true,
 		`!""`:              true,
 		"1 == 1.0":         true,
+		// Two distinct int64s above 2^53 must not compare equal (they would as float64).
+		"9007199254740993 == 9007199254740992": false,
 	}
 	for src, want := range cases {
 		if got := evalExprStr(t, src, nil); got != BoolVal(want) {
