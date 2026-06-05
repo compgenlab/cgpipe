@@ -113,6 +113,31 @@ b.bam: a.bam {{
 	mustContainAll(t, renderDry(t, "batchq", src), "#BATCHQ -afterok dryrun.1")
 }
 
+// When several inputs come from one upstream multi-output job, the dependency is
+// wired once, not repeated (batchq rejects a duplicate afterok).
+func TestDuplicateDepsDeduped(t *testing.T) {
+	src := `a.bam a.bam.bai: {{
+    name = "a"
+    --
+    echo a > a.bam
+    echo i > a.bam.bai
+}}
+b.bam: a.bam a.bam.bai {{
+    name = "b"
+    --
+    cp a.bam ${output}
+}}
+@default: b.bam`
+	for _, sch := range []string{"slurm", "pbs", "sge", "batchq"} {
+		out := renderDry(t, sch, src)
+		if strings.Contains(out, "dryrun.1:dryrun.1") || strings.Contains(out, "dryrun.1 dryrun.1") {
+			t.Errorf("%s: duplicate dependency not deduped:\n%s", sch, out)
+		}
+	}
+	// the single dependency is still present
+	mustContainAll(t, renderDry(t, "slurm", src), "#SBATCH -d afterok:dryrun.1")
+}
+
 // TestLedgerReuse runs the same pipeline twice with a ledger and a still-active
 // mock job: the second run must reuse the existing job, not resubmit.
 func TestLedgerReuse(t *testing.T) {

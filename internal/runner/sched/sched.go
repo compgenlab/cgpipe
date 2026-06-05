@@ -269,6 +269,10 @@ func (b *backend) PostSubmit(job *eval.Target, jobID string) error {
 }
 
 func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
+	// Multiple inputs can come from one upstream (multi-output) job, so the same
+	// dependency id may appear more than once; collapse duplicates before wiring
+	// them (some schedulers, e.g. batchq, reject a repeated afterok).
+	deps = dedupeIDs(deps)
 	// Cross-run reuse: if an existing job still owns this output and is still
 	// active in the scheduler, depend on it instead of resubmitting.
 	if b.ledger != nil && len(t.Outputs) > 0 {
@@ -431,6 +435,21 @@ func setDefault(m map[string]eval.Value, k string, v eval.Value) {
 	if _, ok := m[k]; !ok {
 		m[k] = v
 	}
+}
+
+// dedupeIDs returns ids with empties and later duplicates removed, preserving
+// first-seen order.
+func dedupeIDs(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 func strList(ss []string) eval.ListVal {
