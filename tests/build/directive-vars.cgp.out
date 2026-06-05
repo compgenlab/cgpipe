@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.txt ----
+sort --parallel=8 in.txt > out.txt
+
+

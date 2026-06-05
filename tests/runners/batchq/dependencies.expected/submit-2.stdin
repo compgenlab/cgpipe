@@ -1,0 +1,12 @@
+#!/bin/bash
+#BATCHQ -name post
+#BATCHQ -afterok 1001
+#BATCHQ -input a.bam
+#BATCHQ -output b.bam
+#BATCHQ -wd .
+
+set -eo pipefail
+
+
+cp a.bam b.bam
+

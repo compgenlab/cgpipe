@@ -1,0 +1,8 @@
+# §4.2 Slicing: half-open ranges, negative bounds, out-of-range is clamped.
+f = ["a", "b", "c", "d"]
+print f[1:3]    # b c
+print f[-2:]    # c d
+print f[:-1]    # a b c
+print f[10:]    #        (past the end -> empty line)
+print f[:]      # a b c d
+exit

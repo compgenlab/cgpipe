@@ -1,0 +1,13 @@
+# A downstream job carries the upstream job id in this scheduler's dependency
+# directive. a.bam submits first (1001); b.bam second (depends on 1001).
+b.bam: a.bam {{
+    name = "post"
+    --
+    cp ${input} ${output}
+}}
+a.bam: {{
+    name = "align"
+    --
+    echo a > ${output}
+}}
+@default: b.bam

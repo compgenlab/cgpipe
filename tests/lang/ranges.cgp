@@ -1,0 +1,12 @@
+# §2 / §9.4 Ranges are their own type: they store only bounds, never a
+# materialized list, yet iterate/index/measure like one.
+r = 1..5
+print r.type()              # range
+print r.length()            # 5
+print r[0], r[-1]           # 1 5
+print r.contains(3)         # true
+big = 1..1000000
+print big.type()            # range  (no million-element list is built)
+print big.length()          # 1000000
+for i in 1..3 { print i }   # 1 / 2 / 3
+exit

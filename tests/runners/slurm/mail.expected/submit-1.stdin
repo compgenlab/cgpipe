@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J j
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=user@example.com
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+echo x > out.bam
+

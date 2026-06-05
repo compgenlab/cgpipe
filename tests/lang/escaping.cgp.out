@@ -1,0 +1,4 @@
+bob vs ${name}
+@{x} stays literal
+cost is $5
+Hello "world"!

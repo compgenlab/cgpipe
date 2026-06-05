@@ -1,0 +1,10 @@
+#!/bin/bash
+#PBS -N align
+#PBS -l nodes=1:ppn=1
+#
+set -eo pipefail
+JOB_ID=$PBS_JOBID
+
+
+echo a > a.bam
+

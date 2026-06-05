@@ -1,0 +1,18 @@
+# §5.1 Control flow with brace blocks: if/elif/else, for over range & list,
+# and the while-style single-condition for.
+count = 42
+if count > 100 {
+    print "many"
+} elif count > 0 {
+    print "some"
+} else {
+    print "none"
+}
+for i in 1..3 { print "range", i }
+for s in ["a", "b"] { print "list", s }
+n = 0
+for n < 3 {
+    print "while", n
+    n = n + 1
+}
+exit

@@ -1,0 +1,7 @@
+# §4.3 Escaping: \$ and \@ make a literal $ / @ instead of a substitution.
+name = "bob"
+print "${name} vs \${name}"   # bob vs ${name}
+print "\@{x} stays literal"   # @{x} stays literal
+print "cost is \$5"           # cost is $5
+print "Hello \"world\"!"      # \" is a literal double-quote inside a string
+exit

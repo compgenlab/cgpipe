@@ -1,0 +1,13 @@
+#!/bin/bash
+#$ -w e
+#$ -terse
+#$ -N j
+#$ --exclusive
+#$ --constraint=haswell
+#$ -notify
+
+set -eo pipefail
+
+
+run out.bam
+

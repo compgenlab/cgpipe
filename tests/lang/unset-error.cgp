@@ -1,0 +1,3 @@
+# §4.3 ${var} on an unset variable is an error (use ${var?} for empty instead).
+# This fixture asserts the failure: see unset-error.cgp.rc (1) and .cgp.err.
+print "${nope}"

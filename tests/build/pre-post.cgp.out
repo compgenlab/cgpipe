@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.txt ----
+
+echo "==> out.txt"
+
+
+echo hi > out.txt
+
+
+echo "<== out.txt"
+
+

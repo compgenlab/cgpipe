@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.bam ----
+__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
+trap 'rm -f "$__cgp_body"' EXIT
+cat > "$__cgp_body" <<'__CGP_BODY__'
+samtools sort in.bam > out.bam
+__CGP_BODY__
+
+docker run --rm \
+    -v /tmp:/tmp \
+    -v __WORKDIR__:__WORKDIR__ \
+    -w __WORKDIR__ \
+    -u $(id -u):$(id -g) \
+    biocontainers/samtools:1.9 \
+    sh "$__cgp_body"
+
+

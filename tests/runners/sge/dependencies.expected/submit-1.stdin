@@ -1,0 +1,11 @@
+#!/bin/bash
+#$ -w e
+#$ -terse
+#$ -N align
+#$ -notify
+
+set -eo pipefail
+
+
+echo a > a.bam
+

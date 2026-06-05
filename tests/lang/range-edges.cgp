@@ -1,0 +1,8 @@
+# §2/§9.4 Range edge cases: descending ranges iterate high->low; a single-point
+# range has length 1.
+for x in 5..1 { print x }   # 5 4 3 2 1 (descending)
+print "--"
+print (3..3).length()       # 1
+for y in 3..3 { print y }   # 3
+print (1..10).contains(10)  # true  (inclusive upper bound)
+exit

@@ -60,4 +60,11 @@ run:
 test:
 	go test ./...
 
-.PHONY: all clean run test
+# spec runs the standalone .cgp fixture suite (tests/run.sh) against the freshly
+# built host binary. `make test` also covers it via the Go wrapper (TestFixtures
+# in ./tests); this target is the human-facing entry point — pass FLAGS=-v for
+# per-failure diffs or FLAGS=-u to refresh golden files.
+spec: $(HOST_BINARY)
+	CGP_BIN=$(abspath $(HOST_BINARY)) ./tests/run.sh $(FLAGS)
+
+.PHONY: all clean run test spec

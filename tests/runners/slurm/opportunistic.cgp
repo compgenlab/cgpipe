@@ -1,0 +1,13 @@
+# §7.6 An opportunistic (bodyless-input) job depends afterok on the jobs that
+# produced its inputs this run, so guarded cleanup runs after them.
+prod.bam: {{
+    name = "prod"
+    --
+    echo x > ${output}
+}}
+: prod.bam {{
+    name = "cleanup"
+    --
+    rm -f prod.bam
+}}
+@default: prod.bam

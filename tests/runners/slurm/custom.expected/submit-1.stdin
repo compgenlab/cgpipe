@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J j
+#SBATCH --exclusive
+#SBATCH --constraint=haswell
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+run out.bam
+

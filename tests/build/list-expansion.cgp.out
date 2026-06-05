@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- s1.done s2.done s3.done ----
+
+touch s1.done s2.done s3.done
+
+

@@ -1,0 +1,11 @@
+# Submit one job with per-job directives; each scheduler translates name/mem/
+# procs/walltime into its own header lines, and cgp prints the assigned job id.
+out.bam: {{
+    name     = "align"
+    mem      = "8G"
+    procs    = 4
+    walltime = "12:00:00"
+    --
+    echo aligning > ${output}
+}}
+@default: out.bam

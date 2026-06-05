@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- stage1.txt ----
+
+cp src.txt stage1.txt
+
+
+# ---- final.txt ----
+
+cp stage1.txt final.txt
+
+

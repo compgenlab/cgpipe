@@ -1,0 +1,7 @@
+# §7.1/§7.3 Build variables: ${stem}, ${input[0]}, ${output[0]}, ${output}.
+%.sorted.bam %.flagstat: %.bam {{
+    samtools sort -o ${output[0]} ${input[0]}    # stem=${stem}
+    samtools flagstat ${output[0]} > ${output[1]}
+    echo "outputs: ${output}"
+}}
+@default: sampleA.sorted.bam

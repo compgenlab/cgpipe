@@ -1,0 +1,2 @@
+b = "mid"
+include "leaf.cgp"

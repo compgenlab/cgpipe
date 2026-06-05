@@ -1,0 +1,17 @@
+# §8 nopre/nopost directives opt a target out of @pre/@post wrapping.
+@pre {{
+    echo "==> ${output}"
+}}
+@post {{
+    echo "<== ${output}"
+}}
+wrapped.txt: {{
+    echo a > ${output}
+}}
+bare.txt: {{
+    nopre = true
+    nopost = true
+    --
+    echo b > ${output}
+}}
+@default: wrapped.txt bare.txt

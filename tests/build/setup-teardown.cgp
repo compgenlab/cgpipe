@@ -1,0 +1,15 @@
+# §8 @setup runs first, @teardown last; shexec bodies still render under -dr.
+@setup {{
+    shexec = true
+    --
+    mkdir -p logs
+}}
+@teardown {{
+    shexec = true
+    --
+    echo "pipeline complete"
+}}
+out.txt: {{
+    echo hi > ${output}
+}}
+@default: out.txt

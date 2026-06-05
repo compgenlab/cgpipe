@@ -1,0 +1,9 @@
+# §12 With an engine + a per-target image, the body is wrapped to run in the
+# container; input/output paths and the working dir are bind-mounted.
+cgp.container.engine = "docker"
+out.bam: in.bam {{
+    container = "biocontainers/samtools:1.9"
+    --
+    samtools sort ${input} > ${output}
+}}
+@default: out.bam

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.bam ----
+__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
+trap 'rm -f "$__cgp_body"' EXIT
+cat > "$__cgp_body" <<'__CGP_BODY__'
+bwa in.bam > out.bam
+__CGP_BODY__
+
+singularity exec \
+    -B /tmp:/tmp \
+    -B __WORKDIR__:__WORKDIR__ \
+    --pwd __WORKDIR__ \
+    --nv \
+    docker://biocontainers/bwa:0.7.17 \
+    sh "$__cgp_body"
+
+

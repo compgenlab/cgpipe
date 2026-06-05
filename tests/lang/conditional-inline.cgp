@@ -1,0 +1,16 @@
+# §6.3 Inline conditional ${if cond; a; b} inside string substitution.
+# (Branches are expressions; at statement level they reference variables. A
+# nested string literal inside the ${...} does not work here even when escaped
+# (\"-R \" -> "unterminated ${"); the nested-string form is valid inside a {{ }}
+# body — see build/inline-cond-body.cgp.)
+rg = "lib1"
+withR = "-R " + rg
+have = "have-rg"
+print "${if rg; withR}"        # -R lib1
+print "${if rg; have}"         # have-rg
+empty = ""
+print "[${if empty; have}]"    # []   (else omitted -> empty when false)
+big = "big"
+small = "small"
+print "${if 2 > 1; big; small}"  # big
+exit

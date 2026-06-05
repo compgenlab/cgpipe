@@ -1,0 +1,7 @@
+# §10.4 A changed (newer) input makes the output stale, so the job is submitted.
+out.bam: in.fastq {{
+    name = "align"
+    --
+    echo x > ${output}
+}}
+@default: out.bam

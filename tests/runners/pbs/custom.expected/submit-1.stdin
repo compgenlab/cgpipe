@@ -1,0 +1,12 @@
+#!/bin/bash
+#PBS -N j
+#PBS -l nodes=1:ppn=1
+#PBS --exclusive
+#PBS --constraint=haswell
+#
+set -eo pipefail
+JOB_ID=$PBS_JOBID
+
+
+run out.bam
+

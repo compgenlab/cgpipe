@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.txt ----
+
+annotate --tab BASIC_GENE:BRCA1,4 out.txt
+
+

@@ -1,0 +1,7 @@
+# Align reads and call variants.
+#
+# Options:
+#     --reads FILE   input FASTQ
+#     --ref FILE     reference FASTA
+showhelp
+exit

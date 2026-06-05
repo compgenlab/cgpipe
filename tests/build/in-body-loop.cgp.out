@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.txt ----
+
+echo a >> out.txt
+echo b >> out.txt
+echo c >> out.txt
+
+

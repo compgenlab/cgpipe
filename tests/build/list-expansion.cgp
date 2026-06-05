@@ -1,0 +1,8 @@
+# §7.4 @{list} expands a list into separate declaration items, so @{outs}: @{ins}
+# becomes one rule listing every output and every input (contrast ${} which
+# joins into a single space-separated value).
+samples = ["s1", "s2", "s3"]
+@{samples}.done: @{samples}.bam {{
+    touch ${output}
+}}
+@default: @{samples}.done

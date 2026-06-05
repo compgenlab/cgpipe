@@ -1,0 +1,9 @@
+# §6.4 A %-prefixed line is cgp control flow inside a body; the shell lines
+# between % for { and % } are emitted once per iteration with ${} resolved.
+parts = ["a", "b", "c"]
+out.txt: {{
+% for p in parts {
+    echo ${p} >> ${output}
+% }
+}}
+@default: out.txt

@@ -1,0 +1,6 @@
+# §5.2 include "path" inlines another .cgp file in the global context,
+# resolved relative to the current file. defs.cgp sets greeting + a helper.
+include "defs.cgp"
+print greeting          # hello from defs
+print twice             # set inside defs via its own logic
+exit

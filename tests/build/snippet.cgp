@@ -1,0 +1,10 @@
+# §6.6 A snippet is a reusable body fragment, spliced in with @name.
+snippet common {{
+    set -euo pipefail
+    umask 077
+}}
+out.txt: in.txt {{
+    @common
+    wc -l ${input} > ${output}
+}}
+@default: out.txt

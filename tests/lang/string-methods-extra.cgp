@@ -1,0 +1,9 @@
+# §9.2 More string methods: regex sub with capture groups, split() into chars,
+# chained calls.
+print "chr1:100-200".sub("chr(\\d+):(\\d+)-(\\d+)", "$1 $2 $3")  # 1 100 200
+print "a.b.c".split(".")                # a b c
+print "abc".split()                     # a b c   (no delim -> characters)
+print "  trim me  ".sub("^\\s+|\\s+$", "")  # trim me
+print "Mixed".lower().upper()           # MIXED   (chained)
+print "/a/b/c.bam".basename().sub("\\.bam$", "")  # c
+exit

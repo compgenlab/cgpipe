@@ -1,0 +1,7 @@
+# §5.2 eval evaluates a string-valued expression as cgp source at run time.
+src = "answer = 6 * 7"
+eval src
+print answer            # 42
+eval "greeting = \"hi\""
+print greeting          # hi
+exit
