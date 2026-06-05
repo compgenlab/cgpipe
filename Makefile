@@ -24,7 +24,10 @@ LDFLAGS := -ldflags "-X github.com/compgen-io/cgp/internal/buildinfo.Version=$(V
 # Default target is just the host binary — fast iteration during dev.
 # `make all` cross-builds every supported target; that's what CI runs
 # and what release tarballs are built from.
-HOST_OS := $(shell go env GOOS)
+# go env GOOS reports darwin, but our binaries use the macos label, so
+# normalize it. Otherwise HOST_BINARY on macOS would be cgp.darwin_arm64,
+# which has no rule, and `make spec` fails with "no target to build".
+HOST_OS := $(subst darwin,macos,$(shell go env GOOS))
 HOST_ARCH := $(shell go env GOARCH)
 HOST_BINARY := bin/cgp.$(HOST_OS)_$(HOST_ARCH)
 
