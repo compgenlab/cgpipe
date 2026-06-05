@@ -140,7 +140,7 @@ run_stdout_fixture() {
     [ -f "$rc_file" ] && IFS= read -r want_rc < "$rc_file"
 
     read_args "${cgp_file}.args"
-    local -a args=("${WORDS[@]}")
+    local -a args=(${WORDS[@]+"${WORDS[@]}"})
 
     local work; work="$(mktemp -d)"
     cp "$cgp_file" "$work/$name"
@@ -155,7 +155,7 @@ run_stdout_fixture() {
         [ -f "$env_file" ] && . "$env_file"
         # optional prep (create inputs with set mtimes, seed a ledger, ...)
         [ -f "$setup_file" ] && bash "$setup_file"
-        "$CGP" "${args[@]}" "$name" >stdout.actual 2>stderr.actual
+        "$CGP" ${args[@]+"${args[@]}"} "$name" >stdout.actual 2>stderr.actual
         echo $? >rc.actual
     )
     IFS= read -r rc < "$work/rc.actual"
@@ -195,7 +195,7 @@ run_runner_fixture() {
     fi
 
     read_args "${cgp_file}.args"
-    local -a extra=("${WORDS[@]}")
+    local -a extra=(${WORDS[@]+"${WORDS[@]}"})
 
     local work; work="$(mktemp -d)"
     local capture="$work/capture" bindir="$work/bin"
@@ -218,7 +218,7 @@ run_runner_fixture() {
         # with set mtimes. Its scheduler calls go to a scratch capture dir so
         # they don't pollute the captures under test.
         [ -f "$setup_file" ] && CGP_TEST_CAPTURE="$work/setup-capture" bash "$setup_file"
-        "$CGP" -r "$sched" "${extra[@]}" "$name" >stdout.actual 2>stderr.actual
+        "$CGP" -r "$sched" ${extra[@]+"${extra[@]}"} "$name" >stdout.actual 2>stderr.actual
         echo $? >rc.actual
     )
     IFS= read -r rc < "$work/rc.actual"
