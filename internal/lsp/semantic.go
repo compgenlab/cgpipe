@@ -3,6 +3,7 @@ package lsp
 import (
 	"sort"
 
+	"github.com/compgen-io/cgp/internal/ast"
 	"github.com/compgen-io/cgp/internal/lexer"
 	"github.com/compgen-io/cgp/internal/token"
 )
@@ -31,11 +32,14 @@ const (
 
 // builtinStmts are the statement-leading built-in words. They are plain IDENTs
 // to the lexer; we color them as functions only when they begin a statement.
-var builtinStmts = map[string]bool{
-	"print": true, "exit": true, "unset": true, "include": true,
-	"snippet": true, "eval": true, "sleep": true, "dumpvars": true,
-	"showhelp": true, "export": true, "stage": true,
-}
+// Built from the canonical ast.BuiltinStmts list.
+var builtinStmts = func() map[string]bool {
+	m := make(map[string]bool, len(ast.BuiltinStmts))
+	for _, n := range ast.BuiltinStmts {
+		m[n] = true
+	}
+	return m
+}()
 
 // semTok is an absolute (pre-delta-encoding) semantic token.
 type semTok struct {

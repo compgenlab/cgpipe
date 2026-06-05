@@ -1,13 +1,9 @@
 package lsp
 
 // Short Markdown descriptions surfaced by hover and completion. They summarize
-// the language constructs documented in docs/language-spec.md.
-
-// builtinList is the statement-leading built-ins, in a stable order for completion.
-var builtinList = []string{
-	"print", "exit", "unset", "include", "snippet",
-	"eval", "sleep", "dumpvars", "showhelp", "export", "stage",
-}
+// the language constructs documented in docs/language-spec.md. The keys are kept
+// in sync with the canonical ast.BuiltinStmts / ast.ReservedTargets lists by the
+// drift-guard test (docs_test.go).
 
 var builtinDocs = map[string]string{
 	"print":    "`print <expr>...` — evaluate the expressions and write them to stdout, space-separated.",

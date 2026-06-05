@@ -671,10 +671,15 @@ func (p *parser) parseListLit() ast.Expr {
 
 // ---- helpers ----
 
-var reservedTargets = map[string]bool{
-	"pre": true, "post": true, "setup": true, "teardown": true,
-	"postsubmit": true, "default": true,
-}
+// reservedTargets is the lookup set for @-prefixed target validation, built from
+// the canonical ast.ReservedTargets list.
+var reservedTargets = func() map[string]bool {
+	m := make(map[string]bool, len(ast.ReservedTargets))
+	for _, n := range ast.ReservedTargets {
+		m[n] = true
+	}
+	return m
+}()
 
 // declWords splits a raw target-declaration fragment into whitespace-separated
 // word templates, dropping a trailing comment. ${…}/@{…}/^ are preserved for eval.
