@@ -73,7 +73,7 @@ const usage = `cgp — run a .cgp pipeline
 usage:
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] -- <command ...>     (submit a one-off job; see cgp sub -h)
-    cgp ledger {vacuum|unlock} <db>
+    cgp ledger {dump|search|vacuum|unlock} <db>   (see cgp ledger)
     cgp convert <old.cgp> [-o out.cgp]     (migrate a legacy cgpipe script)
     cgp version
 
@@ -842,14 +842,36 @@ func runConvert(args []string) int {
 	return 0
 }
 
+const ledgerUsage = `usage:
+    cgp ledger dump <db>                       dump all jobs as key/value TSV
+    cgp ledger search [filters] <db>           dump jobs matching the filters
+    cgp ledger vacuum <db>                      drop jobs that own no current output
+    cgp ledger unlock <db>                      remove a stale lockfile
+
+search filters (substring match; combined with AND):
+    -i PATH      an input path contains PATH
+    -o PATH      an output path contains PATH
+    -g PATTERN   a job-script line contains PATTERN (grep)
+    -name NAME   the job name contains NAME
+    -id JOBID    the job id (exact)
+`
+
 // runLedger handles `cgp ledger <subcommand> ...`.
 func runLedger(args []string) int {
-	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: cgp ledger {vacuum|unlock} <ledger.db>")
+	if len(args) < 1 {
+		fmt.Fprint(os.Stderr, ledgerUsage)
 		return 2
 	}
 	switch args[0] {
+	case "dump":
+		return runLedgerDump(args[1:])
+	case "search":
+		return runLedgerSearch(args[1:])
 	case "vacuum":
+		if len(args) < 2 {
+			fmt.Fprint(os.Stderr, ledgerUsage)
+			return 2
+		}
 		lg, err := ledger.Open(args[1])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
@@ -862,15 +884,115 @@ func runLedger(args []string) int {
 		}
 		return 0
 	case "unlock":
+		if len(args) < 2 {
+			fmt.Fprint(os.Stderr, ledgerUsage)
+			return 2
+		}
 		if err := ledger.Unlock(args[1]); err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		return 0
 	default:
-		fmt.Fprintln(os.Stderr, "usage: cgp ledger {vacuum|unlock} <ledger.db>")
+		fmt.Fprint(os.Stderr, ledgerUsage)
 		return 2
 	}
+}
+
+// runLedgerDump handles `cgp ledger dump <db>`.
+func runLedgerDump(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprint(os.Stderr, ledgerUsage)
+		return 2
+	}
+	lg, err := ledger.OpenRead(args[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	defer lg.Close()
+	if err := lg.Dump(os.Stdout, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// runLedgerSearch handles `cgp ledger search [filters] <db>`.
+func runLedgerSearch(args []string) int {
+	var f ledger.Filter
+	var db string
+	need := func(i int) (string, bool) {
+		if i+1 >= len(args) {
+			fmt.Fprint(os.Stderr, ledgerUsage)
+			return "", false
+		}
+		return args[i+1], true
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		var v string
+		ok := true
+		switch a {
+		case "-i":
+			if v, ok = need(i); ok {
+				f.Input = v
+				i++
+			}
+		case "-o":
+			if v, ok = need(i); ok {
+				f.Output = v
+				i++
+			}
+		case "-g":
+			if v, ok = need(i); ok {
+				f.Grep = v
+				i++
+			}
+		case "-name":
+			if v, ok = need(i); ok {
+				f.Name = v
+				i++
+			}
+		case "-id":
+			if v, ok = need(i); ok {
+				f.ID = v
+				i++
+			}
+		default:
+			if strings.HasPrefix(a, "-") || db != "" {
+				fmt.Fprint(os.Stderr, ledgerUsage)
+				return 2
+			}
+			db = a
+		}
+		if !ok {
+			return 2
+		}
+	}
+	if db == "" || (f == ledger.Filter{}) {
+		fmt.Fprint(os.Stderr, ledgerUsage)
+		return 2
+	}
+	lg, err := ledger.OpenRead(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	defer lg.Close()
+	ids, err := lg.Search(f)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	if len(ids) == 0 {
+		return 0 // no matches: dump nothing (an empty set is not "everything")
+	}
+	if err := lg.Dump(os.Stdout, ids); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 // parseCLIValue parses a command-line value into a typed cgp value, falling back

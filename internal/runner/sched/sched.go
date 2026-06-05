@@ -334,14 +334,38 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	}
 	if b.ledger != nil && id != "" && len(t.Outputs) > 0 {
 		if err := b.ledger.Record(ledger.Job{
-			JobID: id, RunID: b.runID, Name: jobName(t), Pipeline: b.opts.Pipeline,
+			JobID: id, RunID: b.runID, Name: eval.Stringify(vars["name"]), Pipeline: b.opts.Pipeline,
 			WorkingDir: b.opts.Dir, User: b.user, SubmitTime: time.Now().Unix(),
 			Outputs: t.Outputs, Temp: t.Temp, Inputs: t.Inputs, Deps: deps,
+			Script: body, Settings: jobSettings(vars),
 		}); err != nil {
 			return "", fmt.Errorf("ledger record: %w", err)
 		}
 	}
 	return id, nil
+}
+
+// jobSettings extracts the per-job settings worth recording (mem, procs,
+// walltime, name, container, gpu, …) from the render vars: scalar values, minus
+// the build-in/internal names and cgp.* config.
+func jobSettings(vars map[string]eval.Value) map[string]string {
+	skip := map[string]bool{
+		"input": true, "output": true, "stem": true, "name": true, // name is recorded as NAME
+		"_body": true, "_inputs": true, "_outputs": true,
+		"depids": true, "custom": true, "setup": true, "shell": true,
+		"run_id": true, "parallelenv": true, "mailtype": true,
+	}
+	out := map[string]string{}
+	for k, v := range vars {
+		if skip[k] || strings.HasPrefix(k, "cgp.") {
+			continue
+		}
+		switch v.(type) {
+		case eval.StrVal, eval.IntVal, eval.FloatVal, eval.BoolVal:
+			out[k] = eval.Stringify(v)
+		}
+	}
+	return out
 }
 
 // shExec runs body on the submission host (for shexec targets). In dry-run it is

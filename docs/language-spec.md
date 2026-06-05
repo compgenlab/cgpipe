@@ -413,7 +413,7 @@ Only `type()`. No implicit coercion; an unknown method throws `Method not found`
 > The ledger is **optional** — a pipeline runs correctly without one.
 
 ### 10.1 Purpose and scope
-The ledger is a record of **which job owns (last produced) which output file**, plus that job's inputs and dependencies. Its core query is "who owns output path `X`?" It enables cross-run composition: cgp won't resubmit a job whose output is already pending in the scheduler, even across separate invocations, and it wires new downstream work as a scheduler dependency (`afterok:<id>`) of the in-flight job.
+The ledger is a record of **which job owns (last produced) which output file**, plus that job's inputs, dependencies, settings, and rendered job script (for audit and `cgp ledger search`/`dump` — see [§15.2](#152-cgp-ledger)). Its core query is "who owns output path `X`?" It enables cross-run composition: cgp won't resubmit a job whose output is already pending in the scheduler, even across separate invocations, and it wires new downstream work as a scheduler dependency (`afterok:<id>`) of the in-flight job.
 
 Three responsibilities are kept strictly separate:
 
@@ -616,7 +616,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
 
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] -- <command ...>
-    cgp ledger {vacuum|unlock} <db>
+    cgp ledger {dump|search|vacuum|unlock} <db>
     cgp convert <old.cgp> [-o out.cgp]
     cgp version
 
@@ -642,7 +642,11 @@ Submits a single command as a job, using the same runners, settings, and ledger 
 Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, repeatable), `-i PATH` (declared input), `-d JOBID` (depend on a job id), `-after PATH` (depend on the active ledger owner of `PATH`), `-r`, `-ledger`, `-dr`.
 
 ### 15.2 `cgp ledger`
-`cgp ledger vacuum <db>` keeps only the last owner of each path and drops the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <db>` removes a stale lockfile ([§10.6](#106-lockfile)).
+- `cgp ledger dump <db>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`/`START`/`END`, `RETCODE`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).
+- `cgp ledger search [filters] <db>` writes the same TSV for the jobs matching the filters (combined with AND; substring match except `-id`): `-i PATH` (an input contains), `-o PATH` (an output contains), `-g PATTERN` (a job-script line contains — grep), `-name NAME` (job name contains), `-id JOBID` (exact). A non-matching search prints nothing.
+- `cgp ledger vacuum <db>` keeps only the last owner of each path and drops the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <db>` removes a stale lockfile ([§10.6](#106-lockfile)).
+
+`dump` and `search` open the ledger read-only, so they are safe to run while a pipeline is in flight.
 
 ### 15.3 `cgp convert` — migrate an older script
 `cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgp-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgpipe.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgp-convert:` comment for you to review.

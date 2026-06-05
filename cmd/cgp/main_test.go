@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/compgen-io/cgp/internal/ledger"
 )
 
 func TestRunVersion(t *testing.T) {
@@ -380,6 +382,53 @@ func TestManifestCombinedGraphviz(t *testing.T) {
 	if !strings.Contains(out, `label="P001"`) || !strings.Contains(out, `label="P002"`) {
 		t.Errorf("missing per-sample clusters:\n%s", out)
 	}
+}
+
+// §15.2 cgp ledger dump / search read the ledger and print the joblog TSV.
+func TestLedgerDumpAndSearchCLI(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "l.db")
+	lg, err := ledger.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lg.Record(ledger.Job{JobID: "1001", Name: "align", Outputs: []string{"out.bam"},
+		Inputs: []string{"reads.fq"}, Script: "bwa mem reads.fq > out.bam"})
+	lg.Record(ledger.Job{JobID: "1002", Name: "sort", Outputs: []string{"sorted.bam"},
+		Inputs: []string{"out.bam"}, Script: "samtools sort out.bam > sorted.bam"})
+	lg.Close()
+
+	dump := captureStdout(t, func() int { return run([]string{"ledger", "dump", db}) })
+	if !strings.Contains(dump, "1001\tNAME\talign") || !strings.Contains(dump, "1002\tNAME\tsort") {
+		t.Errorf("dump missing jobs:\n%s", dump)
+	}
+	// grep the script: only the samtools job matches
+	got := captureStdout(t, func() int { return run([]string{"ledger", "search", "-g", "samtools", db}) })
+	if !strings.Contains(got, "1002") || strings.Contains(got, "1001\t") {
+		t.Errorf("search -g samtools = %q, want only job 1002", got)
+	}
+	// a non-matching search prints nothing (not everything)
+	none := captureStdout(t, func() int { return run([]string{"ledger", "search", "-g", "zzznope", db}) })
+	if strings.TrimSpace(none) != "" {
+		t.Errorf("non-matching search should print nothing, got:\n%s", none)
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected and returns what it wrote.
+func captureStdout(t *testing.T, fn func() int) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	code := fn()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if code != 0 {
+		t.Fatalf("command exited %d", code)
+	}
+	return buf.String()
 }
 
 func fileThere(dir, name string) bool {
