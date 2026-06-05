@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J cleanup
+#SBATCH -d afterok:1001
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+rm -f prod.bam
+

@@ -1,0 +1,7 @@
+# §4.3 $(cmd) runs in the shell at parse time; its stdout is substituted.
+# The command string is variable-substituted first.
+print "$(printf hello)"           # hello
+word = "world"
+print "$(echo ${word})"           # world
+print "$(echo a; echo b)"         # a/b  (multi-line stdout, joined as printed)
+exit

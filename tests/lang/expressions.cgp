@@ -1,0 +1,12 @@
+# §4.1 Operators: arithmetic, precedence, power, string/list repeat & concat.
+print 1 + 2 * 3        # precedence: 7
+print (1 + 2) * 3      # grouping: 9
+print 7 / 2            # int division: 3
+print 7.0 / 2          # float: 3.5
+print 7 % 3            # modulo: 1
+print 2 ** 10          # power: 1024
+print 10 - 3 - 2       # left assoc: 5
+print "ab" + "cd"      # string concat: abcd
+print "ab" * 3         # string repeat: ababab
+print [1, 2] * 2       # list repeat: 1 2 1 2
+exit

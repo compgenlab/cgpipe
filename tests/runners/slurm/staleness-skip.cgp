@@ -1,0 +1,8 @@
+# §10.4 Restart is mtime-based: an output newer than its input is current, so
+# nothing is submitted (no stdout, no scheduler calls). setup.sh sets the mtimes.
+out.bam: in.fastq {{
+    name = "align"
+    --
+    echo x > ${output}
+}}
+@default: out.bam

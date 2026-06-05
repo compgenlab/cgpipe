@@ -1,0 +1,13 @@
+#!/bin/bash
+#$ -w e
+#$ -terse
+#$ -N align
+#$ -l h_rt=12:00:00
+#$ -l h_vmem=8G
+#$ -notify
+
+set -eo pipefail
+
+
+echo aligning > out.bam
+

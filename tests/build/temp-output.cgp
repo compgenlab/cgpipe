@@ -1,0 +1,9 @@
+# §7.5 A ^-prefixed output is temporary (intermediate); it still renders and
+# mtime-checks like a normal file when building the chain.
+^stage1.txt: src.txt {{
+    cp ${input} ${output}
+}}
+final.txt: stage1.txt {{
+    cp ${input} ${output}
+}}
+@default: final.txt

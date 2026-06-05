@@ -1,0 +1,5 @@
+# §5.2 include resolves relative to the including file and nests: top.cgp
+# includes mid.cgp, which includes leaf.cgp.
+include "top.cgp"
+print a, b, c     # from top, mid, leaf respectively
+exit

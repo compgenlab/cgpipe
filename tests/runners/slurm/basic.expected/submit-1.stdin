@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J align
+#SBATCH -t 12:00:00
+#SBATCH -c 4
+#SBATCH -n 1
+#SBATCH --mem=8000
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+echo aligning > out.bam
+

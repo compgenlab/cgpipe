@@ -1,0 +1,5 @@
+# §7.3 Wildcard rule: % matches the stem, reused on the input side and as ${stem}.
+%.sai: %.fastq {{
+    bwa aln ref.fa ${input} > ${output}   # stem=${stem}
+}}
+@default: reads.sai

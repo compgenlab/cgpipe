@@ -1,0 +1,13 @@
+# §3 Variable forms: =, ?=, +=, unset.
+threads = 4
+print threads               # 4
+threads ?= 16               # already set -> unchanged
+print threads               # 4
+method ?= "fast"            # unset -> takes the default
+print method                # fast
+nums = 1
+nums += 2                   # scalar promoted to a list
+print nums                  # 1 2
+unset method
+print "method=[${method?}]" # method=[]   (unset reads empty via ?)
+exit

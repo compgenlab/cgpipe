@@ -1,0 +1,8 @@
+# §7 A dependency chain a.txt -> b.txt -> c.txt is emitted in build order.
+c.txt: b.txt {{
+    cp ${input} ${output}
+}}
+b.txt: a.txt {{
+    cp ${input} ${output}
+}}
+@default: c.txt

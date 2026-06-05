@@ -1,0 +1,15 @@
+# §6.3 Inline conditional ${if cond; a; b} inside string substitution.
+# (Branches are expressions; at statement level they reference variables since a
+# cgp string literal can't itself contain a nested double-quote — see the
+# interp-quoting build fixture for the nested-string form inside a {{ }} body.)
+rg = "lib1"
+withR = "-R " + rg
+have = "have-rg"
+print "${if rg; withR}"        # -R lib1
+print "${if rg; have}"         # have-rg
+empty = ""
+print "[${if empty; have}]"    # []   (else omitted -> empty when false)
+big = "big"
+small = "small"
+print "${if 2 > 1; big; small}"  # big
+exit

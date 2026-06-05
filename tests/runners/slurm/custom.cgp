@@ -1,0 +1,8 @@
+# job.custom lines are emitted verbatim as this scheduler's directive lines.
+out.bam: {{
+    name   = "j"
+    custom = ["--exclusive", "--constraint=haswell"]
+    --
+    run ${output}
+}}
+@default: out.bam

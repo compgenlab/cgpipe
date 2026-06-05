@@ -1,0 +1,13 @@
+# §8 An @setup with shexec runs locally on the submit host (no sbatch); the
+# normal target is still submitted. The shexec echo appears on stdout.
+@setup {{
+    shexec = true
+    --
+    echo "setup ran on submit host"
+}}
+out.bam: {{
+    name = "j"
+    --
+    echo x > ${output}
+}}
+@default: out.bam

@@ -1,0 +1,10 @@
+#!/bin/bash
+#BATCHQ -name align
+#BATCHQ -output a.bam
+#BATCHQ -wd .
+
+set -eo pipefail
+
+
+echo a > a.bam
+

@@ -1,0 +1,9 @@
+# Empty collections behave predictably: zero length, no iterations, no membership.
+e = []
+print e.length()        # 0
+print e.contains("x")   # false
+for x in e { print "never" }
+print "empty-list ok"
+print "".length()       # 0
+print "".split(",")     #        (one empty field -> blank line)
+exit

@@ -1,0 +1,9 @@
+# §11.3 global_hold submits every job held (sbatch -H), then releases each
+# after the whole pipeline submits cleanly (scontrol release).
+cgp.runner.slurm.global_hold = true
+out.bam: {{
+    name = "j"
+    --
+    echo x > ${output}
+}}
+@default: out.bam

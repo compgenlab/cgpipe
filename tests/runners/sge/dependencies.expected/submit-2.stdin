@@ -1,0 +1,12 @@
+#!/bin/bash
+#$ -w e
+#$ -terse
+#$ -N post
+#$ -hold_jid 1001
+#$ -notify
+
+set -eo pipefail
+
+
+cp a.bam b.bam
+

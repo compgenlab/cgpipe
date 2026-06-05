@@ -1,0 +1,11 @@
+# §8 @pre is prepended and @post appended to every target body.
+@pre {{
+    echo "==> ${output}"
+}}
+@post {{
+    echo "<== ${output}"
+}}
+out.txt: {{
+    echo hi > ${output}
+}}
+@default: out.txt

@@ -1,0 +1,8 @@
+# §6.3 Inline ${if} in a body, with a nested double-quoted string that itself
+# contains ${...} — the span scanner tokenizes the quoted string as a unit, so
+# the inner '}' and ',' do not end the substitution early. (Regression guard.)
+basic = "BRCA1"
+out.txt: {{
+    annotate ${if basic; "--tab BASIC_GENE:${basic},4"} ${output}
+}}
+@default: out.txt

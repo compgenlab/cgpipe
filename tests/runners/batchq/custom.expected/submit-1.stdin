@@ -1,0 +1,12 @@
+#!/bin/bash
+#BATCHQ -name j
+#BATCHQ -output out.bam
+#BATCHQ --exclusive
+#BATCHQ --constraint=haswell
+#BATCHQ -wd .
+
+set -eo pipefail
+
+
+run out.bam
+

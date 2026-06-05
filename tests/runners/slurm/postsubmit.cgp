@@ -1,0 +1,16 @@
+# §8 @postsubmit runs on the submit host after each submission with ${jobid}
+# set to the scheduler-assigned id; here it echoes a record to stdout.
+a.bam: {{
+    name = "a"
+    --
+    echo a > ${output}
+}}
+b.bam: a.bam {{
+    name = "b"
+    --
+    cp ${input} ${output}
+}}
+@postsubmit {{
+    echo "submitted ${output} as ${jobid}"
+}}
+@default: b.bam

@@ -1,0 +1,10 @@
+# §10.5 Cross-run reuse: with a ledger, a second run that finds the output still
+# owned by an active job reuses it (polls scontrol) instead of resubmitting.
+# setup.sh performs the first (seeding) run; this is the second run.
+cgp.ledger = "led.db"
+a.bam: {{
+    name = "a"
+    --
+    echo a > ${output}
+}}
+@default: a.bam

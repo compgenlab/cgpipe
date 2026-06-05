@@ -1,0 +1,13 @@
+# §12 Per-target container settings shape the engine invocation: extra binds,
+# env passthrough, raw opts, the in-image shell.
+cgp.container.engine = "docker"
+out.bam: in.bam {{
+    container          = "img:1"
+    container.bind     = ["/data", "/refs"]
+    container.env      = ["SAMPLE"]
+    container.opts     = ["--shm-size=1g"]
+    container.shell    = "bash"
+    --
+    run ${input} > ${output}
+}}
+@default: out.bam

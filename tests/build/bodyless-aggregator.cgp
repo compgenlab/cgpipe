@@ -1,0 +1,10 @@
+# §7.7 A bodyless target is a phony grouping rule: requesting it builds its
+# inputs but it contributes no recipe of its own.
+all: a.txt b.txt
+a.txt: {{
+    echo a > ${output}
+}}
+b.txt: {{
+    echo b > ${output}
+}}
+@default: all

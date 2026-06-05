@@ -1,0 +1,11 @@
+#!/bin/bash
+#PBS -N post
+#PBS -l nodes=1:ppn=1
+#PBS -W depend=afterok:1001.cluster1
+#
+set -eo pipefail
+JOB_ID=$PBS_JOBID
+
+
+cp a.bam b.bam
+

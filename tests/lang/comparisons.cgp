@@ -1,0 +1,9 @@
+# §4.1 Comparison and logic operators.
+print 1 == 1, 1 == 2          # true false
+print 1 != 2, "a" != "a"      # true false
+print 3 < 5, 5 <= 5, 6 > 9    # true true false
+print true && false           # false
+print true || false           # true
+print !true, !false           # false true
+print !"", !"x"               # true false   (! as unset/empty guard, §4.1)
+exit

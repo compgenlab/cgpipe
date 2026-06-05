@@ -1,0 +1,13 @@
+#!/bin/bash
+#BATCHQ -name align
+#BATCHQ -procs 4
+#BATCHQ -mem 8G
+#BATCHQ -walltime 12:00:00
+#BATCHQ -output out.bam
+#BATCHQ -wd .
+
+set -eo pipefail
+
+
+echo aligning > out.bam
+

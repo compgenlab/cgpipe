@@ -1,0 +1,16 @@
+# §4.3 / §9.2 String substitution and string methods.
+name = "sample-1"
+path = "/data/reads/SshouldRR.bam"
+print "hi ${name}"                    # interpolation
+print "missing=[${nope?}]"            # ${var?} -> empty when unset
+print "Sample-1".upper()              # SAMPLE-1
+print "Sample-1".lower()              # sample-1
+print name.length()                   # 8
+print name.contains("amp")            # true
+print name.split("-")                 # sample 1
+print "a,b,c".split(",")              # a b c
+print ",".join(["a", "b", "c"])       # a,b,c
+print path.basename()                 # SshouldRR.bam
+print path.dirname()                  # /data/reads
+print "reads.bam".sub("\\.bam$", "")  # reads
+exit

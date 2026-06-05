@@ -1,0 +1,17 @@
+# §4.2 / §9.3 Lists: literals, indexing, slicing, methods, append.
+foo = ["one", "two", "three"]
+print foo                  # one two three   (a list joins with spaces)
+print foo[0]               # one
+print foo[-1]              # three
+print foo[1:]              # two three
+print foo[:2]              # one two
+print foo.length()         # 3
+print foo.contains("two")  # true
+print foo.join(",")        # one,two,three
+foo += "four"
+print foo.length()         # 4
+bar = []
+bar += 1
+bar += 2
+print bar                  # 1 2
+exit
