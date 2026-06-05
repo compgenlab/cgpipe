@@ -283,6 +283,55 @@ func TestCLIVarNumericTyping(t *testing.T) {
 	}
 }
 
+// §3.1 A bare --name is a boolean flag (name=true); hyphens in the name become
+// underscores so it's a usable cgp identifier.
+func TestBooleanFlagAndHyphen(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo \"${hp_dist} ${hp_dist.type()} ${adaptive}\" > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp", "--hp-dist", "--adaptive"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "true bool true\n" {
+		t.Errorf("out.txt = %q, want \"true bool true\\n\"", string(b))
+	}
+	// --hp_dist (underscore form) is equivalent to --hp-dist
+	if code := run([]string{"p.cgp", "--hp_dist", "--adaptive"}); code != 0 {
+		t.Fatalf("run (underscore) = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "true bool true\n" {
+		t.Errorf("underscore form differs: %q", string(b))
+	}
+}
+
+// §3.1 A boolean flag immediately before a value flag stays boolean (the value
+// flag still takes its own value).
+func TestBooleanFlagBeforeValueFlag(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo \"${hp_dist} ${threads} ${threads.type()}\" > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp", "--hp-dist", "--threads", "4"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "true 4 int\n" {
+		t.Errorf("out.txt = %q, want \"true 4 int\\n\"", string(b))
+	}
+}
+
+// §3.1 A repeated --name builds a list; --name=value sets an explicit value (with
+// hyphen→underscore on the name).
+func TestRepeatedFlagAndEqualsForm(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo \"${x} n=${x.length()} mf=${my_flag} ${my_flag.type()}\" > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp", "--x", "a", "--x", "b", "--my-flag=5"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "a b n=2 mf=5 int\n" {
+		t.Errorf("out.txt = %q, want \"a b n=2 mf=5 int\\n\"", string(b))
+	}
+}
+
 // §15 cgp options may appear before the pipeline file (cgp [options] <file>),
 // not only after it.
 func TestOptionsBeforeFile(t *testing.T) {

@@ -82,6 +82,14 @@ A double-hyphen `--name value` on the command line sets the script variable `nam
 
     $ cgp pipeline.cgp --sample patient_42 --threads 16
 
+The value is typed like any literal (`16` → int, `0.5` → float, `true`/`false` → bool, otherwise string). Three more conventions:
+
+- **Boolean flags.** A bare `--name` — the next token is another option, or there is none — sets `name = true`. So `--adaptive` ⇒ `adaptive = true`.
+- **Hyphens → underscores in the name.** Identifiers can't contain hyphens, so `--hp-dist` sets `hp_dist` (and `--hp_dist` is the same). Values are untouched.
+- **Repeat to build a list.** Giving the same flag more than once makes a list: `--x a --x b` ⇒ `x = ["a", "b"]`.
+
+Two edge cases: a value that starts with `-` needs the explicit form (`--offset=-5`, since `--offset -5` reads `-5` as an option and leaves `offset = true`); and a boolean flag placed immediately before the pipeline file would consume it as a value, so put the file first (`cgp p.cgp --adaptive`) or write `--adaptive=true`.
+
 Because CLI values are applied first, `?=` defaults do not override them.
 
 ---
@@ -567,7 +575,7 @@ A **workflow** chains several standalone pipelines into one command, threading v
     stage call   call.cgp   --bam ${post.cleaned_bam} --ref ${ref}
 
 ### 13.1 Declaring stages
-`stage NAME FILE ARGS...` declares one stage. `ARGS` use the same `--name value` (or `--name=value`) convention as command-line variables ([§3.1](#31-command-line-variables)) — they are the variables the stage pipeline receives. `NAME`, `FILE`, and each arg are interpolated against the workflow's variables before the stage runs.
+`stage NAME FILE ARGS...` declares one stage. `ARGS` use the same `--name value` convention as command-line variables ([§3.1](#31-command-line-variables)) — including boolean flags, hyphen→underscore names, and repeat-to-list — and are the variables the stage pipeline receives. `NAME`, `FILE`, and each arg are interpolated against the workflow's variables before the stage runs.
 
 Stages run in **declaration order**. Each stage's args may reference earlier stages' exports.
 

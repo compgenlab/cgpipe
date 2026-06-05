@@ -89,8 +89,10 @@ options (single hyphen):
                           columns/keys become variables
 
 Script variables use a double hyphen: --name value (or --name=value). A bare
-argument is a goal (target) to build. With no goal, cgp builds @default (or
-the first defined target).
+--name (no value) sets name=true; hyphens in a name become underscores
+(--hp-dist sets hp_dist); a repeated flag builds a list (--x a --x b => [a, b]).
+A bare argument is a goal (target) to build. With no goal, cgp builds @default
+(or the first defined target).
 `
 
 // printUsage writes the help text followed by the version footer (e.g.
@@ -142,18 +144,21 @@ func run(args []string) int {
 		a := rest[i]
 		switch {
 		case strings.HasPrefix(a, "--"):
-			// double hyphen: a script variable (--name value or --name=value)
+			// double hyphen: a script variable. --name=value (explicit), --name
+			// value (the next token, unless it's another option), or a bare --name
+			// boolean flag. Hyphens in the name become underscores; a repeated flag
+			// builds a list.
 			nv := a[2:]
 			if eq := strings.IndexByte(nv, '='); eq >= 0 {
-				vars[nv[:eq]] = parseCLIValue(nv[eq+1:])
+				addCLIVar(vars, cliVarName(nv[:eq]), parseCLIValue(nv[eq+1:]))
 				continue
 			}
-			if i+1 >= len(rest) {
-				fmt.Fprintf(os.Stderr, "cgp: variable %s needs a value\n", a)
-				return 2
+			if i+1 < len(rest) && !isOptionToken(rest[i+1]) {
+				i++
+				addCLIVar(vars, cliVarName(nv), parseCLIValue(rest[i]))
+			} else {
+				addCLIVar(vars, cliVarName(nv), eval.BoolVal(true))
 			}
-			i++
-			vars[nv] = parseCLIValue(rest[i])
 		case len(a) > 1 && a[0] == '-':
 			// single hyphen: a cgp option
 			switch a {
@@ -483,21 +488,21 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 			}
 			nv := a[2:]
 			if eq := strings.IndexByte(nv, '='); eq >= 0 {
-				subVars[nv[:eq]] = parseCLIValue(nv[eq+1:])
+				addCLIVar(subVars, cliVarName(nv[:eq]), parseCLIValue(nv[eq+1:]))
 				continue
 			}
-			// value is the next interpolated arg
-			i++
-			if i >= len(st.Args) {
-				fmt.Fprintf(os.Stderr, "cgp: stage %s: --%s needs a value\n", name, nv)
-				return 2
+			// next token is the value, unless it's another --flag (then boolean)
+			if i+1 < len(st.Args) && !isOptionToken(st.Args[i+1]) {
+				i++
+				val, err := eval.Interpolate(st.Args[i], wfVars)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
+					return 1
+				}
+				addCLIVar(subVars, cliVarName(nv), parseCLIValue(val))
+			} else {
+				addCLIVar(subVars, cliVarName(nv), eval.BoolVal(true))
 			}
-			val, err := eval.Interpolate(st.Args[i], wfVars)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
-				return 1
-			}
-			subVars[nv] = parseCLIValue(val)
 		}
 
 		src, err := os.ReadFile(subfile)
@@ -1024,4 +1029,27 @@ func parseCLIValue(s string) eval.Value {
 		return eval.FloatVal(f)
 	}
 	return eval.StrVal(s)
+}
+
+// cliVarName normalizes a command-line variable name: hyphens become underscores
+// so `--hp-dist` sets the cgp identifier `hp_dist` (identifiers can't contain
+// hyphens). `--hp_dist` is therefore equivalent.
+func cliVarName(s string) string { return strings.ReplaceAll(s, "-", "_") }
+
+// isOptionToken reports whether a token looks like an option/flag (starts with
+// `-`), so it should not be consumed as the value of a preceding --name.
+func isOptionToken(s string) bool { return len(s) > 0 && s[0] == '-' }
+
+// addCLIVar sets a command-line variable, building a list when the same name is
+// given more than once (e.g. `--x a --x b` ⇒ x = [a, b]).
+func addCLIVar(vars map[string]eval.Value, name string, v eval.Value) {
+	if prev, ok := vars[name]; ok {
+		if lst, isList := prev.(eval.ListVal); isList {
+			vars[name] = append(lst, v)
+		} else {
+			vars[name] = eval.ListVal{prev, v}
+		}
+		return
+	}
+	vars[name] = v
 }
