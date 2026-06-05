@@ -15,6 +15,10 @@
     "type": "git",
     "url": "https://github.com/compgen-io/cgp"
   },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:cgp"
+  ],
   "contributes": {
     "languages": [
       {
@@ -39,6 +43,42 @@
           "meta.embedded.block.shell.cgp": "shellscript"
         }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "cgp",
+      "properties": {
+        "cgp.serverPath": {
+          "type": "string",
+          "default": "cgp",
+          "markdownDescription": "Path to the `cgp` binary used to run the language server (`cgp lsp`). Defaults to `cgp` on your PATH."
+        },
+        "cgp.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the communication between VSCode and the cgp language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run compile -- --sourcemap --watch",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.4.0"
   }
 }
