@@ -691,17 +691,138 @@ var reservedTargets = func() map[string]bool {
 	return m
 }()
 
-// declWords splits a raw target-declaration fragment into whitespace-separated
-// word templates, dropping a trailing comment. ${…}/@{…}/^ are preserved for eval.
+// declWords splits a raw target-declaration fragment into word templates,
+// dropping a trailing comment. It splits on unquoted whitespace while treating
+// "…", ${…}, @{…}, and $(…) as opaque spans, so a word like ${if c; "a b"; c}
+// (whose interior contains spaces or a #) stays a single word. ${…}/@{…}/^ are
+// preserved verbatim for eval. A '#' outside any span starts a comment.
 func declWords(raw string) []string {
-	if i := strings.IndexByte(raw, '#'); i >= 0 {
-		raw = raw[:i]
+	var words []string
+	var cur strings.Builder
+	flush := func() {
+		if cur.Len() > 0 {
+			words = append(words, cur.String())
+			cur.Reset()
+		}
 	}
-	fields := strings.Fields(raw)
-	if len(fields) == 0 {
-		return nil
+	for i := 0; i < len(raw); {
+		c := raw[i]
+		switch {
+		case c == '#':
+			flush()
+			return words // comment to end of line
+		case c == ' ' || c == '\t' || c == '\r' || c == '\n':
+			flush()
+			i++
+		case c == '"':
+			j := i + 1
+			for j < len(raw) { // closing-quote scan, honoring \ escapes
+				if raw[j] == '\\' && j+1 < len(raw) {
+					j += 2
+					continue
+				}
+				if raw[j] == '"' {
+					j++
+					break
+				}
+				j++
+			}
+			cur.WriteString(raw[i:j])
+			i = j
+		case (c == '$' || c == '@') && i+1 < len(raw) && raw[i+1] == '{':
+			i = copySpan(&cur, raw, i, declBraceSpan(raw[i+2:]))
+		case c == '$' && i+1 < len(raw) && raw[i+1] == '(':
+			i = copySpan(&cur, raw, i, declParenSpan(raw[i+2:]))
+		default:
+			cur.WriteByte(c)
+			i++
+		}
 	}
-	return fields
+	flush()
+	return words
+}
+
+// copySpan appends the span starting at i (an opener of width 2, e.g. "${"/"$(")
+// whose inner length is span (offset of the closer within raw[i+2:], or -1 if
+// unterminated) to cur, and returns the new scan index. An unterminated span
+// consumes the rest of the fragment.
+func copySpan(cur *strings.Builder, raw string, i, span int) int {
+	if span < 0 {
+		cur.WriteString(raw[i:])
+		return len(raw)
+	}
+	end := i + 2 + span + 1
+	cur.WriteString(raw[i:end])
+	return end
+}
+
+// declBraceSpan returns the offset of the '}' closing a ${…}/@{…} whose opener
+// was consumed, or -1 if unterminated. Mirrors eval.braceSpan (a quoted substring
+// is opaque; \-escaped bytes are skipped; an escaped \" toggles string mode too)
+// — duplicated here to avoid a parser→eval import cycle.
+func declBraceSpan(s string) int {
+	depth, inStr := 0, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\\' && i+1 < len(s) {
+			if s[i+1] == '"' {
+				inStr = !inStr
+			}
+			i++
+			continue
+		}
+		if c == '"' {
+			inStr = !inStr
+			continue
+		}
+		if inStr {
+			continue
+		}
+		switch c {
+		case '{':
+			depth++
+		case '}':
+			if depth == 0 {
+				return i
+			}
+			depth--
+		}
+	}
+	return -1
+}
+
+// declParenSpan returns the offset of the ')' closing a $( … ) whose opener was
+// consumed, or -1 if unterminated. Mirrors eval.parenSpan's shell-quoting rules
+// — duplicated here to avoid a parser→eval import cycle.
+func declParenSpan(s string) int {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '\'':
+			i++
+			for i < len(s) && s[i] != '\'' {
+				i++
+			}
+		case '"':
+			i++
+			for i < len(s) && s[i] != '"' {
+				if s[i] == '\\' {
+					i++
+				}
+				i++
+			}
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return i
+			}
+			depth--
+		}
+	}
+	return -1
 }
 
 // tokenWidth is the source width of a token, for raw-name slicing.

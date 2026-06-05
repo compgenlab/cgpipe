@@ -191,3 +191,69 @@ func TestInlineFlagged(t *testing.T) {
 		t.Errorf("inline case not annotated:\n%s", out)
 	}
 }
+
+// A multi-line <% … %> directive region (all assignments) becomes the directive
+// block before "--".
+func TestMultiLineDirectiveRegion(t *testing.T) {
+	src := "out.bam: in.bam\n" +
+		"    <%\n" +
+		"    job.mem = \"8G\"\n" +
+		"    job.procs = 4\n" +
+		"    %>\n" +
+		"    process $< > $>\n"
+	got := convertOf(t, src)
+	for _, frag := range []string{"out.bam: in.bam {{", "mem = \"8G\"", "procs = 4", "--", "process ${input} > ${output}", "}}"} {
+		if !strings.Contains(got, frag) {
+			t.Errorf("missing %q in:\n%s", frag, got)
+		}
+	}
+}
+
+// A comment sitting at column 0 inside an indented body must stay part of the
+// body (the body must not end early at the dedented comment).
+func TestColumnZeroCommentInsideBody(t *testing.T) {
+	src := "out.txt: in.txt\n" +
+		"    echo a\n" +
+		"# mid-body comment\n" +
+		"    echo b\n"
+	got := convertOf(t, src)
+	for _, frag := range []string{"echo a", "# mid-body comment", "echo b", "}}"} {
+		if !strings.Contains(got, frag) {
+			t.Errorf("missing %q (body ended early at the comment?) in:\n%s", frag, got)
+		}
+	}
+	if strings.Count(got, "{{") != 1 {
+		t.Errorf("expected a single body block, got:\n%s", got)
+	}
+}
+
+// A tab counts as indentation (indentWidth rounds a tab up to 8), so a
+// tab-indented line belongs to the target body.
+func TestTabIndentedBody(t *testing.T) {
+	src := "out.txt: in.txt\n\techo hello\n"
+	got := convertOf(t, src)
+	for _, frag := range []string{"out.txt: in.txt {{", "echo hello", "}}"} {
+		if !strings.Contains(got, frag) {
+			t.Errorf("missing %q (tab not treated as body indent?) in:\n%s", frag, got)
+		}
+	}
+}
+
+// A legacy multi-variable for loop can't be mechanically converted; it is passed
+// through with a warning and an inline cgp-convert note.
+func TestMultiVarForLoopWarns(t *testing.T) {
+	src := "for a, b in xs, ys\n    echo $a $b\ndone\n"
+	got, warnings := Convert(src)
+	if !strings.Contains(got, "# cgp-convert: rewrite this multi-variable for loop") {
+		t.Errorf("missing inline cgp-convert note in:\n%s", got)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "multi-variable") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a multi-variable warning, got %v", warnings)
+	}
+}

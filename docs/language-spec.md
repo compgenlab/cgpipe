@@ -130,6 +130,8 @@ Escaping: inside a `"…"` string literal a backslash escapes the next character
 
 `${{var}}` (double-eval) is for when a variable's *content* is itself a template; `$(cmd)` runs at parse time and its command string is variable-substituted first.
 
+> **Note — `$(cmd)` and dry runs.** Because `$(cmd)` runs while the body is *rendered*, it also runs under `cgp -dr` (the script is rendered to be shown, which evaluates the substitution). This is intentional: a dry run reports the script that would run, including the resolved output of any render-time `$(cmd)`. When you want the command deferred to the job's own shell at runtime, write `\$(cmd)` (see [§6.1](#61-the-body-is-a-template)) — that form is emitted verbatim and never runs at render time.
+
 ---
 
 ## 5. Statements and control flow

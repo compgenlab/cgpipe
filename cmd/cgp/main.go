@@ -15,7 +15,6 @@ import (
 
 	"github.com/compgen-io/cgp/internal/ast"
 	"github.com/compgen-io/cgp/internal/buildinfo"
-	"github.com/compgen-io/cgp/internal/convert"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
 	"github.com/compgen-io/cgp/internal/manifest"
@@ -92,6 +91,9 @@ usage:
 options (single hyphen):
     -h           show this help
     -dr          dry run: render scripts instead of executing/submitting
+                 (note: cgp's own $(…) command substitution is evaluated while
+                 rendering, so it still runs under -dr; use \$(…) to defer to
+                 the job's shell)
     -force       rebuild every target in the goal graph, ignoring staleness
     -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz, html
                  (graphviz=DOT to stdout; html=status report reading the ledger)
@@ -479,7 +481,12 @@ var stageRefRe = regexp.MustCompile(`\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_]
 // freshly produced outputs (so they must not be cached as missing).
 func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dryRun, force bool) int {
 	wfVars := wf.Vars()
-	if code := validateStageRefs(wf, wfVars); code != 0 {
+	// Parse each stage file at most once, shared between validation and the run
+	// loop below (a stage file is otherwise read+parsed by both). Keyed by the
+	// resolved path, so a stage whose file depends on a prior stage's export still
+	// parses correctly when orchestration reaches it.
+	pc := parseCache{}
+	if code := validateStageRefs(wf, wfVars, pc); code != 0 {
 		return code
 	}
 	for _, st := range wf.Stages {
@@ -523,12 +530,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 			}
 		}
 
-		src, err := os.ReadFile(subfile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
-			return 1
-		}
-		sf, err := parser.Parse(string(src), subfile)
+		sf, err := pc.load(subfile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
 			return 1
@@ -555,7 +557,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 // validateStageRefs is a best-effort static check: a ${NAME.X} reference to a
 // declared stage NAME whose file never exports X is a typo and fails fast.
 // (Conditional exports that don't fire are caught at runtime when referenced.)
-func validateStageRefs(wf *eval.Program, wfVars map[string]eval.Value) int {
+func validateStageRefs(wf *eval.Program, wfVars map[string]eval.Value, pc parseCache) int {
 	exports := map[string]map[string]bool{}
 	for _, st := range wf.Stages {
 		name, err := eval.Interpolate(st.Name, wfVars)
@@ -566,11 +568,7 @@ func validateStageRefs(wf *eval.Program, wfVars map[string]eval.Value) int {
 		if err != nil {
 			continue
 		}
-		src, err := os.ReadFile(subfile)
-		if err != nil {
-			continue
-		}
-		sf, err := parser.Parse(string(src), subfile)
+		sf, err := pc.load(subfile)
 		if err != nil {
 			continue
 		}
@@ -593,6 +591,28 @@ func validateStageRefs(wf *eval.Program, wfVars map[string]eval.Value) int {
 		}
 	}
 	return 0
+}
+
+// parseCache memoizes parsed stage files by resolved path, so a file referenced
+// by both stage-ref validation and the orchestration run is read and parsed once.
+type parseCache map[string]*ast.File
+
+// load returns the parsed file at path, parsing (and caching) it on first use. A
+// read or parse error is returned and not cached, so a later caller still sees it.
+func (pc parseCache) load(path string) (*ast.File, error) {
+	if f, ok := pc[path]; ok {
+		return f, nil
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	f, err := parser.Parse(string(src), path)
+	if err != nil {
+		return nil, err
+	}
+	pc[path] = f
+	return f, nil
 }
 
 // loadManifest loads a manifest into rows of variables, one run per row.
@@ -639,398 +659,6 @@ func loadCGPManifest(pattern string) ([]map[string]eval.Value, error) {
 	return rows, nil
 }
 
-const subUsage = `cgp sub — submit a one-off command as a job
-
-usage:
-    cgp sub [options] -- <command ...>
-
-options:
-    -name S        job name
-    -mem S         memory (e.g. 8G)
-    -procs N       cpus
-    -walltime S    wall-time limit
-    -o PATH        declared output (repeatable; recorded in the ledger)
-    -i PATH        declared input (repeatable)
-    -d JOBID       depend on an existing job id (repeatable)
-    -after PATH    depend on the active job that owns PATH in the ledger (repeatable)
-    -r NAME        runner: shell (default), slurm, sge, pbs, batchq
-    -ledger PATH   ledger database
-    -dr            dry run
-
-The command (everything after --) is treated as a cgp body: ${input}/${output}
-substitute; use $VAR for shell variables.
-`
-
-// runSub handles `cgp sub [options] -- command...`.
-func runSub(args []string) int {
-	var name string
-	var outs, ins, deps, after []string
-	var runnerName, ledgerPath string
-	dryRun := false
-	settings := map[string]eval.Value{}
-	var cmdParts []string
-
-	need := func(i int, flag string) (string, bool) {
-		if i+1 >= len(args) {
-			fmt.Fprintf(os.Stderr, "cgp sub: %s needs a value\n", flag)
-			return "", false
-		}
-		return args[i+1], true
-	}
-
-	i := 0
-	for i < len(args) {
-		a := args[i]
-		if a == "--" {
-			cmdParts = args[i+1:]
-			break
-		}
-		v, ok := "", false
-		switch a {
-		case "-dr":
-			dryRun = true
-		case "-h":
-			fmt.Print(subUsage)
-			return 0
-		case "-name":
-			if name, ok = need(i, a); !ok {
-				return 2
-			}
-			i++
-		case "-mem":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			settings["job.mem"] = eval.StrVal(v)
-			i++
-		case "-procs":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			settings["job.procs"] = eval.ParseScalar(v)
-			i++
-		case "-walltime":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			settings["job.walltime"] = eval.StrVal(v)
-			i++
-		case "-o":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			outs = append(outs, v)
-			i++
-		case "-i":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			ins = append(ins, v)
-			i++
-		case "-d":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			deps = append(deps, v)
-			i++
-		case "-after":
-			if v, ok = need(i, a); !ok {
-				return 2
-			}
-			after = append(after, v)
-			i++
-		case "-r":
-			if runnerName, ok = need(i, a); !ok {
-				return 2
-			}
-			i++
-		case "-ledger":
-			if ledgerPath, ok = need(i, a); !ok {
-				return 2
-			}
-			i++
-		default:
-			fmt.Fprintf(os.Stderr, "cgp sub: unknown option %s (put the command after --)\n", a)
-			return 2
-		}
-		i++
-	}
-
-	if len(cmdParts) == 0 {
-		fmt.Fprint(os.Stderr, subUsage)
-		return 2
-	}
-
-	// Merge config (cgp.* / job.*) as defaults, then let explicit flags win.
-	cfgs, err := loadConfigs()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	base, err := eval.Run(&ast.File{}, eval.Options{Configs: cfgs})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	for k, v := range base.Vars() {
-		if strings.HasPrefix(k, "cgp.") || strings.HasPrefix(k, "job.") {
-			if _, set := settings[k]; !set {
-				settings[k] = v
-			}
-		}
-	}
-	if runnerName != "" {
-		settings["cgp.runner"] = eval.StrVal(runnerName)
-	}
-	if ledgerPath != "" {
-		settings["cgp.ledger"] = eval.StrVal(ledgerPath)
-	}
-	if runnerName == "" {
-		if v, ok := settings["cgp.runner"]; ok {
-			runnerName = eval.Stringify(v)
-		}
-	}
-
-	prog := eval.NewJob(eval.JobSpec{
-		Command: strings.Join(cmdParts, " "),
-		Name:    name, Outputs: outs, Inputs: ins, Settings: settings,
-	})
-	t := prog.Targets[0]
-
-	if runnerName == "" || runnerName == "shell" {
-		if err := shell.SubmitOne(prog, t, shell.Options{DryRun: dryRun}); err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		return 0
-	}
-	sch, ok := sched.For(runnerName)
-	if !ok {
-		fmt.Fprintf(os.Stderr, "cgp sub: unknown runner %q\n", runnerName)
-		return 2
-	}
-	if _, err := sched.SubmitOne(prog, sch, t, deps, after, sched.Options{DryRun: dryRun, Pipeline: "cgp sub"}); err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	return 0
-}
-
-const convertUsage = `cgp convert — migrate a legacy cgpipe script to cgp
-
-usage:
-    cgp convert <old.cgp> [-o out.cgp]
-
-Reads a legacy (JVM-cgpipe-era) script and writes the cgp-equivalent to stdout
-(or to -o FILE). Best-effort: the mechanical differences are rewritten and
-anything that can't be converted safely is annotated with a "# cgp-convert:"
-comment. Review the result before running it.
-`
-
-// runConvert handles `cgp convert <old.cgp> [-o out.cgp]`.
-func runConvert(args []string) int {
-	var in, out string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-h":
-			fmt.Print(convertUsage)
-			return 0
-		case a == "-o":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cgp convert: -o needs a value")
-				return 2
-			}
-			i++
-			out = args[i]
-		case strings.HasPrefix(a, "-"):
-			fmt.Fprintf(os.Stderr, "cgp convert: unknown option %s\n", a)
-			return 2
-		default:
-			if in != "" {
-				fmt.Fprintln(os.Stderr, "cgp convert: only one input file")
-				return 2
-			}
-			in = a
-		}
-	}
-	if in == "" {
-		fmt.Fprint(os.Stderr, convertUsage)
-		return 2
-	}
-
-	src, err := os.ReadFile(in)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	converted, warnings := convert.Convert(string(src))
-
-	if out == "" {
-		fmt.Print(converted)
-	} else if err := os.WriteFile(out, []byte(converted), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "cgp convert: %s\n", w)
-	}
-	return 0
-}
-
-const ledgerUsage = `usage:
-    cgp ledger dump <db>                       dump all jobs as key/value TSV
-    cgp ledger search [filters] <db>           dump jobs matching the filters
-    cgp ledger vacuum <db>                      drop jobs that own no current output
-    cgp ledger unlock <db>                      remove a stale lockfile
-
-search filters (substring match; combined with AND):
-    -i PATH      an input path contains PATH
-    -o PATH      an output path contains PATH
-    -g PATTERN   a job-script line contains PATTERN (grep)
-    -name NAME   the job name contains NAME
-    -id JOBID    the job id (exact)
-`
-
-// runLedger handles `cgp ledger <subcommand> ...`.
-func runLedger(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprint(os.Stderr, ledgerUsage)
-		return 2
-	}
-	switch args[0] {
-	case "dump":
-		return runLedgerDump(args[1:])
-	case "search":
-		return runLedgerSearch(args[1:])
-	case "vacuum":
-		if len(args) < 2 {
-			fmt.Fprint(os.Stderr, ledgerUsage)
-			return 2
-		}
-		lg, err := ledger.Open(args[1])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		defer lg.Close()
-		if err := lg.Vacuum(); err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		return 0
-	case "unlock":
-		if len(args) < 2 {
-			fmt.Fprint(os.Stderr, ledgerUsage)
-			return 2
-		}
-		if err := ledger.Unlock(args[1]); err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		return 0
-	default:
-		fmt.Fprint(os.Stderr, ledgerUsage)
-		return 2
-	}
-}
-
-// runLedgerDump handles `cgp ledger dump <db>`.
-func runLedgerDump(args []string) int {
-	if len(args) != 1 {
-		fmt.Fprint(os.Stderr, ledgerUsage)
-		return 2
-	}
-	lg, err := ledger.OpenRead(args[0])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	defer lg.Close()
-	if err := lg.Dump(os.Stdout, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	return 0
-}
-
-// runLedgerSearch handles `cgp ledger search [filters] <db>`.
-func runLedgerSearch(args []string) int {
-	var f ledger.Filter
-	var db string
-	need := func(i int) (string, bool) {
-		if i+1 >= len(args) {
-			fmt.Fprint(os.Stderr, ledgerUsage)
-			return "", false
-		}
-		return args[i+1], true
-	}
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		var v string
-		ok := true
-		switch a {
-		case "-i":
-			if v, ok = need(i); ok {
-				f.Input = v
-				i++
-			}
-		case "-o":
-			if v, ok = need(i); ok {
-				f.Output = v
-				i++
-			}
-		case "-g":
-			if v, ok = need(i); ok {
-				f.Grep = v
-				i++
-			}
-		case "-name":
-			if v, ok = need(i); ok {
-				f.Name = v
-				i++
-			}
-		case "-id":
-			if v, ok = need(i); ok {
-				f.ID = v
-				i++
-			}
-		default:
-			if strings.HasPrefix(a, "-") || db != "" {
-				fmt.Fprint(os.Stderr, ledgerUsage)
-				return 2
-			}
-			db = a
-		}
-		if !ok {
-			return 2
-		}
-	}
-	if db == "" || (f == ledger.Filter{}) {
-		fmt.Fprint(os.Stderr, ledgerUsage)
-		return 2
-	}
-	lg, err := ledger.OpenRead(db)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	defer lg.Close()
-	ids, err := lg.Search(f)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	if len(ids) == 0 {
-		return 0 // no matches: dump nothing (an empty set is not "everything")
-	}
-	if err := lg.Dump(os.Stdout, ids); err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	return 0
-}
-
 // cliVarName normalizes a command-line variable name: hyphens become underscores
 // so `--hp-dist` sets the cgp identifier `hp_dist` (identifiers can't contain
 // hyphens). `--hp_dist` is therefore equivalent.
@@ -1045,7 +673,10 @@ func isOptionToken(s string) bool { return len(s) > 0 && s[0] == '-' }
 func addCLIVar(vars map[string]eval.Value, name string, v eval.Value) {
 	if prev, ok := vars[name]; ok {
 		if lst, isList := prev.(eval.ListVal); isList {
-			vars[name] = append(lst, v)
+			// Copy rather than append in place: the same backing array can be
+			// shared across manifest rows / repeated runs, so a mutating append
+			// could alias another row's list.
+			vars[name] = append(append(eval.ListVal{}, lst...), v)
 		} else {
 			vars[name] = eval.ListVal{prev, v}
 		}

@@ -196,6 +196,31 @@ func TestTargetTempCaret(t *testing.T) {
 	}
 }
 
+func TestTargetWordWithSpacesInParen(t *testing.T) {
+	// A $(…) command substitution containing spaces must stay one input word,
+	// not split on the interior whitespace.
+	tg := only(t, "out.txt: $(printf a b) {{\n  cat ${input} > ${output}\n}}").(*ast.Target)
+	if len(tg.Inputs) != 1 || tg.Inputs[0] != "$(printf a b)" {
+		t.Fatalf("inputs = %v, want a single $(printf a b) word", tg.Inputs)
+	}
+}
+
+func TestTargetWordWithSpacesInBrace(t *testing.T) {
+	// Spaces inside a ${…} span must not split the word.
+	tg := only(t, "out.txt: ${ name } {{\n  echo ${input}\n}}").(*ast.Target)
+	if len(tg.Inputs) != 1 || tg.Inputs[0] != "${ name }" {
+		t.Fatalf("inputs = %v, want a single ${ name } word", tg.Inputs)
+	}
+}
+
+func TestTargetTrailingCommentDropped(t *testing.T) {
+	// A trailing # comment is dropped; a # inside a quoted word is not a comment.
+	tg := only(t, "out.txt: \"a#b\" in.txt # trailing comment\n").(*ast.Target)
+	if len(tg.Inputs) != 2 || tg.Inputs[0] != `"a#b"` || tg.Inputs[1] != "in.txt" {
+		t.Fatalf("inputs = %v, want [\"a#b\" in.txt]", tg.Inputs)
+	}
+}
+
 func TestOpportunisticTarget(t *testing.T) {
 	tg := only(t, ": out.bam report.html {{\n  zip\n}}").(*ast.Target)
 	if len(tg.Outputs) != 0 {

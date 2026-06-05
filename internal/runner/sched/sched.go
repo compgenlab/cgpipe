@@ -286,10 +286,16 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// dependency id may appear more than once; collapse duplicates before wiring
 	// them (some schedulers, e.g. batchq, reject a repeated afterok).
 	deps = dedupeIDs(deps)
-	// Cross-run reuse: if an existing job still owns this output and is still
-	// active in the scheduler, depend on it instead of resubmitting.
-	if b.ledger != nil && len(t.Outputs) > 0 {
-		if owner, ok, err := b.ledger.OwnerOf(t.Outputs[0]); err == nil && ok && owner != "" {
+	// Cross-run reuse: if an existing job still owns any of this target's outputs
+	// and is still active in the scheduler, depend on it instead of resubmitting.
+	// Check every output (not just the first): a target's outputs are produced by
+	// one job, but the first output may be unowned while a later one is owned.
+	if b.ledger != nil {
+		for _, out := range t.Outputs {
+			owner, ok, err := b.ledger.OwnerOf(out)
+			if err != nil || !ok || owner == "" {
+				continue
+			}
 			if b.sch.IsActive == nil || b.sch.IsActive(owner) {
 				fmt.Fprintf(b.opts.Out, "# reuse: %s already owned by active job %s\n", runner.Label(t), owner)
 				return owner, nil
