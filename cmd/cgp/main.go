@@ -125,7 +125,10 @@ func run(args []string) int {
 		return runConvert(args[1:])
 	}
 
-	file := args[0]
+	// Pipeline run. cgp options (single hyphen) and script variables (--name)
+	// may appear before or after the pipeline file; the first bare argument is
+	// the pipeline file, any later bare arguments are goals.
+	file := ""
 	vars := map[string]eval.Value{}
 	var goals []string
 	dryRun := false
@@ -134,7 +137,7 @@ func run(args []string) int {
 	runnerName := ""
 	manifestPath, manifestFmt := "", ""
 
-	rest := args[1:]
+	rest := args
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
 		switch {
@@ -189,8 +192,18 @@ func run(args []string) int {
 				return 2
 			}
 		default:
-			goals = append(goals, a)
+			if file == "" {
+				file = a // the first bare argument is the pipeline file
+			} else {
+				goals = append(goals, a)
+			}
 		}
+	}
+
+	if file == "" {
+		fmt.Fprintln(os.Stderr, "cgp: no pipeline file given")
+		printUsage(os.Stderr)
+		return 2
 	}
 
 	if os.Getenv("CGP_DRYRUN") != "" {

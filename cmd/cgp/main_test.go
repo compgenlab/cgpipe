@@ -283,6 +283,35 @@ func TestCLIVarNumericTyping(t *testing.T) {
 	}
 }
 
+// §15 cgp options may appear before the pipeline file (cgp [options] <file>),
+// not only after it.
+func TestOptionsBeforeFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.txt"), 0o644)
+	// -dr before the file (the reported bug: "open -dr: no such file")
+	if code := run([]string{"-dr", "p.cgp", "--greeting", "hi"}); code != 0 {
+		t.Fatalf("run(-dr p.cgp …) = %d, want 0", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out.txt")); err == nil {
+		t.Error("-dr should not have produced out.txt")
+	}
+	// the same options after the file still execute for real
+	if code := run([]string{"p.cgp", "--greeting", "hi"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "hi\n" {
+		t.Errorf("out.txt = %q", string(b))
+	}
+}
+
+// §15 a run with no pipeline file is an error.
+func TestNoPipelineFile(t *testing.T) {
+	if code := run([]string{"-dr"}); code != 2 {
+		t.Fatalf("run(-dr) with no file = %d, want 2", code)
+	}
+}
+
 // §15 -dr renders instead of executing: no output file is produced.
 func TestDryRunDoesNotExecute(t *testing.T) {
 	dir := t.TempDir()
