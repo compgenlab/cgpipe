@@ -93,19 +93,26 @@ argument is a goal (target) to build. With no goal, cgp builds @default (or
 the first defined target).
 `
 
+// printUsage writes the help text followed by the version footer (e.g.
+// "cgp v0.1.2-dev-abcdef").
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, usage)
+	fmt.Fprintf(w, "\ncgp %s\n", buildinfo.Version)
+}
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, usage)
+		printUsage(os.Stderr)
 		return 2
 	}
 
 	switch args[0] {
 	case "-h", "help":
-		fmt.Print(usage)
+		printUsage(os.Stdout)
 		return 0
 	case "version":
 		fmt.Printf("cgp %s\n", buildinfo.Version)
