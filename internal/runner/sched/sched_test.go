@@ -290,6 +290,52 @@ func TestExternalDepWiresAfterok(t *testing.T) {
 	}
 }
 
+// TestLedgerReuseChecksAllOutputs: a multi-output target whose first output is
+// unowned but whose second output is owned by an active job must reuse that job
+// rather than resubmit (the reuse check considers every output, not just [0]).
+func TestLedgerReuseChecksAllOutputs(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	os.MkdirAll(bin, 0o755)
+	counter := filepath.Join(dir, "counter")
+	// sbatch records a submit by creating/bumping the counter; if reuse works it
+	// is never called, so the counter file stays absent.
+	os.WriteFile(filepath.Join(bin, "sbatch"), []byte("#!/bin/bash\n"+
+		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\necho $n\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "scontrol"), []byte("#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CGP_COUNTER", counter)
+
+	ledgerPath := filepath.Join(dir, "ledger.db")
+	lg, err := ledger.Open(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lg.Record(ledger.Job{JobID: "777", Outputs: []string{"second.bam"}}) // owns only the 2nd output
+	lg.Close()
+
+	prog := eval.NewJob(eval.JobSpec{
+		Command:  "echo > ${output}",
+		Outputs:  []string{"first.bam", "second.bam"},
+		Settings: map[string]eval.Value{"cgp.ledger": eval.StrVal(ledgerPath)},
+	})
+	sch, _ := For("slurm")
+	var out bytes.Buffer
+	id, err := SubmitOne(prog, sch, prog.Targets[0], nil, nil, Options{Dir: dir, Out: &out})
+	if err != nil {
+		t.Fatalf("SubmitOne: %v", err)
+	}
+	if id != "777" {
+		t.Fatalf("job id = %q, want 777 (reuse of the 2nd output's active owner)", id)
+	}
+	if _, err := os.Stat(counter); err == nil {
+		t.Errorf("sbatch was called (counter exists) — should have reused, not resubmitted")
+	}
+	if !strings.Contains(out.String(), "reuse") {
+		t.Errorf("output should note reuse:\n%s", out.String())
+	}
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)

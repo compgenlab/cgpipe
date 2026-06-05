@@ -150,6 +150,68 @@ func TestServerHandshakeAndSemanticTokens(t *testing.T) {
 	}
 }
 
+// TestServerDocumentLifecycleHover drives didOpen → didChange → didClose and
+// hovers after each, confirming the server tracks document state: hover sees the
+// changed text, and after close the document is gone (null hover).
+func TestServerDocumentLifecycleHover(t *testing.T) {
+	uri := "file:///t.cgp"
+	hoverReq := func(id int) map[string]any {
+		return map[string]any{
+			"jsonrpc": "2.0", "id": id, "method": "textDocument/hover",
+			"params": map[string]any{
+				"textDocument": map[string]any{"uri": uri},
+				"position":     map[string]any{"line": 0, "character": 0},
+			},
+		}
+	}
+
+	var in strings.Builder
+	in.WriteString(frame(t, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}}))
+	// Open with "y = 1": hover at 0:0 is a plain variable -> null.
+	in.WriteString(frame(t, map[string]any{
+		"jsonrpc": "2.0", "method": "textDocument/didOpen",
+		"params": map[string]any{"textDocument": map[string]any{"uri": uri, "text": "y = 1\n"}},
+	}))
+	in.WriteString(frame(t, hoverReq(2)))
+	// Change to "print y": hover at 0:0 now lands on the built-in `print`.
+	in.WriteString(frame(t, map[string]any{
+		"jsonrpc": "2.0", "method": "textDocument/didChange",
+		"params": map[string]any{
+			"textDocument":   map[string]any{"uri": uri},
+			"contentChanges": []any{map[string]any{"text": "print y\n"}},
+		},
+	}))
+	in.WriteString(frame(t, hoverReq(3)))
+	// Close: the document is forgotten, so hover is null again.
+	in.WriteString(frame(t, map[string]any{
+		"jsonrpc": "2.0", "method": "textDocument/didClose",
+		"params": map[string]any{"textDocument": map[string]any{"uri": uri}},
+	}))
+	in.WriteString(frame(t, hoverReq(4)))
+	in.WriteString(frame(t, map[string]any{"jsonrpc": "2.0", "method": "exit"}))
+
+	var out bytes.Buffer
+	if err := Run(strings.NewReader(in.String()), &out); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	msgs := readAllFrames(t, out.Bytes())
+
+	if m := findByID(msgs, float64(2)); m == nil || m["result"] != nil {
+		t.Fatalf("hover #2 (over a variable) should be null, got %+v", m)
+	}
+	m3 := findByID(msgs, float64(3))
+	if m3 == nil || m3["result"] == nil {
+		t.Fatalf("hover #3 (over `print` after didChange) should be non-null, got %+v", m3)
+	}
+	contents := m3["result"].(map[string]any)["contents"].(map[string]any)
+	if v, _ := contents["value"].(string); !strings.Contains(v, "print") {
+		t.Errorf("hover #3 value = %q, want it to mention `print`", v)
+	}
+	if m := findByID(msgs, float64(4)); m == nil || m["result"] != nil {
+		t.Fatalf("hover #4 (after didClose) should be null, got %+v", m)
+	}
+}
+
 func readAllFrames(t *testing.T, b []byte) []map[string]any {
 	t.Helper()
 	r := bufio.NewReader(bytes.NewReader(b))

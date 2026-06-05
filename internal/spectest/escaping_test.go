@@ -45,3 +45,18 @@ func TestBodyKeepsShellBackslashesVerbatim(t *testing.T) {
 		`echo run $(date)`,       // \$( -> shell command substitution, deferred
 	)
 }
+
+// §4.3 cgp's own $(cmd) runs while the body is rendered, so it is substituted
+// even under a dry run; \$(cmd) is deferred to the job shell verbatim. This pins
+// the (intentional) "-dr still runs $(…)" behavior against silent regression.
+func TestDryRunEvaluatesCommandSubstitution(t *testing.T) {
+	got := dryRunShell(t, `out.txt: {{
+    echo now=$(printf RENDERED)
+    echo later=\$(printf DEFERRED)
+}}`, "out.txt")
+	mustContain(t, got,
+		"echo now=RENDERED",             // $(printf …) ran at render time, even in -dr
+		"echo later=$(printf DEFERRED)", // \$(…) deferred verbatim to the job shell
+	)
+	mustNotContain(t, got, "now=$(printf", "DEFERRED\n")
+}
