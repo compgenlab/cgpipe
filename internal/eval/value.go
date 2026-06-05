@@ -96,6 +96,34 @@ func truthy(v Value) bool {
 	return true
 }
 
+// ParseScalar parses an external scalar string (a command-line value or a
+// manifest cell) into a typed value: true/false become bools, integer and float
+// literals become numbers, and anything else stays a string.
+func ParseScalar(s string) Value {
+	switch s {
+	case "true":
+		return BoolVal(true)
+	case "false":
+		return BoolVal(false)
+	}
+	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return IntVal(i)
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return FloatVal(f)
+	}
+	return StrVal(s)
+}
+
+// StrList converts a slice of strings into a ListVal of StrVals.
+func StrList(ss []string) ListVal {
+	out := make(ListVal, len(ss))
+	for i, s := range ss {
+		out[i] = StrVal(s)
+	}
+	return out
+}
+
 // asList coerces lists and ranges to a slice of values for iteration.
 func asList(v Value) ([]Value, bool) {
 	switch x := v.(type) {

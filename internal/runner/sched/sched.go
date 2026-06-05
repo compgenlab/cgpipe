@@ -316,8 +316,8 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 		setDefault(vars, "mailtype", eval.StrVal(b.sch.MailType))
 	}
 	vars["_body"] = eval.StrVal(body)
-	vars["_inputs"] = strList(t.Inputs)
-	vars["_outputs"] = strList(t.Outputs)
+	vars["_inputs"] = eval.StrList(t.Inputs)
+	vars["_outputs"] = eval.StrList(t.Outputs)
 	if len(deps) > 0 {
 		vars["depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
 	}
@@ -448,14 +448,6 @@ func dedupeIDs(ids []string) []string {
 		}
 		seen[id] = true
 		out = append(out, id)
-	}
-	return out
-}
-
-func strList(ss []string) eval.ListVal {
-	out := make(eval.ListVal, len(ss))
-	for i, s := range ss {
-		out[i] = eval.StrVal(s)
 	}
 	return out
 }
