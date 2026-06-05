@@ -9,6 +9,17 @@ import (
 	"strings"
 )
 
+// maxLoopIterations caps while-form for-loops (`for cond { … }` in global code and
+// `% for cond` in a body) as a runaway-loop backstop. Shared by the global
+// statement evaluator (execFor in eval.go) and the body renderer (renderNodes in
+// body.go).
+//
+// Future work: those two interpreters duplicate the if/for control-flow logic.
+// Unifying them is deferred — the body path also interleaves shell-line emission,
+// per-target render scope, and snippet expansion, so a full merge is high-risk.
+// For now they share this constant plus the value helpers (asList, truthy).
+const maxLoopIterations = 1_000_000
+
 // Value is a cgp runtime value.
 type Value interface{ typeName() string }
 

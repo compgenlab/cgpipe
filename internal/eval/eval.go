@@ -401,10 +401,9 @@ func (ip *interp) execFor(n *ast.For) error {
 		return nil
 	}
 	// while form
-	const cap = 1_000_000
 	for i := 0; ; i++ {
-		if i >= cap {
-			return fmt.Errorf("%s: for-loop exceeded %d iterations", n.Pos(), cap)
+		if i >= maxLoopIterations {
+			return fmt.Errorf("%s: for-loop exceeded %d iterations", n.Pos(), maxLoopIterations)
 		}
 		v, err := ip.eval(n.Cond)
 		if err != nil {

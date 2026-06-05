@@ -494,7 +494,7 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 				}
 				items, ok := asList(v)
 				if !ok {
-					return fmt.Errorf("%% for…in requires a list/range")
+					return fmt.Errorf("%% for…in requires a list or range, got %s", v.typeName())
 				}
 				for _, e := range items {
 					ip.sc.set(x.varName, e)
@@ -503,10 +503,9 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 					}
 				}
 			} else {
-				const cap = 1_000_000
 				for i := 0; ; i++ {
-					if i >= cap {
-						return fmt.Errorf("%% for-loop exceeded %d iterations", cap)
+					if i >= maxLoopIterations {
+						return fmt.Errorf("%% for-loop exceeded %d iterations", maxLoopIterations)
 					}
 					v, err := ip.eval(x.cond)
 					if err != nil {
