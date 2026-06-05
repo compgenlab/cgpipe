@@ -14,6 +14,22 @@ import (
 
 var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
 
+// tmplMode selects the escape policy for a template. The two template sources
+// have opposite expectations for the backslash:
+//
+//   - modeString — a cgp "…" string literal. It is one escape domain: every
+//     `\X` resolves to `X` (the lexer kept escapes verbatim), including inside a
+//     ${…}/@{…}, so a nested string written `\"…\"` parses as `"…"`.
+//   - modeBody — a {{ }} raw-shell body. Only `\$` and `\@` are special (they
+//     suppress ${…}/@{…}/$(…)); every other backslash — `\"`, `\\`, `\n` — is
+//     shell text and passes through verbatim.
+type tmplMode int
+
+const (
+	modeString tmplMode = iota
+	modeBody
+)
+
 // Interpolate resolves a template string against the given variables. Used by
 // workflow orchestration to resolve stage names/files/args (which reference
 // ${prior_stage.export}) as each stage runs.
@@ -23,13 +39,13 @@ func Interpolate(raw string, vars map[string]Value) (string, error) {
 		sc.set(k, v)
 	}
 	ip := &interp{sc: sc, out: io.Discard, prog: &Program{Snippets: map[string]string{}, Exports: map[string]Value{}}}
-	return ip.interpolate(raw)
+	return ip.interpolate(raw, modeString)
 }
 
 // interpolate resolves a raw template to a single string (@{…} expansions are
 // joined with spaces).
-func (ip *interp) interpolate(raw string) (string, error) {
-	parts, err := ip.expandTemplate(raw)
+func (ip *interp) interpolate(raw string, mode tmplMode) (string, error) {
+	parts, err := ip.expandTemplate(raw, mode)
 	if err != nil {
 		return "", err
 	}
@@ -39,31 +55,49 @@ func (ip *interp) interpolate(raw string) (string, error) {
 // expandTemplate resolves ${…}/$(…)/@{…} and \ escapes in raw, returning one or
 // more strings (more than one when @{…} expands a list — a cartesian product
 // across multiple @{…} occurrences).
-func (ip *interp) expandTemplate(raw string) ([]string, error) {
+func (ip *interp) expandTemplate(raw string, mode tmplMode) ([]string, error) {
 	var pieces [][]string
 	var buf strings.Builder
 	flush := func() {
 		pieces = append(pieces, []string{buf.String()})
 		buf.Reset()
 	}
+	// unesc resolves the cgp escape layer of a ${…}/@{…} interior — a string
+	// literal had to escape any quote (\") to survive the outer "…", so the
+	// interior reaches the expression parser still escaped. A body's interior has
+	// real quotes already, so it is left verbatim.
+	unesc := func(s string) string {
+		if mode == modeString {
+			return unescapeBackslashes(s)
+		}
+		return s
+	}
 
 	for i := 0; i < len(raw); {
 		c := raw[i]
 		switch {
 		case c == '\\' && i+1 < len(raw):
-			buf.WriteByte(raw[i+1])
-			i += 2
+			// modeString: every \X -> X. modeBody: only \$ and \@ are special
+			// (suppress interpolation); any other backslash is literal shell text.
+			n := raw[i+1]
+			if mode == modeString || n == '$' || n == '@' {
+				buf.WriteByte(n)
+				i += 2
+			} else {
+				buf.WriteByte('\\')
+				i++
+			}
 		case c == '$' && i+2 < len(raw) && raw[i+1] == '{' && raw[i+2] == '{':
 			// ${{ var }} double-evaluation: substitute, then evaluate the result
 			end := strings.Index(raw[i+3:], "}}")
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated ${{ in %q", raw)
 			}
-			v, err := ip.evalString(raw[i+3 : i+3+end])
+			v, err := ip.evalString(unesc(raw[i+3 : i+3+end]))
 			if err != nil {
 				return nil, err
 			}
-			s, err := ip.interpolate(stringify(v))
+			s, err := ip.interpolate(stringify(v), modeString)
 			if err != nil {
 				return nil, err
 			}
@@ -74,7 +108,7 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated ${ in %q", raw)
 			}
-			s, err := ip.resolveDollarBrace(raw[i+2 : i+2+end])
+			s, err := ip.resolveDollarBrace(unesc(raw[i+2 : i+2+end]))
 			if err != nil {
 				return nil, err
 			}
@@ -85,7 +119,7 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated $( in %q", raw)
 			}
-			out, err := ip.runShell(raw[i+2 : i+2+end])
+			out, err := ip.runShell(raw[i+2:i+2+end], mode)
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +130,7 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 			if end < 0 {
 				return nil, fmt.Errorf("unterminated @{ in %q", raw)
 			}
-			elems, err := ip.resolveAtBrace(raw[i+2 : i+2+end])
+			elems, err := ip.resolveAtBrace(unesc(raw[i+2 : i+2+end]))
 			if err != nil {
 				return nil, err
 			}
@@ -124,32 +158,61 @@ func (ip *interp) expandTemplate(raw string) ([]string, error) {
 }
 
 // braceSpan returns the byte offset in s of the `}` that closes a ${…} or @{…}
-// whose opening has already been consumed. It runs the cgp lexer, which already
-// tokenizes a double-quoted string as a single STRING token — so braces (and a
-// nested ${…}) inside a string are part of that token and never seen as
-// structural — and balances real `{ }`. It returns the first depth-0 `}` token's
-// offset, or -1 if the span is unterminated/unlexable. This is what lets a nested
-// ${…} sit inside a quoted ${if …} branch, e.g. ${if x; "a-${y}-b"}.
+// whose opening has already been consumed, or -1 if unterminated. A double-quoted
+// substring is opaque (its braces are content, not structure), and \-escaped
+// bytes are skipped. Crucially it toggles "in string" on either a real `"` or an
+// escaped `\"`, so it finds the right `}` for both a body's `${if x; "a}b"}`
+// (real quotes) and a string literal's `${if x; \"a}b\"}` (escaped quotes, not
+// yet unescaped) — including a nested ${…} inside the quoted branch.
 func braceSpan(s string) int {
-	lx := lexer.New(s, "<expr>")
-	depth := 0
-	for {
-		t := lx.Next()
-		switch t.Kind {
-		case token.EOF:
-			return -1 // no closing brace (truly unterminated)
-		case token.LBRACE:
+	depth, inStr := 0, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\\' && i+1 < len(s) {
+			if s[i+1] == '"' {
+				inStr = !inStr // an escaped quote is a string delimiter here
+			}
+			i++ // skip the escaped byte
+			continue
+		}
+		if c == '"' {
+			inStr = !inStr
+			continue
+		}
+		if inStr {
+			continue
+		}
+		switch c {
+		case '{':
 			depth++
-		case token.RBRACE:
+		case '}':
 			if depth == 0 {
-				return t.Pos.Off
+				return i
 			}
 			depth--
 		}
-		// An ILLEGAL token (e.g. the `?` in ${var?}) is not fatal here: the lexer
-		// advances past it, and the offending character is reported later by
-		// ParseExpr when the extracted expression is parsed.
 	}
+	return -1
+}
+
+// unescapeBackslashes resolves `\X` -> `X` for every escape in s. Applied to a
+// ${…}/@{…} interior lifted from a "…" string literal, so the expression parser
+// sees real quotes (\" -> ") instead of the verbatim escapes the lexer preserved.
+func unescapeBackslashes(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			b.WriteByte(s[i+1])
+			i++
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 // parenSpan returns the byte offset in s of the `)` that closes a $( … ) whose
@@ -304,8 +367,8 @@ func (ip *interp) evalToString(src string) (string, error) {
 
 // runShell evaluates a $(…) command substitution at parse time: it interpolates
 // the inner template, runs it via `sh -c`, and returns trimmed stdout.
-func (ip *interp) runShell(inner string) (string, error) {
-	cmdText, err := ip.interpolate(inner)
+func (ip *interp) runShell(inner string, mode tmplMode) (string, error) {
+	cmdText, err := ip.interpolate(inner, mode)
 	if err != nil {
 		return "", err
 	}

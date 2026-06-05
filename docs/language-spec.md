@@ -126,7 +126,7 @@ Inside a string literal:
 | `${{var}}` | Double evaluation — substitute, then evaluate the result as source |
 | `$(cmd)`   | Run `cmd` in the shell at parse time; substitute its stdout |
 
-Escaping: prefix `$` or `@` with `\` for a literal. If the string will be evaluated again, escape twice (`\\$`).
+Escaping: inside a `"…"` string literal a backslash escapes the next character — `\X` resolves to `X` — so `\$`/`\@` give a literal `$`/`@` (suppressing substitution) and `\"` gives a literal quote. This resolution applies across the whole string **including inside a `${…}`**, so an expression that needs a nested string literal escapes its quotes to survive the outer ones: `"${x.sub(\".bam\", \"\")}"`. A string nested inside a `${…}` inside a string is two escape layers deep, so a backslash that must reach the inner string (e.g. a regex `\.`) is written `\\\\`. If the whole string will be evaluated again, escape the substitution sigil twice (`\\$`).
 
 `${{var}}` (double-eval) is for when a variable's *content* is itself a template; `$(cmd)` runs at parse time and its command string is variable-substituted first.
 
@@ -193,6 +193,8 @@ Inside `{{ }}` the content is **raw shell text**, captured verbatim and rendered
 3. **`%`-prefixed cgp control lines** (see [§6.4](#64-in-body-control-flow--lines)).
 
 Everything else is shell, passed through after leading-whitespace stripping. The body ends at a lone `}}` line.
+
+A body is **raw shell, not a cgp string literal**, so its escape rule differs from [§4.3](#43-string-substitution): only `\$` and `\@` are special — they suppress the cgp sigils, so `\${HOME}` and `\$HOME` keep their `$` for the shell, and `\$(cmd)` defers command substitution to job runtime instead of running at render time. Every other backslash is shell text and passes through verbatim (`echo "x\"y"` stays `echo "x\"y"`).
 
 ### 6.2 Directives and the `--` separator
 A target body may begin with a **directive block** that sets per-job settings, separated from the shell by a line containing only `--`:
