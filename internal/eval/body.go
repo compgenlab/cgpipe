@@ -481,7 +481,7 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 				}
 				continue
 			}
-			s, err := ip.interpolate(strings.TrimLeft(x.line, " \t"))
+			s, err := ip.interpolate(strings.TrimLeft(x.line, " \t"), modeBody)
 			if err != nil {
 				return err
 			}

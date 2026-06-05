@@ -170,7 +170,7 @@ func TestInterpolation(t *testing.T) {
 		"flag":   BoolVal(true),
 	})
 	check := func(raw, want string) {
-		got, err := ip.interpolate(raw)
+		got, err := ip.interpolate(raw, modeString)
 		if err != nil {
 			t.Fatalf("interpolate %q: %v", raw, err)
 		}
@@ -189,7 +189,7 @@ func TestInterpolation(t *testing.T) {
 // A bad ${…} names the offending expression and the character it choked on,
 // instead of a bare "<expr>:1:N: unexpected ILLEGAL".
 func TestBadExpressionErrorIsHelpful(t *testing.T) {
-	_, err := testInterp(nil).interpolate("x=${a?b}")
+	_, err := testInterp(nil).interpolate("x=${a?b}", modeString)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -212,7 +212,7 @@ func TestNestedInterpolationInIfBranch(t *testing.T) {
 	})
 	check := func(raw, want string) {
 		t.Helper()
-		got, err := ip.interpolate(raw)
+		got, err := ip.interpolate(raw, modeString)
 		if err != nil {
 			t.Fatalf("interpolate %q: %v", raw, err)
 		}
@@ -232,7 +232,7 @@ func TestNestedInterpolationInIfBranch(t *testing.T) {
 
 func TestInterpolationAtBraceWords(t *testing.T) {
 	ip := testInterp(map[string]Value{"xs": ListVal{StrVal("a"), StrVal("b")}})
-	got, err := ip.expandTemplate("p_@{xs}.txt")
+	got, err := ip.expandTemplate("p_@{xs}.txt", modeString)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,13 +242,13 @@ func TestInterpolationAtBraceWords(t *testing.T) {
 }
 
 func TestUndefinedVarErrors(t *testing.T) {
-	if _, err := testInterp(nil).interpolate("${nope}"); err == nil {
+	if _, err := testInterp(nil).interpolate("${nope}", modeString); err == nil {
 		t.Fatal("expected error for ${nope}")
 	}
 }
 
 func TestCommandSubstitution(t *testing.T) {
-	got, err := testInterp(nil).interpolate("$(printf hello)")
+	got, err := testInterp(nil).interpolate("$(printf hello)", modeString)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestCommandSubstitutionQuotingAndNesting(t *testing.T) {
 	ip := testInterp(nil)
 	check := func(raw, want string) {
 		t.Helper()
-		got, err := ip.interpolate(raw)
+		got, err := ip.interpolate(raw, modeString)
 		if err != nil {
 			t.Fatalf("interpolate %q: %v", raw, err)
 		}
@@ -282,7 +282,7 @@ func TestDoubleEval(t *testing.T) {
 		"tmpl": StrVal("hi ${name}"),
 		"name": StrVal("bob"),
 	})
-	got, err := ip.interpolate("${{tmpl}}")
+	got, err := ip.interpolate("${{tmpl}}", modeString)
 	if err != nil {
 		t.Fatal(err)
 	}

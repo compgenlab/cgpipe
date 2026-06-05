@@ -479,7 +479,7 @@ func (ip *interp) execTarget(n *ast.Target) error {
 func (ip *interp) expandWords(words []string) ([]string, error) {
 	var out []string
 	for _, w := range words {
-		exp, err := ip.expandTemplate(w)
+		exp, err := ip.expandTemplate(w, modeString)
 		if err != nil {
 			return nil, err
 		}
@@ -499,7 +499,7 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 	case *ast.BoolLit:
 		return BoolVal(n.Val), nil
 	case *ast.StringLit:
-		s, err := ip.interpolate(n.Raw)
+		s, err := ip.interpolate(n.Raw, modeString)
 		if err != nil {
 			return nil, err
 		}

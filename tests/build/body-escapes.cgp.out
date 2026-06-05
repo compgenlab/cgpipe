@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- out.txt ----
+
+echo "x\"y"
+echo back \\ slash
+echo "node1 ${HOME} $HOME"
+echo deferred $(date)
+
+
