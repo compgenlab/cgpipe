@@ -10,6 +10,14 @@ import (
 	"github.com/compgen-io/cgp/internal/ledger"
 )
 
+// TestMain enables the shell runner's autoexec for the end-to-end tests below,
+// which assert on executed output. The shell runner now *emits* a script by
+// default; that default is covered explicitly by TestShellEmitsScriptByDefault.
+func TestMain(m *testing.M) {
+	os.Setenv("CGP_ENV", "cgp.runner.shell.autoexec = true")
+	os.Exit(m.Run())
+}
+
 func TestRunVersion(t *testing.T) {
 	if code := run([]string{"version"}); code != 0 {
 		t.Fatalf("run(version) = %d, want 0", code)
@@ -358,6 +366,43 @@ func TestOptionsBeforeFile(t *testing.T) {
 func TestNoPipelineFile(t *testing.T) {
 	if code := run([]string{"-dr"}); code != 2 {
 		t.Fatalf("run(-dr) with no file = %d, want 2", code)
+	}
+}
+
+// §15 The shell runner emits a runnable script to stdout by default and does
+// NOT execute (no autoexec).
+func TestShellEmitsScriptByDefault(t *testing.T) {
+	t.Setenv("CGP_ENV", "") // undo TestMain's autoexec
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
+	out := captureStdout(t, func() int { return run([]string{"p.cgp"}) })
+	if fileThere(dir, "out.txt") {
+		t.Error("shell runner should not execute by default (out.txt was created)")
+	}
+	mustHave(t, out, "#!/usr/bin/env bash", "echo hi > out.txt")
+}
+
+// §11.3 cgp.runner.shell.autoexec = true makes the shell runner execute.
+func TestShellAutoexecRuns(t *testing.T) {
+	t.Setenv("CGP_ENV", "")
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("cgp.runner.shell.autoexec = true\nout.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
+	if code := run([]string{"p.cgp"}); code != 0 {
+		t.Fatalf("run = %d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(b) != "hi\n" {
+		t.Errorf("autoexec did not run: out.txt = %q", string(b))
+	}
+}
+
+func mustHave(t *testing.T, got string, want ...string) {
+	t.Helper()
+	for _, w := range want {
+		if !strings.Contains(got, w) {
+			t.Errorf("missing %q in:\n%s", w, got)
+		}
 	}
 }
 

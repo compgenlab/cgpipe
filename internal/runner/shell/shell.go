@@ -12,34 +12,41 @@ import (
 
 // Options configures a shell run.
 type Options struct {
-	Goals  []string      // explicit targets to build; empty => program default
-	DryRun bool          // render scripts instead of executing
-	Force  bool          // rebuild regardless of staleness
-	Dir    string        // working directory for jobs (default: current)
-	Cache  *runner.Cache // shared stat cache (for manifest fan-out)
-	Out    io.Writer     // dry-run output (default os.Stdout)
-	Stdout io.Writer     // job stdout (default os.Stdout)
-	Stderr io.Writer     // job stderr (default os.Stderr)
+	Goals    []string      // explicit targets to build; empty => program default
+	DryRun   bool          // render scripts instead of executing
+	AutoExec bool          // execute the assembled script instead of emitting it
+	Force    bool          // rebuild regardless of staleness
+	Dir      string        // working directory for jobs (default: current)
+	Cache    *runner.Cache // shared stat cache (for manifest fan-out)
+	Out      io.Writer     // emitted script / dry-run output (default os.Stdout)
+	Stdout   io.Writer     // job stdout when executing (default os.Stdout)
+	Stderr   io.Writer     // job stderr when executing (default os.Stderr)
 }
 
-// Run builds the program's goals with the local shell: stale targets are
-// rendered and executed with bash, in dependency order.
+// Run builds the program's goals with the local shell. By default it assembles
+// the stale targets into one runnable bash script (in dependency order) and
+// writes it to Out — it does NOT execute. Set AutoExec (cgp.runner.shell.autoexec)
+// to run the bodies instead. -dr (DryRun) always emits, never executes.
 func Run(p *eval.Program, opts Options) error {
-	if opts.Out == nil {
-		opts.Out = os.Stdout
+	defaults(&opts)
+	b := &backend{prog: p, opts: opts, emit: opts.DryRun || !opts.AutoExec}
+	if b.emit {
+		fmt.Fprint(opts.Out, "#!/usr/bin/env bash\nset -euo pipefail\n\n")
 	}
-	if opts.Stdout == nil {
-		opts.Stdout = os.Stdout
-	}
-	if opts.Stderr == nil {
-		opts.Stderr = os.Stderr
-	}
-	b := &backend{prog: p, opts: opts}
 	return runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir, Cache: opts.Cache, Force: opts.Force})
 }
 
-// SubmitOne renders and runs a single target with bash (used by `cgp sub`).
+// SubmitOne renders a single target (used by `cgp sub`). Unlike the pipeline
+// runner it executes by default — `cgp sub` is an explicit one-off — emitting
+// only under -dr.
 func SubmitOne(p *eval.Program, t *eval.Target, opts Options) error {
+	defaults(&opts)
+	b := &backend{prog: p, opts: opts, emit: opts.DryRun}
+	_, err := b.Submit(t, nil)
+	return err
+}
+
+func defaults(opts *Options) {
 	if opts.Out == nil {
 		opts.Out = os.Stdout
 	}
@@ -49,14 +56,12 @@ func SubmitOne(p *eval.Program, t *eval.Target, opts Options) error {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
-	b := &backend{prog: p, opts: opts}
-	_, err := b.Submit(t, nil)
-	return err
 }
 
 type backend struct {
 	prog *eval.Program
 	opts Options
+	emit bool // emit the script (default / dry-run) rather than execute
 }
 
 // ExternalDep: the shell runner is synchronous, so prerequisites already ran and
@@ -70,8 +75,8 @@ func (b *backend) PostSubmit(job *eval.Target, jobID string) error {
 	if err != nil || body == "" {
 		return err
 	}
-	if b.opts.DryRun {
-		fmt.Fprintf(b.opts.Out, "# ---- @postsubmit (%s) ----\n%s\n", runner.Label(job), body)
+	if b.emit {
+		fmt.Fprintf(b.opts.Out, "# ---- @postsubmit (%s) ----\n%s\n\n", runner.Label(job), body)
 		return nil
 	}
 	cmd := exec.Command("bash", "-c", body)
@@ -92,8 +97,8 @@ func (b *backend) Submit(t *eval.Target, _ []string) (string, error) {
 		return "", err
 	}
 	label := runner.Label(t)
-	if b.opts.DryRun {
-		fmt.Fprintf(b.opts.Out, "# ---- %s ----\n%s\n", label, script)
+	if b.emit {
+		fmt.Fprintf(b.opts.Out, "# ---- %s ----\n%s\n\n", label, script)
 		return "", nil
 	}
 	cmd := exec.Command("bash", "-c", script)

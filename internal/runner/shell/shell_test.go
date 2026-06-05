@@ -22,7 +22,7 @@ func build(t *testing.T, dir, src string, goals ...string) error {
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
-	return Run(prog, Options{Dir: dir, Goals: goals, Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard})
+	return Run(prog, Options{Dir: dir, Goals: goals, AutoExec: true, Out: io.Discard, Stdout: io.Discard, Stderr: io.Discard})
 }
 
 func mustBuild(t *testing.T, dir, src string, goals ...string) {
