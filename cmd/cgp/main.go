@@ -42,7 +42,10 @@ func loadConfigs() ([]eval.ConfigFile, error) {
 	addFile := func(path string) error {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return nil // a missing config file is fine
+			if os.IsNotExist(err) {
+				return nil // a missing config file is fine
+			}
+			return err // surface real errors (e.g. permission denied) instead of silently skipping
 		}
 		return addSrc(path, filepath.Dir(path), string(b))
 	}

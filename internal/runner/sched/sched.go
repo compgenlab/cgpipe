@@ -121,8 +121,13 @@ func For(name string) (Scheduler, bool) {
 	return s, ok
 }
 
+// schedulerNames is the supported scheduler names in display order. It is the
+// source of truth for Names() and is kept in sync with the schedulers map by
+// TestSchedulerNamesMatchMap.
+var schedulerNames = []string{"slurm", "sge", "pbs", "batchq"}
+
 // Names lists the supported scheduler names.
-func Names() []string { return []string{"slurm", "sge", "pbs", "batchq"} }
+func Names() []string { return schedulerNames }
 
 // Options configure a scheduler run.
 type Options struct {
