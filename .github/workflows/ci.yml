@@ -25,6 +25,7 @@ jobs:
           go-version: '1.25'
       - run: go build ./...
       - run: go test ./...
+      - run: make spec
 
   lint:
     name: gofmt + vet
