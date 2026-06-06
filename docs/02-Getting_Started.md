@@ -240,6 +240,19 @@ of settings is in the [Configuration Reference](13-Configuration_Reference.md).
 
 ---
 
+## Editor support
+
+A [VSCode extension](../editor/vscode/) gives `.cgp` files syntax highlighting out
+of the box (a TextMate grammar — no setup beyond installing it). When the `cgp`
+binary is on your `PATH`, the extension also starts cgp's built-in language server
+(`cgp lsp`) for parse-error diagnostics, hover, completion, and semantic
+highlighting. The server speaks the standard [Language Server
+Protocol](https://microsoft.github.io/language-server-protocol/), so any
+LSP-capable editor can launch `cgp lsp` over stdio. See
+[`editor/vscode/README.md`](../editor/vscode/README.md) for installation.
+
+---
+
 ## Where next
 
 - **[Tutorial 1: Hello, target](tutorials/01-hello.md)** — the smallest real

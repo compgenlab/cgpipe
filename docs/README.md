@@ -47,6 +47,7 @@ New here? Start with **[Getting Started](02-Getting_Started.md)**.
 - **…see what's done / running / failed at a glance.** → the `html` runner, [Tutorial 14](tutorials/14-status-report.md).
 - **…submit one quick one-off job.** → `cgp sub` in [Running Jobs](08-Running_Jobs.md).
 - **…bring an older script forward.** → [The `convert` Tool](14-The_convert_Tool.md).
+- **…set up my editor (highlighting, diagnostics).** → [Getting Started § Editor support](02-Getting_Started.md#editor-support), [`editor/vscode/`](../editor/vscode/).
 - **…debug a misbehaving pipeline.** → [Troubleshooting](16-Troubleshooting.md) (start with `-dr`).
 - **…decide cgp vs. Snakemake / Nextflow / WDL.** → [Comparisons](17-Comparisons.md).
 

@@ -37,12 +37,27 @@ The common ones:
 | `mem` | Memory (e.g. `"8G"`) |
 | `walltime` | Wall-time limit (e.g. `"12:00:00"`) |
 | `stdout` / `stderr` | Redirect job output |
+| `queue` | Queue / partition |
+| `account` | Accounting/billing project |
 | `mail` | Notification address |
 | `gpu` | GPUs to request (see [Containers & GPUs](09-Containers_and_GPUs.md)) |
+| `env` | Capture the submit-host environment into the job (SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`) |
+| `hold` | Submit this job held (release it later by hand) |
+| `setup` | A list of shell lines emitted at the top of the submission script, before the body |
 | `custom` | Extra directive lines, emitted verbatim |
 
+A few settings are scheduler-specific (silently ignored elsewhere):
+
+| Setting | Scheduler | Meaning |
+|---------|-----------|---------|
+| `qos` | SLURM, PBS | Quality-of-service |
+| `nice` | SLURM | Scheduling priority adjustment (`--nice`) |
+| `parallelenv` | SGE | Parallel-environment name, required for `-pe` when `procs > 1` (usually set once as `cgp.runner.sge.parallelenv` in config) |
+
 Set defaults globally with the `job.` prefix (`job.mem = "4G"`); drop the prefix
-inside a body's directive block (`mem = "4G"`).
+inside a body's directive block (`mem = "4G"`). To hold the *entire* pipeline until
+it submits cleanly, see `global_hold` in the
+[Configuration Reference](13-Configuration_Reference.md).
 
 ### The same job, four schedulers
 
