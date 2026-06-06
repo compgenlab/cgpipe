@@ -24,6 +24,18 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestShowTemplateSubcommand(t *testing.T) {
+	if code := run([]string{"show-template", "-r", "slurm"}); code != 0 {
+		t.Errorf("run(show-template -r slurm) = %d, want 0", code)
+	}
+	if code := run([]string{"show-template", "-r", "bogus"}); code != 2 {
+		t.Errorf("run(show-template -r bogus) = %d, want 2", code)
+	}
+	if code := run([]string{"show-template"}); code != 2 {
+		t.Errorf("run(show-template) with no -r = %d, want 2", code)
+	}
+}
+
 func TestRunDoubleHyphenVariable(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

@@ -104,12 +104,36 @@ ${_body}
 
 The `% if account { … }` blocks are why a setting only appears when you set it. The
 built-in templates (SLURM, SGE, PBS, BatchQ) live with the binary and cover the
-common cluster setups; `~/.cgp/templates/` is the reserved location for per-site
-template overrides.
+common cluster setups.
 
-> **Note:** full template *replacement* from `~/.cgp/templates/` is reserved but
-> not yet wired up — today, customize submissions with the named settings and
-> `custom` shown above, which cover the large majority of site requirements.
+## Replacing the whole template
+
+When the named settings and `custom` aren't enough — your site needs a different
+script structure, a module-load preamble, or directives cgp doesn't model — supply
+your **own** template. Start from the built-in:
+
+```sh
+cgp show-template -r slurm > ~/.cgp/custom_template.cgp
+```
+
+Edit that file (it's the body language: `${name}`, `${mem}`, `${procs}`,
+`${walltime}`, `${custom}`, `${depids}`, the rendered job as `${_body}`, etc.), and
+cgp uses it for the active scheduler runner. Two ways to point at a template:
+
+| Source | Scope |
+|--------|-------|
+| `~/.cgp/custom_template.cgp` | A single file, applied to whichever scheduler runner is active (most people target one cluster) |
+| `cgp.runner.<name>.template = "<path>"` | Explicit and per-scheduler — set in `~/.cgp/config`, a site config, or the pipeline |
+
+**Precedence:** the explicit config key wins, then the convention file, then the
+built-in. Only the *template* is replaced — the submit command, the status/`squeue`
+probes, and mem normalization stay as configured. A config key pointing at a
+missing file is a hard error (so a typo fails loudly).
+
+```
+# ~/.cgp/config — force a vetted site template for SLURM
+cgp.runner.slurm.template = "/etc/cgp/slurm.template.cgp"
+```
 
 ## Next
 

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -212,7 +213,58 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 		}
 		b.ledger = lg
 	}
+	if err := b.resolveTemplate(); err != nil {
+		return nil, err
+	}
 	return b, nil
+}
+
+// resolveTemplate lets a site override a scheduler's built-in submission template
+// while keeping the rest of its wiring (submit command, status probes, mem
+// normalization). Two sources, in priority order:
+//
+//  1. cgp.runner.<name>.template = "<path>" — explicit and per-scheduler, via
+//     normal config layering. A set-but-unreadable/empty path is a loud error.
+//  2. ~/.cgp/custom_template.cgp — a single zero-config convention file applied to
+//     whichever scheduler runner is active (most users target one cluster). Absent
+//     or empty ⇒ silently keep the built-in.
+//
+// On success it replaces b.sch.Template (a copy, safe to mutate) and records the
+// source path in b.templateSrc for error messages.
+func (b *backend) resolveTemplate() error {
+	name := b.sch.Name
+	if path := b.cfg("cgp.runner." + name + ".template"); path != "" {
+		full := expandTilde(path)
+		data, err := os.ReadFile(full)
+		if err != nil {
+			return fmt.Errorf("runner %s: custom template %q: %w", name, path, err)
+		}
+		if strings.TrimSpace(string(data)) == "" {
+			return fmt.Errorf("runner %s: custom template %q is empty", name, path)
+		}
+		b.sch.Template = string(data)
+		b.templateSrc = full
+		return nil
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		conv := filepath.Join(home, ".cgp", "custom_template.cgp")
+		if data, err := os.ReadFile(conv); err == nil && strings.TrimSpace(string(data)) != "" {
+			b.sch.Template = string(data)
+			b.templateSrc = conv
+		}
+	}
+	return nil
+}
+
+// expandTilde expands a leading ~ or ~/ to the user's home directory; other paths
+// pass through unchanged.
+func expandTilde(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(p[1:], "/"))
+		}
+	}
+	return p
 }
 
 func (b *backend) closeLedger() {
@@ -222,18 +274,19 @@ func (b *backend) closeLedger() {
 }
 
 type backend struct {
-	prog       *eval.Program
-	sch        Scheduler
-	opts       Options
-	shell      string
-	globalHold bool
-	ledger     *ledger.Ledger
-	runID      string
-	user       string
-	wd         string // effective working directory recorded in the ledger
-	dryN       int
-	ids        []string
-	held       []string
+	prog        *eval.Program
+	sch         Scheduler
+	opts        Options
+	shell       string
+	globalHold  bool
+	ledger      *ledger.Ledger
+	runID       string
+	user        string
+	wd          string // effective working directory recorded in the ledger
+	templateSrc string // path a custom template was loaded from ("" ⇒ built-in)
+	dryN        int
+	ids         []string
+	held        []string
 }
 
 func (b *backend) cfg(name string) string {
@@ -349,7 +402,11 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 
 	script, err := b.prog.RenderText(b.sch.Template, vars)
 	if err != nil {
-		return "", err
+		src := b.templateSrc
+		if src == "" {
+			src = "built-in"
+		}
+		return "", fmt.Errorf("runner %s: rendering template (%s): %w", b.sch.Name, src, err)
 	}
 	id, err := b.submitScript(runner.Label(t), script)
 	if err != nil {

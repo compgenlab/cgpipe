@@ -400,6 +400,87 @@ b.bam: a.bam {{
 	}
 }
 
+// --- custom submission templates --------------------------------------------
+
+const customTmpl = "#!${shell}\n# SITE TEMPLATE\n#SBATCH -J ${name}\n${_body}\n"
+
+// writeTmpl writes a custom template file and returns its path.
+func writeTmpl(t *testing.T, dir, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, "my.template.cgp")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestCustomTemplateExplicitKey: cgp.runner.<name>.template overrides the
+// built-in submission script while keeping the rest of the runner wiring.
+func TestCustomTemplateExplicitKey(t *testing.T) {
+	tmpl := writeTmpl(t, t.TempDir(), customTmpl)
+	src := "cgp.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
+	got := renderDry(t, "slurm", src)
+	mustContainAll(t, got, "# SITE TEMPLATE", "#SBATCH -J align", "echo hi > out.bam")
+	if strings.Contains(got, "set -eo pipefail") {
+		t.Errorf("custom template should replace the built-in boilerplate, but rendered:\n%s", got)
+	}
+}
+
+// TestCustomTemplateConventionFile: ~/.cgp/custom_template.cgp is honored with no
+// config key, applied to whichever scheduler runner is active.
+func TestCustomTemplateConventionFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".cgp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".cgp", "custom_template.cgp"), []byte(customTmpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := renderDry(t, "slurm", oneTarget)
+	mustContainAll(t, got, "# SITE TEMPLATE", "#SBATCH -J align")
+}
+
+// TestCustomTemplatePrecedence: the explicit config key wins over the convention
+// file.
+func TestCustomTemplatePrecedence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	os.MkdirAll(filepath.Join(home, ".cgp"), 0o755)
+	os.WriteFile(filepath.Join(home, ".cgp", "custom_template.cgp"),
+		[]byte("#!${shell}\n# CONVENTION\n${_body}\n"), 0o644)
+	tmpl := writeTmpl(t, t.TempDir(), "#!${shell}\n# EXPLICIT\n${_body}\n")
+	src := "cgp.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
+	got := renderDry(t, "slurm", src)
+	if !strings.Contains(got, "# EXPLICIT") || strings.Contains(got, "# CONVENTION") {
+		t.Errorf("explicit key should win over the convention file, rendered:\n%s", got)
+	}
+}
+
+// TestCustomTemplateMissingFileErrors: a config key pointing at a missing file is
+// a loud error naming the path and scheduler.
+func TestCustomTemplateMissingFileErrors(t *testing.T) {
+	src := "cgp.runner.slurm.template = \"/no/such/template.cgp\"\n" + oneTarget
+	sch, _ := For("slurm")
+	err := Run(program(t, src), sch, Options{DryRun: true, Dir: t.TempDir(), Out: io.Discard})
+	if err == nil {
+		t.Fatal("expected an error for a missing custom template, got nil")
+	}
+	if !strings.Contains(err.Error(), "/no/such/template.cgp") || !strings.Contains(err.Error(), "slurm") {
+		t.Errorf("error should name the path and scheduler, got: %v", err)
+	}
+}
+
+// TestDefaultTemplateAccessor backs `cgp show-template`.
+func TestDefaultTemplateAccessor(t *testing.T) {
+	if tmpl, ok := DefaultTemplate("slurm"); !ok || !strings.Contains(tmpl, "#SBATCH") {
+		t.Errorf("DefaultTemplate(slurm) = %q, %v; want a non-empty slurm template", tmpl, ok)
+	}
+	if _, ok := DefaultTemplate("nope"); ok {
+		t.Error("DefaultTemplate(nope) should report not-ok")
+	}
+}
+
 // TestSchedulerNamesMatchMap guards against drift between the Names() display
 // list and the schedulers definition map.
 func TestSchedulerNamesMatchMap(t *testing.T) {

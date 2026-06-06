@@ -496,7 +496,7 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 | `<cgp dir>/.cgprc` | Server-wide global config, next to the installed `cgp` binary (lowest priority) |
 | `/etc/cgp/config`  | System (site-wide) config |
 | `~/.cgp/config`    | User config (itself a cgp script) |
-| `~/.cgp/templates/`| Custom runner templates |
+| `~/.cgp/custom_template.cgp` | Custom submission template applied to the active scheduler runner |
 | `~/.cgp/cache/`    | Cache / state |
 
 ### 11.2 Resolution order (later wins)
@@ -516,6 +516,7 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 | `cgp.run_id` | Run identifier (also `CGP_RUN_ID`) |
 | `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific |
+| `cgp.runner.<name>.template` | Path to a custom submission template, replacing the built-in for that scheduler (else `~/.cgp/custom_template.cgp`; scaffold with `cgp show-template -r <name>`) |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of emitting it (default off) |
 | `cgp.shell` | Default shell for rendered bodies |
 | `cgp.dryrun` | Set by `-dr` / `CGP_DRYRUN` |
@@ -633,6 +634,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
     cgp sub [options] -- <command ...>
     cgp ledger {dump|search|vacuum|unlock} <db>
     cgp convert <old.cgp> [-o out.cgp]
+    cgp show-template -r <runner>
     cgp version
 
 A bare argument is a **goal** (a target to build); with none, cgp builds `@default` (or the first target). `--name value` sets a script variable; single-hyphen flags are cgp's own options.
@@ -667,6 +669,9 @@ Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, rep
 
 ### 15.3 `cgp convert` — migrate an older script
 `cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgp-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgpipe.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgp-convert:` comment for you to review.
+
+### 15.4 `cgp show-template` — print a scheduler's default template
+`cgp show-template -r <slurm|sge|pbs|batchq>` prints that scheduler's built-in submission template to stdout, as a starting point for a custom one. Save it (`> ~/.cgp/custom_template.cgp`, or any path named by `cgp.runner.<name>.template`) and edit it to replace the built-in submission script — see [§11.3](#113-selected-cgp-settings). The rest of the runner's wiring (submit command, status probes, mem normalization) is unchanged; only the rendered script is overridden.
 
 ---
 

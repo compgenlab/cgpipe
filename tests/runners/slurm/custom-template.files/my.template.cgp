@@ -1,0 +1,8 @@
+#!${shell}
+# SITE TEMPLATE
+#SBATCH -J ${name}
+% for c in custom {
+#SBATCH ${c}
+% }
+module load site/env
+${_body}

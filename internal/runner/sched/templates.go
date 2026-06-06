@@ -20,3 +20,13 @@ var pbsTmpl string
 
 //go:embed templates/batchq.template.cgp
 var batchqTmpl string
+
+// DefaultTemplate returns the built-in submission template for a scheduler, so
+// `cgp template <name>` can print it as a starting point for customization.
+func DefaultTemplate(name string) (string, bool) {
+	s, ok := schedulers[name]
+	if !ok {
+		return "", false
+	}
+	return s.Template, true
+}

@@ -14,7 +14,7 @@ User state lives under one root, `~/.cgp/`:
 | `<cgp dir>/.cgprc` | Server-wide config next to the installed `cgp` binary (lowest priority) |
 | `/etc/cgp/config` | System (site-wide) config |
 | `~/.cgp/config` | User config (a cgp script) |
-| `~/.cgp/templates/` | Custom runner templates |
+| `~/.cgp/custom_template.cgp` | Custom submission template for the active scheduler runner |
 | `~/.cgp/cache/` | Cache / state |
 
 ## Resolution order
@@ -48,6 +48,7 @@ overrides a config default.
 |----------|---------|
 | `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific options |
+| `cgp.runner.<name>.template` | Path to a custom submission template, replacing the built-in for that scheduler |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of printing it (default off) |
 | `cgp.ledger` | Ledger database path; enables [cross-run tracking](10-The_Ledger.md) |
 | `cgp.run_id` | Run identifier |
@@ -86,9 +87,19 @@ Common settings: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`,
 
 ## Custom runner templates
 
-The scheduler runners render each job from a template. To customize the submission
-script for your site — mandatory billing lines, a partition, a module-load
-preamble — drop a template in `~/.cgp/templates/`. See
+The scheduler runners render each job from a template. For most site requirements
+the named settings (`account`, `queue`, `qos`, …) and the `custom` directive are
+enough. To replace the submission script wholesale, scaffold from the built-in and
+edit it:
+
+```sh
+cgp show-template -r slurm > ~/.cgp/custom_template.cgp
+```
+
+cgp then uses `~/.cgp/custom_template.cgp` for the active scheduler runner, or set
+`cgp.runner.<name>.template = "<path>"` for explicit, per-scheduler control. The
+explicit key wins over the convention file, which wins over the built-in; only the
+template is replaced (submit command and status probes are unchanged). See
 [Tutorial 10](tutorials/10-custom-templates.md).
 
 ## A typical `~/.cgp/config`

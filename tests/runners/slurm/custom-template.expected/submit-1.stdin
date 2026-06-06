@@ -1,0 +1,7 @@
+#!/bin/bash
+# SITE TEMPLATE
+#SBATCH -J j
+#SBATCH --exclusive
+module load site/env
+run > out.bam
+

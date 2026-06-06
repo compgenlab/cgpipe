@@ -119,6 +119,11 @@ custom = ["--exclusive", "--constraint=haswell"]
 #SBATCH --constraint=haswell
 ```
 
+When even `custom` isn't enough and you need a different submission *script*,
+replace the whole template: `cgp show-template -r slurm > ~/.cgp/custom_template.cgp`,
+edit it, and cgp uses it (or set `cgp.runner.<name>.template`). See
+[Tutorial 10](tutorials/10-custom-templates.md).
+
 ## Dependencies are wired for you
 
 When one target's output is another's input, cgp submits them in order and passes

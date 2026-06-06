@@ -203,6 +203,8 @@ run_runner_fixture() {
     cp "$MOCKS/lib.sh" "$work/lib.sh"
     cp "$MOCKS/$sched"/* "$bindir/" && chmod +x "$bindir"/*
     cp "$cgp_file" "$work/$name"
+    # copy a <name>.files/ helper dir (e.g. a custom submission template) if present
+    [ -d "${cgp_file%.cgp}.files" ] && cp -R "${cgp_file%.cgp}.files/." "$work/"
 
     local rc
     (
