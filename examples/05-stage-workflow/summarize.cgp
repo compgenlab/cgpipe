@@ -1,0 +1,9 @@
+#!/usr/bin/env cgp
+#
+# Stage 2: summarize the cleaned text. Runnable on its own with --text.
+cgp.runner.shell.autoexec = true
+
+summary.txt: ${text} {{
+    printf "lines: %s\nwords: %s\n" "$(wc -l < ${input})" "$(wc -w < ${input})" > ${output}
+}}
+@default: summary.txt

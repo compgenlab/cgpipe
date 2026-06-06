@@ -30,6 +30,7 @@ New here? Start with **[Getting Started](02-Getting_Started.md)**.
 | — | [Language Specification](language-spec.md) | The precise, normative reference |
 | — | [Tutorials index](07-Pipeline_Tutorials.md) | The fourteen worked tutorials |
 | — | [cgp in one page](cgp-for-llms.md) | Dense single-file reference (paste into an LLM, or skim as a cheatsheet) |
+| — | [Examples](../examples/) | Runnable, self-contained pipelines to run and adapt |
 
 ## I want to…
 
