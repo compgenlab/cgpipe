@@ -49,6 +49,8 @@ overrides a config default.
 | `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific options |
 | `cgp.runner.<name>.template` | Path to a custom submission template, replacing the built-in for that scheduler |
+| `cgp.runner.<name>.global_hold` | Submit every job held until the whole pipeline submits cleanly, then release (scheduler runners; off by default) |
+| `cgp.runner.sge.parallelenv` | SGE parallel-environment name, used for `-pe <pe> <procs>` when `procs > 1` |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of printing it (default off) |
 | `cgp.ledger` | Ledger database path; enables [cross-run tracking](10-The_Ledger.md) |
 | `cgp.run_id` | Run identifier |

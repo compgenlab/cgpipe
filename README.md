@@ -34,6 +34,13 @@ cgp is a single static binary. Download the tarball for your platform from the
 (`cgp-<version>-<os>-<arch>.tar.gz`), extract it, and put `cgp` on your `PATH`. See
 [Getting Started](docs/02-Getting_Started.md#install) for details.
 
+## Documentation
+
+The full guide lives in **[`docs/`](docs/)** — start with
+[Getting Started](docs/02-Getting_Started.md), browse the
+[hub](docs/README.md), or skim [cgp in one page](docs/cgp-for-llms.md). The
+precise language reference is [`docs/language-spec.md`](docs/language-spec.md).
+
 ## Build from source
 
 Pure Go, no CGO:
@@ -59,12 +66,14 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 | `internal/lexer/` | source → tokens (incl. the `{{ }}` shell-body capture mode) |
 | `internal/ast/`   | AST node types |
 | `internal/parser/`| hand-rolled recursive-descent parser |
-| `internal/eval/`  | evaluator: scope, control flow, target collection → dependency graph |
-| `internal/template/` | renders captured shell bodies (`${…}`, `%`-control lines) |
-| `internal/runner/` | submit a graph to a backend; `runner/shell` is the default |
+| `internal/eval/`  | evaluator: scope, control flow, target collection → dependency graph; renders shell bodies (`${…}`, `%`-control lines) |
+| `internal/runner/` | drive a graph to a backend; `runner/shell` (default), `runner/sched` (slurm/sge/pbs/batchq), `runner/graphviz`, `runner/report` (html) |
 | `internal/ledger/` | optional SQLite job ledger (output → owning job) |
+| `internal/container/` | container/GPU command wrapping (docker/singularity) |
+| `internal/manifest/` | manifest loaders (tsv/csv/json/cgp) for fan-out |
 | `internal/convert/` | best-effort migrator from legacy cgpipe scripts |
-| `docs/`           | language specification and (later) the docs site |
+| `internal/lsp/`   | zero-dependency language server (`cgp lsp`) for editors |
+| `docs/`           | the user guide and the language specification |
 
 ## Examples
 

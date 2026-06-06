@@ -517,6 +517,8 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 | `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific |
 | `cgp.runner.<name>.template` | Path to a custom submission template, replacing the built-in for that scheduler (else `~/.cgp/custom_template.cgp`; scaffold with `cgp show-template -r <name>`) |
+| `cgp.runner.<name>.global_hold` | Submit every job held until the pipeline submits cleanly, then release (off by default) |
+| `cgp.runner.sge.parallelenv` | SGE parallel-environment name for `-pe <pe> <procs>` when `procs > 1` |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of emitting it (default off) |
 | `cgp.shell` | Default shell for rendered bodies |
 | `cgp.dryrun` | Set by `-dr` / `CGP_DRYRUN` |
@@ -526,7 +528,7 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 `global_hold` (hold all jobs until the pipeline submits cleanly) and host-environment capture are **not** defaults — enable them in `~/.cgp/config` if you want them. This keeps the core small; belt-and-suspenders behavior is opt-in.
 
 ### 11.4 Per-job directives (the `job.*` surface, prefix dropped in bodies)
-Set globally as `job.<name>` for defaults, or as a bare `<name>` directive inside a target body's directive block. Common: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`, `container`, `gpu`, plus the assembly flags `shexec`, `nopre`, `nopost`. (Full runner/job table belongs in a future Running Jobs chapter.)
+Set globally as `job.<name>` for defaults, or as a bare `<name>` directive inside a target body's directive block. Resource/identity: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`, `queue`, `account`, `mail`, `gpu`, `container`. Submission control: `env` (capture the submit-host environment — SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`), `hold` (submit this job held), `setup` (a list of shell lines emitted before the body in the submission script), `custom` (extra directive lines, verbatim). Assembly flags: `shexec`, `nopre`, `nopost`. Scheduler-specific (ignored elsewhere): `qos` (SLURM/PBS), `nice` (SLURM); SGE's `-pe` needs `cgp.runner.sge.parallelenv` when `procs > 1`. The friendly reference with per-scheduler mapping is the [Running Jobs chapter](README.md).
 
 ---
 
@@ -635,6 +637,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
     cgp ledger {dump|search|vacuum|unlock} <db>
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
+    cgp lsp
     cgp version
 
 A bare argument is a **goal** (a target to build); with none, cgp builds `@default` (or the first target). `--name value` sets a script variable; single-hyphen flags are cgp's own options.
@@ -672,6 +675,9 @@ Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, rep
 
 ### 15.4 `cgp show-template` — print a scheduler's default template
 `cgp show-template -r <slurm|sge|pbs|batchq>` prints that scheduler's built-in submission template to stdout, as a starting point for a custom one. Save it (`> ~/.cgp/custom_template.cgp`, or any path named by `cgp.runner.<name>.template`) and edit it to replace the built-in submission script — see [§11.3](#113-selected-cgp-settings). The rest of the runner's wiring (submit command, status probes, mem normalization) is unchanged; only the rendered script is overridden.
+
+### 15.5 `cgp lsp` — language server
+`cgp lsp` runs a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) server over stdin/stdout, providing diagnostics (parse errors), semantic tokens, hover, and completion for `.cgp` files. It is launched by an editor, not used interactively; the bundled VSCode extension (`editor/vscode/`) starts it automatically when `cgp` is on `PATH`.
 
 ---
 
