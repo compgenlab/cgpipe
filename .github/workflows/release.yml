@@ -33,13 +33,11 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME}"
           ldflags="-s -w -X github.com/compgen-io/cgp/internal/buildinfo.Version=${version}"
-          dist="cgp-${version}-${GOOS}-${GOARCH}"
-          mkdir -p "dist/${dist}"
-          go build -trimpath -ldflags "${ldflags}" -o "dist/${dist}/cgp" ./cmd/cgp
-          cp README.md LICENSE "dist/${dist}/"
-          tar -C dist -czf "dist/${dist}.tar.gz" "${dist}"
+          bin="cgp-${version}-${GOOS}-${GOARCH}"
+          mkdir -p dist
+          go build -trimpath -ldflags "${ldflags}" -o "dist/${bin}" ./cmd/cgp
 
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.tar.gz
+          files: dist/cgp-*
