@@ -2,11 +2,11 @@
 # env passthrough, raw opts, the in-image shell.
 cgp.container.engine = "docker"
 out.bam: in.bam {{
-    container          = "img:1"
-    container.bind     = ["/data", "/refs"]
-    container.env      = ["SAMPLE"]
-    container.opts     = ["--shm-size=1g"]
-    container.shell    = "bash"
+    job.container          = "img:1"
+    job.container.bind     = ["/data", "/refs"]
+    job.container.env      = ["SAMPLE"]
+    job.container.opts     = ["--shm-size=1g"]
+    job.container.shell    = "bash"
     --
     run ${input} > ${output}
 }}

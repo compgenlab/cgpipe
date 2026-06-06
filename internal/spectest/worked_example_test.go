@@ -18,14 +18,14 @@ for c in chroms {
     per_chrom += "calls.${c}.vcf"
 
     ^calls.${c}.vcf: in.bam {{
-        name = "call-chr${c}"
+        job.name = "call-chr${c}"
         --
         echo "variants on chr${c}" > ${output}
     }}
 }
 
 merged.vcf: @{per_chrom} {{
-    name = "merge"
+    job.name = "merge"
     --
     cat ${input} > ${output}
 }}
@@ -65,13 +65,13 @@ per_chrom = []
 for c in chroms {
     per_chrom += "calls.${c}.vcf"
     ^calls.${c}.vcf: in.bam {{
-        name = "call-chr${c}"
+        job.name = "call-chr${c}"
         --
         echo x > ${output}
     }}
 }
 merged.vcf: @{per_chrom} {{
-    name = "merge"
+    job.name = "merge"
     --
     cat ${input} > ${output}
 }}

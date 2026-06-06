@@ -11,14 +11,14 @@ Wrapping happens when **both** are set:
 
 - **`cgp.container.engine`** — `docker`, `singularity`, or `apptainer` (in config
   or the script). Unset disables all wrapping.
-- **`container = "<image>"`** — a per-target directive naming the image. A target
-  with no `container` runs unwrapped even when an engine is configured.
+- **`job.container = "<image>"`** — a per-target directive naming the image. A
+  target with no `job.container` runs unwrapped even when an engine is configured.
 
 ```
 cgp.container.engine = "docker"
 
 out.bam: in.bam {{
-    container = "biocontainers/samtools:1.9"
+    job.container = "biocontainers/samtools:1.9"
     --
     samtools sort ${input} > ${output}
 }}
@@ -44,7 +44,7 @@ docker run --rm \
     sh "$__cgp_body"
 ```
 
-The body never mentions Docker — you could drop the `container` line and run it
+The body never mentions Docker — you could drop the `job.container` line and run it
 bare. (A target with an engine set but **no** image renders unwrapped, exactly as
 if containers weren't configured.)
 
@@ -57,7 +57,7 @@ binds and `--pwd`:
 cgp.container.engine = "singularity"
 
 out.bam: in.bam {{
-    container = "docker://biocontainers/bwa:0.7.17"
+    job.container = "docker://biocontainers/bwa:0.7.17"
     --
     bwa ${input} > ${output}
 }}
@@ -74,24 +74,24 @@ singularity exec \
 ## Tuning the invocation
 
 Extra settings shape the engine command. Each is available globally as
-`cgp.container.<name>` and/or per target as `container.<name>`:
+`cgp.container.<name>` and/or per target as `job.container.<name>`:
 
 | Setting | Purpose |
 |---------|---------|
-| `container.bind` | Extra bind mounts (list) |
-| `container.env` | Environment variables to pass through |
-| `container.opts` | Raw extra flags for the engine |
-| `container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
-| `container.shell` | Shell used to run the body inside the image (default `sh`) |
+| `job.container.bind` | Extra bind mounts (list) |
+| `job.container.env` | Environment variables to pass through |
+| `job.container.opts` | Raw extra flags for the engine |
+| `job.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
+| `job.container.shell` | Shell used to run the body inside the image (default `sh`) |
 | `cgp.container.user_map` | Docker: add `-u $(id -u):$(id -g)` (default on) |
 
 ```
 out.bam: in.bam {{
-    container       = "img:1"
-    container.bind  = ["/data", "/refs"]
-    container.env   = ["SAMPLE"]
-    container.opts  = ["--shm-size=1g"]
-    container.shell = "bash"
+    job.container       = "img:1"
+    job.container.bind  = ["/data", "/refs"]
+    job.container.env   = ["SAMPLE"]
+    job.container.opts  = ["--shm-size=1g"]
+    job.container.shell = "bash"
     --
     run ${input} > ${output}
 }}
@@ -115,23 +115,23 @@ verbatim, `shell` as the in-image interpreter.
 
 ## GPUs
 
-`gpu` requests GPUs and drives **both** layers at once:
+`job.gpu` requests GPUs and drives **both** layers at once:
 
 ```
 train.model: data.tfrecord {{
-    gpu = 2
+    job.gpu = 2
     --
     train.py --data ${input} --out ${output}
 }}
 ```
 
-- `gpu = true` → one GPU; `gpu = N` → N; `gpu = false`/unset → none. Global default:
-  `cgp.gpu`.
+- `job.gpu = true` → one GPU; `job.gpu = N` → N; `job.gpu = false`/unset → none.
+  Global default: `cgp.gpu`.
 - On a scheduler it emits the resource request — on SLURM, `#SBATCH --gres=gpu:2`.
 - Inside a container it adds the engine's GPU flag (Docker `--gpus`,
   Singularity/Apptainer `--nv`).
 
-So one `gpu = 2` both asks the scheduler for two GPUs and exposes them to the
+So one `job.gpu = 2` both asks the scheduler for two GPUs and exposes them to the
 container — no separate flags to keep in sync.
 
 ## Next

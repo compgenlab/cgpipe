@@ -82,6 +82,7 @@ type JobSpec struct {
 // available to scheduler templates.
 func NewJob(spec JobSpec) *Program {
 	sc := newScope()
+	seedJobDefaults(sc)
 	for k, v := range spec.Settings {
 		sc.set(k, v)
 	}
@@ -134,6 +135,19 @@ type interp struct {
 	including map[string]bool // include cycle guard (absolute paths)
 }
 
+// seedJobDefaults pre-populates the global scope with the language-level job
+// defaults, before any config layer or the pipeline runs. They are ordinary
+// globals: every config layer, target snapshot, and runner inherits them, and any
+// later assignment (global or directive) overrides them. Only static, universal
+// defaults belong here — `job.shell` is derived from the cgp.shell config and so is
+// defaulted in the runner, and `job.name` defaults to a target's output and so is
+// defaulted per-target in renderTargetScope.
+func seedJobDefaults(sc *Scope) {
+	sc.set("job.procs", IntVal(1))
+	sc.set("job.custom", ListVal{})
+	sc.set("job.setup", ListVal{})
+}
+
 // Run evaluates the file's global statements and returns the resulting Program.
 // A call to exit surfaces as *ExitError.
 func Run(file *ast.File, opts Options) (*Program, error) {
@@ -148,6 +162,7 @@ func Run(file *ast.File, opts Options) (*Program, error) {
 	if ip.out == nil {
 		ip.out = os.Stdout
 	}
+	seedJobDefaults(ip.sc)
 	// 1. config files, in order (system, user, env)
 	for _, cfg := range opts.Configs {
 		ip.dir = cfg.Dir

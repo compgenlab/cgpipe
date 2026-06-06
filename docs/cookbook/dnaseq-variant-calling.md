@@ -27,20 +27,20 @@ chroms ?= "chr1 chr2 chr3 chrX".split(" ")   # list all your intervals here
 
 # 1. Align to a coordinate-sorted BAM (temp: only needed to mark duplicates).
 ^${sample}.sorted.bam: ${r1} ${r2} ${ref} {{
-    name  = "bwa-${sample}"
-    procs = 8
-    mem   = "16G"
+    job.name  = "bwa-${sample}"
+    job.procs = 8
+    job.mem   = "16G"
     --
-    bwa mem -t ${procs} -R "@RG\tID:${sample}\tSM:${sample}\tPL:ILLUMINA" \
+    bwa mem -t ${job.procs} -R "@RG\tID:${sample}\tSM:${sample}\tPL:ILLUMINA" \
         ${ref} ${r1} ${r2} \
-        | samtools sort -@ ${procs} -o ${output} -
+        | samtools sort -@ ${job.procs} -o ${output} -
     samtools index ${output}
 }}
 
 # 2. Mark duplicates (temp: consumed by BQSR).
 ^${sample}.markdup.bam ${sample}.markdup.metrics: ${sample}.sorted.bam {{
-    name = "markdup-${sample}"
-    mem  = "16G"
+    job.name = "markdup-${sample}"
+    job.mem  = "16G"
     --
     gatk MarkDuplicates -I ${input} -O ${output[0]} -M ${output[1]}
     samtools index ${output[0]}
@@ -48,8 +48,8 @@ chroms ?= "chr1 chr2 chr3 chrX".split(" ")   # list all your intervals here
 
 # 3. Base-quality recalibration -> the analysis-ready BAM (kept).
 ${sample}.recal.bam: ${sample}.markdup.bam ${ref} {{
-    name = "bqsr-${sample}"
-    mem  = "16G"
+    job.name = "bqsr-${sample}"
+    job.mem  = "16G"
     --
     gatk BaseRecalibrator -I ${input[0]} -R ${ref} -O ${sample}.recal.table
     gatk ApplyBQSR -I ${input[0]} -R ${ref} --bqsr-recal-file ${sample}.recal.table -O ${output}
@@ -61,9 +61,9 @@ per_chrom = []
 for c in chroms {
     per_chrom += "${sample}.${c}.g.vcf.gz"
     ^${sample}.${c}.g.vcf.gz: ${sample}.recal.bam ${ref} {{
-        name  = "call-${sample}-${c}"
-        procs = 2
-        mem   = "8G"
+        job.name  = "call-${sample}-${c}"
+        job.procs = 2
+        job.mem   = "8G"
         --
         gatk HaplotypeCaller -R ${ref} -I ${input[0]} -L ${c} -ERC GVCF -O ${output}
     }}
@@ -71,8 +71,8 @@ for c in chroms {
 
 # 5. Gather the per-chromosome gVCFs into one (kept).
 ${sample}.g.vcf.gz: @{per_chrom} {{
-    name = "gather-${sample}"
-    mem  = "4G"
+    job.name = "gather-${sample}"
+    job.mem  = "4G"
     --
     gatk MergeVcfs ${if per_chrom; "-I " + per_chrom.join(" -I ")} -O ${output}
 }}

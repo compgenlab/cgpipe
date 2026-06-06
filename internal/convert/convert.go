@@ -248,7 +248,7 @@ func (c *converter) emitBody(raw []string, base int) {
 				if d == "" {
 					continue
 				}
-				directives = append(directives, "    "+stripJobPrefix(wrapBareCmdSubst(makeVars(rewriteSettings(d)))))
+				directives = append(directives, "    "+wrapBareCmdSubst(makeVars(rewriteSettings(d))))
 			}
 			k++
 			continue
@@ -303,7 +303,7 @@ func (c *converter) emitRegion(inner []string) {
 			// %-line but flag it, since job.* settings belong in the directive
 			// block before "--".
 			c.warn("setting %q appears after the body started; moved to a %%-line (review)", t)
-			c.emit("    % " + stripJobPrefix(wrapBareCmdSubst(makeVars(rewriteSettings(t)))))
+			c.emit("    % " + wrapBareCmdSubst(makeVars(rewriteSettings(t))))
 		}
 	}
 }
@@ -426,17 +426,6 @@ func rewriteSettings(line string) string {
 	line = strings.ReplaceAll(line, "cgpipe.joblog", "cgp.ledger")
 	line = strings.ReplaceAll(line, "cgpipe.", "cgp.")
 	return line
-}
-
-// stripJobPrefix removes a leading "job." from a directive (settings inside a
-// body are about the job; the prefix is dropped in cgp directive blocks).
-func stripJobPrefix(d string) string {
-	tl := strings.TrimLeft(d, " \t")
-	indent := d[:len(d)-len(tl)]
-	if strings.HasPrefix(tl, "job.") {
-		return indent + tl[len("job."):]
-	}
-	return d
 }
 
 // makeVars substitutes the legacy make-style build variables.

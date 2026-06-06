@@ -24,12 +24,12 @@ if !gtf    { print "ERROR: --gtf required"; exit 1 }
 # Align to a coordinate-sorted BAM. STAR writes <prefix>Aligned.sortedByCoord.out.bam;
 # rename it to a tidy ${sample}.bam.
 ${sample}.bam: ${r1} ${r2} {{
-    name  = "star-${sample}"
-    procs = 8
-    mem   = "32G"
+    job.name  = "star-${sample}"
+    job.procs = 8
+    job.mem   = "32G"
     --
     STAR --genomeDir ${index} --readFilesIn ${r1} ${r2} --readFilesCommand zcat \
-         --runThreadN ${procs} --outSAMtype BAM SortedByCoordinate \
+         --runThreadN ${job.procs} --outSAMtype BAM SortedByCoordinate \
          --outFileNamePrefix ${sample}.
     mv ${sample}.Aligned.sortedByCoord.out.bam ${output}
     samtools index ${output}
@@ -37,8 +37,8 @@ ${sample}.bam: ${r1} ${r2} {{
 
 # Count reads per gene against the annotation.
 ${sample}.counts.txt: ${sample}.bam {{
-    name = "count-${sample}"
-    mem  = "4G"
+    job.name = "count-${sample}"
+    job.mem  = "4G"
     --
     ngsutilsj bam-count --gtf ${gtf} ${input} > ${output}
 }}

@@ -18,7 +18,7 @@ New here? Start with **[Getting Started](02-Getting_Started.md)**.
 | 6 | [Reserved Targets](06-Reserved_Targets.md) | `@pre`/`@post`/`@setup`/`@teardown`/`@postsubmit`, the `@default` goal |
 | 7 | [Pipeline Tutorials](07-Pipeline_Tutorials.md) | Worked examples, start to finish |
 | 8 | [Running Jobs](08-Running_Jobs.md) | Runners, `job.*` settings, dependencies, `cgp sub` |
-| 9 | [Containers and GPUs](09-Containers_and_GPUs.md) | Docker/Singularity wrapping, `gpu` requests |
+| 9 | [Containers and GPUs](09-Containers_and_GPUs.md) | Docker/Singularity wrapping, `job.gpu` requests |
 | 10 | [The Ledger](10-The_Ledger.md) | Restarts, cross-run reuse, `cgp ledger` |
 | 11 | [Workflows](11-Workflows.md) | Chaining pipelines with `stage` and `export` |
 | 12 | [Manifests and Fan-out](12-Manifests_and_Fanout.md) | Run a pipeline once per sample/row |

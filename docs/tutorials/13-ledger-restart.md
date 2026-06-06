@@ -33,13 +33,13 @@ cgp.ledger = "jobs.db"
 cgp.runner = "slurm"
 
 trimmed.fq: a.fastq {{
-    name = "trim"
+    job.name = "trim"
     --
     cutadapt ${input} > ${output}
 }}
 aligned.bam: trimmed.fq {{
-    name = "align"
-    mem  = "8G"
+    job.name = "align"
+    job.mem  = "8G"
     --
     bwa mem ${input} > ${output}
 }}

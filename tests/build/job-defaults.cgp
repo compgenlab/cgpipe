@@ -1,0 +1,13 @@
+# §11.4 Job settings live under the job.* namespace and are captured per target at
+# definition time: a job.* setting acts as the default for every target defined
+# after it. job.procs is seeded to 1, so the first target sees 1; the reassignment
+# to 2 is captured only by the second target.
+a.txt: {{
+    echo ${job.procs} > ${output}
+}}
+job.procs = 2
+b.txt: {{
+    echo ${job.procs} > ${output}
+}}
+all: a.txt b.txt
+@default: all

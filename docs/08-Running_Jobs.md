@@ -26,38 +26,40 @@ assigned id captured and printed.
 
 ## Per-job settings
 
-Inside a target's directive block (before `--`), bare `name = value` assignments
-set per-job settings. Each scheduler translates them into its own header lines.
-The common ones:
+Per-job settings live under the `job.` namespace. Inside a target's directive
+block (before `--`), `job.name = value` assignments set them; each scheduler
+translates them into its own header lines. The common ones:
 
 | Setting | Meaning |
 |---------|---------|
-| `name` | Job name |
-| `procs` | CPUs / cores |
-| `mem` | Memory (e.g. `"8G"`) |
-| `walltime` | Wall-time limit (e.g. `"12:00:00"`) |
-| `stdout` / `stderr` | Redirect job output |
-| `queue` | Queue / partition |
-| `account` | Accounting/billing project |
-| `mail` | Notification address |
-| `gpu` | GPUs to request (see [Containers & GPUs](09-Containers_and_GPUs.md)) |
-| `env` | Capture the submit-host environment into the job (SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`) |
-| `hold` | Submit this job held (release it later by hand) |
-| `setup` | A list of shell lines emitted at the top of the submission script, before the body |
-| `custom` | Extra directive lines, emitted verbatim |
+| `job.name` | Job name |
+| `job.procs` | CPUs / cores (defaults to 1) |
+| `job.mem` | Memory (e.g. `"8G"`) |
+| `job.walltime` | Wall-time limit (e.g. `"12:00:00"`) |
+| `job.stdout` / `job.stderr` | Redirect job output |
+| `job.queue` | Queue / partition |
+| `job.account` | Accounting/billing project |
+| `job.mail` | Notification address |
+| `job.gpu` | GPUs to request (see [Containers & GPUs](09-Containers_and_GPUs.md)) |
+| `job.env` | Capture the submit-host environment into the job (SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`) |
+| `job.hold` | Submit this job held (release it later by hand) |
+| `job.setup` | A list of shell lines emitted at the top of the submission script, before the body |
+| `job.custom` | Extra directive lines, emitted verbatim |
 
 A few settings are scheduler-specific (silently ignored elsewhere):
 
 | Setting | Scheduler | Meaning |
 |---------|-----------|---------|
-| `qos` | SLURM, PBS | Quality-of-service |
-| `nice` | SLURM | Scheduling priority adjustment (`--nice`) |
-| `parallelenv` | SGE | Parallel-environment name, required for `-pe` when `procs > 1` (usually set once as `cgp.runner.sge.parallelenv` in config) |
+| `job.qos` | SLURM, PBS | Quality-of-service |
+| `job.nice` | SLURM | Scheduling priority adjustment (`--nice`) |
+| `parallelenv` | SGE | Parallel-environment name, required for `-pe` when `job.procs > 1` (usually set once as `cgp.runner.sge.parallelenv` in config) |
 
-Set defaults globally with the `job.` prefix (`job.mem = "4G"`); drop the prefix
-inside a body's directive block (`mem = "4G"`). To hold the *entire* pipeline until
-it submits cleanly, see `global_hold` in the
-[Configuration Reference](13-Configuration_Reference.md).
+The same `job.` prefix applies whether you set a default globally before your
+targets (`job.mem = "4G"`) or inside a body's directive block (`job.mem = "4G"`).
+A setting is captured per target at definition time, so a global `job.mem = "8G"`
+near the top becomes the default for every target defined after it, unless a
+target overrides it. To hold the *entire* pipeline until it submits cleanly, see
+`global_hold` in the [Configuration Reference](13-Configuration_Reference.md).
 
 ### The same job, four schedulers
 
@@ -65,10 +67,10 @@ This target —
 
 ```
 out.bam: {{
-    name     = "align"
-    mem      = "8G"
-    procs    = 4
-    walltime = "12:00:00"
+    job.name     = "align"
+    job.mem      = "8G"
+    job.procs    = 4
+    job.walltime = "12:00:00"
     --
     echo aligning > ${output}
 }}
@@ -108,26 +110,27 @@ BatchQ (`-r batchq`):
 #BATCHQ -walltime 12:00:00
 ```
 
-You write `mem`, `procs`, `walltime` once; the per-scheduler mapping is cgp's job.
+You write `job.mem`, `job.procs`, `job.walltime` once; the per-scheduler mapping is
+cgp's job.
 
-### `mail`, `custom`
+### `job.mail`, `job.custom`
 
-`mail` adds the scheduler's notification directives (defaulting the mail type — on
-SLURM, `END,FAIL`):
+`job.mail` adds the scheduler's notification directives (defaulting the mail type —
+on SLURM, `END,FAIL`):
 
 ```
-mail = "user@example.com"
+job.mail = "user@example.com"
 ```
 ```bash
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=user@example.com
 ```
 
-`custom` passes through extra directive lines verbatim, for site-specific options
-cgp doesn't model:
+`job.custom` passes through extra directive lines verbatim, for site-specific
+options cgp doesn't model:
 
 ```
-custom = ["--exclusive", "--constraint=haswell"]
+job.custom = ["--exclusive", "--constraint=haswell"]
 ```
 ```bash
 #SBATCH --exclusive
@@ -145,8 +148,8 @@ When one target's output is another's input, cgp submits them in order and passe
 the upstream job id into the downstream submission. For:
 
 ```
-a.bam: {{ name = "align"; -- ; echo a > ${output} }}
-b.bam: a.bam {{ name = "post"; -- ; cp ${input} ${output} }}
+a.bam: {{ job.name = "align"; -- ; echo a > ${output} }}
+b.bam: a.bam {{ job.name = "post"; -- ; cp ${input} ${output} }}
 ```
 
 `a.bam` submits first (id `1001`); `b.bam` submits second carrying the dependency:
@@ -210,5 +213,5 @@ pipeline that's already in flight.
 - **[Configuration Reference](13-Configuration_Reference.md)** — every setting,
   precedence, and where to put cluster defaults.
 
-Reference → [language-spec.md §11.4](language-spec.md#114-per-job-directives-the-job-surface-prefix-dropped-in-bodies),
+Reference → [language-spec.md §11.4](language-spec.md#114-per-job-settings-the-job-namespace),
 [§15.1](language-spec.md#151-cgp-sub--one-off-submission).

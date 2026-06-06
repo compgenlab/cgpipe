@@ -363,41 +363,40 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// shexec: run the body directly on the submission host instead of submitting
 	// it (the usual choice for @setup/@teardown — e.g. mkdir). No scheduler job,
 	// so no job id and nothing recorded in the ledger.
-	if v, ok := vars["shexec"]; ok && eval.Truthy(v) {
+	if v, ok := vars["job.shexec"]; ok && eval.Truthy(v) {
 		return b.shExec(runner.Label(t), body)
 	}
-	if m, ok := vars["mem"]; ok && b.sch.PrepareMem != nil {
-		vars["mem"] = eval.StrVal(b.sch.PrepareMem(eval.Stringify(m)))
+	if m, ok := vars["job.mem"]; ok && b.sch.PrepareMem != nil {
+		vars["job.mem"] = eval.StrVal(b.sch.PrepareMem(eval.Stringify(m)))
 	}
-	// Normalize a boolean gpu (gpu = true) to a count for the scheduler directive.
-	if v, ok := vars["gpu"]; ok {
+	// Normalize a boolean gpu (job.gpu = true) to a count for the scheduler directive.
+	if v, ok := vars["job.gpu"]; ok {
 		if b, isBool := v.(eval.BoolVal); isBool {
 			if bool(b) {
-				vars["gpu"] = eval.IntVal(1)
+				vars["job.gpu"] = eval.IntVal(1)
 			} else {
-				delete(vars, "gpu")
+				delete(vars, "job.gpu")
 			}
 		}
 	}
-	setDefault(vars, "procs", eval.IntVal(1))
-	setDefault(vars, "name", eval.StrVal(jobName(t)))
-	setDefault(vars, "custom", eval.ListVal{})
-	setDefault(vars, "setup", eval.ListVal{})
-	setDefault(vars, "shell", eval.StrVal(b.shell))
-	if _, ok := vars["mail"]; ok {
-		setDefault(vars, "mailtype", eval.StrVal(b.sch.MailType))
+	// job.procs / job.name / job.custom / job.setup come pre-seeded from eval
+	// (globals + the per-target job.name default). job.shell and the scheduler/
+	// config-derived settings below are genuinely runner-owned, so default here.
+	setDefault(vars, "job.shell", eval.StrVal(b.shell))
+	if _, ok := vars["job.mail"]; ok {
+		setDefault(vars, "job.mailtype", eval.StrVal(b.sch.MailType))
 	}
 	vars["_body"] = eval.StrVal(body)
 	vars["_inputs"] = eval.StrList(t.Inputs)
 	vars["_outputs"] = eval.StrList(t.Outputs)
 	if len(deps) > 0 {
-		vars["depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
+		vars["job.depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
 	}
 	if pe := b.cfg("cgp.runner.sge.parallelenv"); pe != "" {
-		setDefault(vars, "parallelenv", eval.StrVal(pe))
+		setDefault(vars, "job.parallelenv", eval.StrVal(pe))
 	}
 	if rid := b.cfg("cgp.run_id"); rid != "" {
-		setDefault(vars, "run_id", eval.StrVal(rid))
+		setDefault(vars, "job.run_id", eval.StrVal(rid))
 	}
 
 	script, err := b.prog.RenderText(b.sch.Template, vars)
@@ -414,7 +413,7 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	}
 	if b.ledger != nil && id != "" && len(t.Outputs) > 0 {
 		if err := b.ledger.Record(ledger.Job{
-			JobID: id, RunID: b.runID, Name: eval.Stringify(vars["name"]), Pipeline: b.opts.Pipeline,
+			JobID: id, RunID: b.runID, Name: eval.Stringify(vars["job.name"]), Pipeline: b.opts.Pipeline,
 			WorkingDir: b.wd, User: b.user, SubmitTime: time.Now().Unix(),
 			Outputs: t.Outputs, Temp: t.Temp, Inputs: t.Inputs, Deps: deps,
 			Script: body, Settings: jobSettings(vars),
@@ -426,23 +425,24 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 }
 
 // jobSettings extracts the per-job settings worth recording (mem, procs,
-// walltime, name, container, gpu, …) from the render vars: scalar values, minus
-// the build-in/internal names and cgp.* config.
+// walltime, container, gpu, …) from the render vars: scalar job.* values, minus
+// the name (recorded separately as NAME) and the internal plumbing. Keys are
+// recorded with the job. prefix stripped, keeping the ledger schema stable.
 func jobSettings(vars map[string]eval.Value) map[string]string {
 	skip := map[string]bool{
-		"input": true, "output": true, "stem": true, "name": true, // name is recorded as NAME
-		"_body": true, "_inputs": true, "_outputs": true,
+		"name":   true, // recorded as NAME
 		"depids": true, "custom": true, "setup": true, "shell": true,
 		"run_id": true, "parallelenv": true, "mailtype": true,
 	}
 	out := map[string]string{}
 	for k, v := range vars {
-		if skip[k] || strings.HasPrefix(k, "cgp.") {
+		bare, ok := strings.CutPrefix(k, "job.")
+		if !ok || skip[bare] {
 			continue
 		}
 		switch v.(type) {
 		case eval.StrVal, eval.IntVal, eval.FloatVal, eval.BoolVal:
-			out[k] = eval.Stringify(v)
+			out[bare] = eval.Stringify(v)
 		}
 	}
 	return out
@@ -526,16 +526,6 @@ func dedupeIDs(ids []string) []string {
 		out = append(out, id)
 	}
 	return out
-}
-
-func jobName(t *eval.Target) string {
-	if len(t.Outputs) > 0 {
-		return t.Outputs[0]
-	}
-	if t.Special != "" {
-		return "cgp." + t.Special
-	}
-	return "cgp.job"
 }
 
 // slurmMem normalizes a memory spec to megabytes (SLURM --mem unit). "8G" -> 8000.

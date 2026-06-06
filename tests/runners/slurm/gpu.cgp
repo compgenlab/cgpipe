@@ -1,7 +1,7 @@
 # §12.1 gpu = N emits the scheduler's GPU resource request (SLURM --gres=gpu:N).
 train.model: {{
-    name = "train"
-    gpu  = 2
+    job.name = "train"
+    job.gpu  = 2
     --
     train.py --out ${output}
 }}

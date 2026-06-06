@@ -50,12 +50,12 @@ the hooks see each job's own files.
 
 ### Opting out: `nopre` / `nopost`
 
-A target opts out of wrapping with the `nopre` / `nopost` directives:
+A target opts out of wrapping with the `job.nopre` / `job.nopost` directives:
 
 ```
 bare.txt: {{
-    nopre  = true
-    nopost = true
+    job.nopre  = true
+    job.nopost = true
     --
     echo b > ${output}
 }}
@@ -67,22 +67,22 @@ bare.txt: {{
 
 `@setup` runs once as the first job; `@teardown` once as the last. They are the
 place for one-time work like creating directories. Typically they run **on the
-submit host** rather than as submitted jobs — set `shexec = true`:
+submit host** rather than as submitted jobs — set `job.shexec = true`:
 
 ```
 @setup {{
-    shexec = true
+    job.shexec = true
     --
     mkdir -p logs
 }}
 @teardown {{
-    shexec = true
+    job.shexec = true
     --
     echo "pipeline complete"
 }}
 ```
 
-`shexec = true` runs the body directly on the submission host instead of
+`job.shexec = true` runs the body directly on the submission host instead of
 submitting it (the usual choice for `mkdir`-style setup). Only `@setup` and
 `@teardown` may be `shexec`; `@postsubmit` always is. Under `-dr`, shexec bodies
 still render so you can see them.

@@ -1,8 +1,8 @@
 # §11.4 Setting mail adds the scheduler's notification directives, defaulting
 # the mail type when unset (SLURM END,FAIL).
 out.bam: {{
-    name = "j"
-    mail = "user@example.com"
+    job.name = "j"
+    job.mail = "user@example.com"
     --
     echo x > ${output}
 }}

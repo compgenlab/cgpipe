@@ -3,7 +3,7 @@
 # setup.sh performs the first (seeding) run; this is the second run.
 cgp.ledger = "led.db"
 a.bam: {{
-    name = "a"
+    job.name = "a"
     --
     echo a > ${output}
 }}

@@ -33,8 +33,8 @@ $ cgp convert old.cgp
 #!/usr/bin/env cgp
 threads ?= 4
 out.bam: in.bam {{
-    mem = "8G"
-    procs = threads
+    job.mem = "8G"
+    job.procs = threads
     --
     samtools sort -@ ${job.procs} -o ${output} ${input}
 }}
@@ -44,8 +44,8 @@ It handled, mechanically:
 
 - the **shebang** (`cgpipe` → `cgp`),
 - the **body delimiters** — the indented recipe becomes a `{{ }}` block,
-- the **settings block** `<% … %>` → a directive block ending in `--`, with the
-  `job.` prefix dropped,
+- the **settings block** `<% … %>` → a directive block ending in `--`, with each
+  per-job setting keeping its `job.` prefix,
 - the **build variables** `$>` / `$<` → `${output}` / `${input}` (and `$%` →
   `${stem}`).
 
@@ -58,9 +58,8 @@ and `cgpipe.*` settings → `cgp.*`.
 
 The tool annotates anything it can't safely convert with a `# cgp-convert:`
 comment, so the conversion never silently changes meaning — those markers are your
-to-do list. And as the example shows, it rewrites *structure* faithfully but
-doesn't chase every reference: the body's `${job.procs}` was left as written even
-though the directive is now `procs`. So always:
+to-do list. It rewrites *structure* faithfully, but it can't reason about every
+shell reference, so always:
 
 1. `grep cgp-convert` the output for flagged lines.
 2. Read the bodies for stale references.

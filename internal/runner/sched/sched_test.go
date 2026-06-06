@@ -41,11 +41,11 @@ func renderDry(t *testing.T, name, src string) string {
 }
 
 const oneTarget = `out.bam: {{
-    name = "align"
-    mem = "8G"
-    procs = 4
-    walltime = "12:00:00"
-    queue = "normal"
+    job.name = "align"
+    job.mem = "8G"
+    job.procs = 4
+    job.walltime = "12:00:00"
+    job.queue = "normal"
     --
     echo hi > ${output}
 }}
@@ -86,7 +86,7 @@ func TestBatchqRender(t *testing.T) {
 
 func TestSgeNameSanitized(t *testing.T) {
 	src := `out.bam: {{
-    name = "align/chr1"
+    job.name = "align/chr1"
     --
     echo hi > ${output}
 }}
@@ -96,12 +96,12 @@ func TestSgeNameSanitized(t *testing.T) {
 
 func TestDependencyThreadingDryRun(t *testing.T) {
 	src := `a.bam: {{
-    name = "a"
+    job.name = "a"
     --
     echo a > ${output}
 }}
 b.bam: a.bam {{
-    name = "b"
+    job.name = "b"
     --
     cp ${input} ${output}
 }}
@@ -117,13 +117,13 @@ b.bam: a.bam {{
 // wired once, not repeated (batchq rejects a duplicate afterok).
 func TestDuplicateDepsDeduped(t *testing.T) {
 	src := `a.bam a.bam.bai: {{
-    name = "a"
+    job.name = "a"
     --
     echo a > a.bam
     echo i > a.bam.bai
 }}
 b.bam: a.bam a.bam.bai {{
-    name = "b"
+    job.name = "b"
     --
     cp a.bam ${output}
 }}
@@ -166,7 +166,7 @@ func TestLedgerReuse(t *testing.T) {
 
 	ledgerPath := filepath.Join(dir, "ledger.db")
 	src := "cgp.ledger = \"" + ledgerPath + "\"\n" +
-		"a.bam: {{\n    name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
+		"a.bam: {{\n    job.name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
 	sch, _ := For("slurm")
 
 	// Run 1: nothing in the ledger -> submit (job 1001).
@@ -370,12 +370,12 @@ func TestSubmitWithMock(t *testing.T) {
 	t.Setenv("CGP_SCRIPTS", scripts)
 
 	src := `a.bam: {{
-    name = "a"
+    job.name = "a"
     --
     echo a > ${output}
 }}
 b.bam: a.bam {{
-    name = "b"
+    job.name = "b"
     --
     cp ${input} ${output}
 }}
@@ -402,7 +402,7 @@ b.bam: a.bam {{
 
 // --- custom submission templates --------------------------------------------
 
-const customTmpl = "#!${shell}\n# SITE TEMPLATE\n#SBATCH -J ${name}\n${_body}\n"
+const customTmpl = "#!${job.shell}\n# SITE TEMPLATE\n#SBATCH -J ${job.name}\n${_body}\n"
 
 // writeTmpl writes a custom template file and returns its path.
 func writeTmpl(t *testing.T, dir, content string) string {
@@ -448,8 +448,8 @@ func TestCustomTemplatePrecedence(t *testing.T) {
 	t.Setenv("HOME", home)
 	os.MkdirAll(filepath.Join(home, ".cgp"), 0o755)
 	os.WriteFile(filepath.Join(home, ".cgp", "custom_template.cgp"),
-		[]byte("#!${shell}\n# CONVENTION\n${_body}\n"), 0o644)
-	tmpl := writeTmpl(t, t.TempDir(), "#!${shell}\n# EXPLICIT\n${_body}\n")
+		[]byte("#!${job.shell}\n# CONVENTION\n${_body}\n"), 0o644)
+	tmpl := writeTmpl(t, t.TempDir(), "#!${job.shell}\n# EXPLICIT\n${_body}\n")
 	src := "cgp.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
 	got := renderDry(t, "slurm", src)
 	if !strings.Contains(got, "# EXPLICIT") || strings.Contains(got, "# CONVENTION") {

@@ -1,8 +1,8 @@
 # §12/§12.1 Singularity uses `singularity exec`; gpu adds --nv.
 cgp.container.engine = "singularity"
 out.bam: in.bam {{
-    container = "docker://biocontainers/bwa:0.7.17"
-    gpu = true
+    job.container = "docker://biocontainers/bwa:0.7.17"
+    job.gpu = true
     --
     bwa ${input} > ${output}
 }}

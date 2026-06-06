@@ -1,66 +1,66 @@
-#!${shell}
+#!${job.shell}
 #SBATCH -Q
-#SBATCH -J ${name}
-% if hold {
+#SBATCH -J ${job.name}
+% if job.hold {
 #SBATCH -H
 % }
-% if env {
+% if job.env {
 #SBATCH --export=ALL
 % }
-% if walltime {
-#SBATCH -t ${walltime}
+% if job.walltime {
+#SBATCH -t ${job.walltime}
 % }
-% if procs > 1 {
-#SBATCH -c ${procs}
+% if job.procs > 1 {
+#SBATCH -c ${job.procs}
 #SBATCH -n 1
 % }
-% if mem {
-#SBATCH --mem=${mem}
+% if job.mem {
+#SBATCH --mem=${job.mem}
 % }
-% if gpu {
-#SBATCH --gres=gpu:${gpu}
+% if job.gpu {
+#SBATCH --gres=gpu:${job.gpu}
 % }
-% if depids {
-#SBATCH -d afterok:${depids}
+% if job.depids {
+#SBATCH -d afterok:${job.depids}
 % }
-% if qos {
-#SBATCH --qos=${qos}
+% if job.qos {
+#SBATCH --qos=${job.qos}
 % }
-% if queue {
-#SBATCH -p ${queue}
+% if job.queue {
+#SBATCH -p ${job.queue}
 % }
-% if account {
-#SBATCH -A ${account}
+% if job.account {
+#SBATCH -A ${job.account}
 % }
-% if nice {
-#SBATCH --nice=${nice}
+% if job.nice {
+#SBATCH --nice=${job.nice}
 % }
-% if mail {
-#SBATCH --mail-type=${mailtype}
-#SBATCH --mail-user=${mail}
+% if job.mail {
+#SBATCH --mail-type=${job.mailtype}
+#SBATCH --mail-user=${job.mail}
 % }
-% if stdout {
-% if stdout.isdir() {
-#SBATCH -o ${stdout}/slurm-%j.out
+% if job.stdout {
+% if job.stdout.isdir() {
+#SBATCH -o ${job.stdout}/slurm-%j.out
 % } else {
-#SBATCH -o ${stdout}
+#SBATCH -o ${job.stdout}
 % }
 % }
-% if stderr {
-% if stderr.isdir() {
-#SBATCH -e ${stderr}/slurm-%j.err
+% if job.stderr {
+% if job.stderr.isdir() {
+#SBATCH -e ${job.stderr}/slurm-%j.err
 % } else {
-#SBATCH -e ${stderr}
+#SBATCH -e ${job.stderr}
 % }
 % }
-% for c in custom {
+% for c in job.custom {
 #SBATCH ${c}
 % }
 
 set -eo pipefail
 JOB_ID=$SLURM_JOB_ID
 
-% for line in setup {
+% for line in job.setup {
 ${line}
 % }
 

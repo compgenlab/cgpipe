@@ -22,11 +22,11 @@ the inline `${if}` conditional, and the atomic-write idiom.
 threads ?= 4
 
 aligned.bam: ${reads} ${ref} {{
-    procs    = threads
-    mem      = "8G"
-    walltime = "12:00:00"
+    job.procs    = threads
+    job.mem      = "8G"
+    job.walltime = "12:00:00"
     --
-    bwa mem -t ${procs} ${if rg; "-R " + rg} ${ref} ${reads} \
+    bwa mem -t ${job.procs} ${if rg; "-R " + rg} ${ref} ${reads} \
         | samtools sort -o ${output}.tmp - && mv ${output}.tmp ${output}
 }}
 @default: aligned.bam
@@ -36,8 +36,8 @@ Four things to notice:
 
 - **`threads ?= 4`** sets a default that a `--threads` on the command line
   overrides.
-- **The directive block** (everything before `--`) sets `procs`, `mem`, and
-  `walltime`. These don't emit shell — they configure the job.
+- **The directive block** (everything before `--`) sets `job.procs`, `job.mem`,
+  and `job.walltime`. These don't emit shell — they configure the job.
 - **`${if rg; "-R " + rg}`** adds `-R <rg>` *only when* `--rg` was given, and
   nothing otherwise. No `if` block, no duplicated command.
 - **`${output}.tmp && mv`** writes to a temp name and renames on success, so a
@@ -62,8 +62,8 @@ With no `--rg`, the `${if}` expands to nothing (the empty gap is harmless).
 ## On a scheduler, they become resource requests
 
 The *same target*, submitted to SLURM with overrides, turns the directives into
-`#SBATCH` lines — `mem = "8G"` becomes `--mem=8000`, `procs` becomes `-c`,
-`walltime` becomes `-t`:
+`#SBATCH` lines — `job.mem = "8G"` becomes `--mem=8000`, `job.procs` becomes `-c`,
+`job.walltime` becomes `-t`:
 
 ```console
 $ cgp -dr -r slurm align.cgp --reads reads.fq --ref ref.fa --threads 16 --rg "@RG\tID:lib1"
@@ -80,7 +80,7 @@ bwa mem -t 16 -R @RG\tID:lib1 ref.fa reads.fq \
 | samtools sort -o aligned.bam.tmp - && mv aligned.bam.tmp aligned.bam
 ```
 
-`--threads 16` flowed through `procs = threads` to `-c 16`, and the read-group
+`--threads 16` flowed through `job.procs = threads` to `-c 16`, and the read-group
 appeared because `--rg` was set. You wrote the resources once; the scheduler
 mapping is cgp's job.
 

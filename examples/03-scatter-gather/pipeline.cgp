@@ -14,14 +14,14 @@ counts = []
 for d in docs {
     counts += "${d}.count"
     ^${d}.count: data/${d}.txt {{
-        name = "count-${d}"
+        job.name = "count-${d}"
         --
         wc -w < ${input} > ${output}
     }}
 }
 
 total.txt: @{counts} {{
-    name = "total"
+    job.name = "total"
     --
     cat ${input} | awk '{s += $1} END {print s, "words total"}' > ${output}
 }}

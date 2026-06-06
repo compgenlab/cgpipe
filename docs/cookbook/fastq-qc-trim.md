@@ -19,18 +19,18 @@ if !sample { print "ERROR: --sample required"; exit 1 }
 
 # fastp does the trimming and emits a QC report in one pass.
 ${sample}.trim.R1.fq.gz ${sample}.trim.R2.fq.gz ${sample}.fastp.json: ${r1} ${r2} {{
-    name  = "fastp-${sample}"
-    procs = 4
-    mem   = "4G"
+    job.name  = "fastp-${sample}"
+    job.procs = 4
+    job.mem   = "4G"
     --
     fastp -i ${input[0]} -I ${input[1]} \
           -o ${output[0]} -O ${output[1]} \
-          --json ${output[2]} --thread ${procs}
+          --json ${output[2]} --thread ${job.procs}
 }}
 
 # FastQC on the trimmed reads (a sentinel HTML marks completion).
 ${sample}.trim.R1_fastqc.html: ${sample}.trim.R1.fq.gz {{
-    name = "fastqc-${sample}"
+    job.name = "fastqc-${sample}"
     --
     fastqc ${input}
 }}

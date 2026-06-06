@@ -26,18 +26,18 @@ genome_size ?= "hs"
 
 # One wildcard rule aligns any FASTQ to a sorted, indexed BAM.
 %.bam: %.fq.gz {{
-    name  = "align-${stem}"
-    procs = 4
+    job.name  = "align-${stem}"
+    job.procs = 4
     --
-    bowtie2 -p ${procs} -x ${index} -U ${input} \
-        | samtools sort -@ ${procs} -o ${output} -
+    bowtie2 -p ${job.procs} -x ${index} -U ${input} \
+        | samtools sort -@ ${job.procs} -o ${output} -
     samtools index ${output}
 }}
 
 # Call peaks from the treatment against the control (multi-input target).
 ${sample}_peaks.narrowPeak: ${treat.sub("\\.fq\\.gz$", "")}.bam ${control.sub("\\.fq\\.gz$", "")}.bam {{
-    name = "macs2-${sample}"
-    mem  = "8G"
+    job.name = "macs2-${sample}"
+    job.mem  = "8G"
     --
     macs2 callpeak -t ${input[0]} -c ${input[1]} \
         -g ${genome_size} -n ${sample} -f BAM
@@ -55,10 +55,11 @@ ${sample}_peaks.narrowPeak: ${treat.sub("\\.fq\\.gz$", "")}.bam ${control.sub("\
   treatment and the control; cgp instantiates it once per requested BAM. The
   `${treat.sub(...)}` / `${control.sub(...)}` expressions derive each BAM name from
   its FASTQ.
-- **A directive shadowing gotcha, avoided.** The script variable is `--sample`, not
-  `--name`, because a directive block's `name = ...` setting would otherwise
-  overwrite a script variable called `name`. Keep job-setting names (`name`, `mem`,
-  `procs`, …) distinct from your own variables.
+- **Job settings live under `job.`** Per-job knobs are namespaced — `job.name`,
+  `job.procs`, `job.mem` — so they never collide with your own script variables. A
+  variable called `name` (or `mem`, `procs`, …) coexists freely with the job setting
+  of the same name; the directive `job.name = "macs2-${sample}"` sets the scheduler
+  job name without touching the `sample` variable.
 
 ## Run it
 

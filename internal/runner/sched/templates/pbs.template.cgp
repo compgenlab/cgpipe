@@ -1,54 +1,54 @@
-#!${shell}
-#PBS -N ${name}
-% if hold {
+#!${job.shell}
+#PBS -N ${job.name}
+% if job.hold {
 #PBS -h
 % }
-% if env {
+% if job.env {
 #PBS -V
 % }
 % resources = []
-% nodespec = "nodes=1:ppn=" + procs
-% if gpu {
-% nodespec = nodespec + ":gpus=" + gpu
+% nodespec = "nodes=1:ppn=" + job.procs
+% if job.gpu {
+% nodespec = nodespec + ":gpus=" + job.gpu
 % }
 % resources += nodespec
-% if walltime {
-% resources += "walltime=" + walltime
+% if job.walltime {
+% resources += "walltime=" + job.walltime
 % }
-% if mem {
-% resources += "mem=" + mem
+% if job.mem {
+% resources += "mem=" + job.mem
 % }
-% if qos {
-% resources += "qos=" + qos
+% if job.qos {
+% resources += "qos=" + job.qos
 % }
 #PBS -l ${",".join(resources)}
-% if depids {
-#PBS -W depend=afterok:${depids}
+% if job.depids {
+#PBS -W depend=afterok:${job.depids}
 % }
-% if queue {
-#PBS -q ${queue}
+% if job.queue {
+#PBS -q ${job.queue}
 % }
-% if account {
-#PBS -A ${account}
+% if job.account {
+#PBS -A ${job.account}
 % }
-% if mail {
-#PBS -m ${mailtype}
-#PBS -M ${mail}
+% if job.mail {
+#PBS -m ${job.mailtype}
+#PBS -M ${job.mail}
 % }
-% if stdout {
-#PBS -o ${stdout}
+% if job.stdout {
+#PBS -o ${job.stdout}
 % }
-% if stderr {
-#PBS -e ${stderr}
+% if job.stderr {
+#PBS -e ${job.stderr}
 % }
-% for c in custom {
+% for c in job.custom {
 #PBS ${c}
 % }
 #
 set -eo pipefail
 JOB_ID=$PBS_JOBID
 
-% for line in setup {
+% for line in job.setup {
 ${line}
 % }
 

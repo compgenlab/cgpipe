@@ -50,7 +50,7 @@ overrides a config default.
 | `cgp.runner.<name>.<setting>` | Runner-specific options |
 | `cgp.runner.<name>.template` | Path to a custom submission template, replacing the built-in for that scheduler |
 | `cgp.runner.<name>.global_hold` | Submit every job held until the whole pipeline submits cleanly, then release (scheduler runners; off by default) |
-| `cgp.runner.sge.parallelenv` | SGE parallel-environment name, used for `-pe <pe> <procs>` when `procs > 1` |
+| `cgp.runner.sge.parallelenv` | SGE parallel-environment name, used for `-pe <pe> <procs>` when `job.procs > 1` |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of printing it (default off) |
 | `cgp.ledger` | Ledger database path; enables [cross-run tracking](10-The_Ledger.md) |
 | `cgp.run_id` | Run identifier |
@@ -67,31 +67,36 @@ stays small.
 
 ## Per-job settings: the `job.*` surface
 
-Per-job settings are `job.*`. Set a default globally with the prefix; drop the
-prefix inside a target's directive block:
+Per-job settings live under the `job.*` namespace, and carry the prefix
+everywhere — set globally as a default or inside a target's directive block:
 
 ```
 # global default in ~/.cgp/config
 job.mem = "4G"
 ```
 ```
-# per-target override, prefix dropped
+# per-target override, same prefix
 out.bam: in.bam {{
-    mem = "16G"
+    job.mem = "16G"
     --
     ...
 }}
 ```
 
-Common settings: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`,
-`container`, `gpu`, plus the assembly flags `shexec`, `nopre`, `nopost`. See
-[Running Jobs](08-Running_Jobs.md) for how each maps onto a scheduler.
+A global `job.*` setting is captured per target at definition time, so it becomes
+the default for every target defined after it unless that target overrides it
+(`job.procs` itself defaults to 1).
+
+Common settings: `job.name`, `job.procs`, `job.mem`, `job.walltime`,
+`job.stdout`, `job.stderr`, `job.container`, `job.gpu`, plus the assembly flags
+`job.shexec`, `job.nopre`, `job.nopost`. See [Running Jobs](08-Running_Jobs.md)
+for how each maps onto a scheduler.
 
 ## Custom runner templates
 
 The scheduler runners render each job from a template. For most site requirements
-the named settings (`account`, `queue`, `qos`, …) and the `custom` directive are
-enough. To replace the submission script wholesale, scaffold from the built-in and
+the named settings (`job.account`, `job.queue`, `job.qos`, …) and the `job.custom`
+directive are enough. To replace the submission script wholesale, scaffold from the built-in and
 edit it:
 
 ```sh

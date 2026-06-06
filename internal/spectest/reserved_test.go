@@ -28,7 +28,7 @@ func TestPrePostOptOut(t *testing.T) {
     echo START
 }}
 out: in {{
-    nopre = true
+    job.nopre = true
     --
     work
 }}`
@@ -47,7 +47,7 @@ func TestPostOptOut(t *testing.T) {
     echo END
 }}
 out: in {{
-    nopost = true
+    job.nopost = true
     --
     work
 }}`
@@ -63,7 +63,7 @@ func TestOptOutIsPerTarget(t *testing.T) {
     echo START
 }}
 skip: in {{
-    nopre = true
+    job.nopre = true
     --
     work-skip
 }}
@@ -81,7 +81,7 @@ keep: in {{
 // §8 @setup may run on the submit host with shexec; it's collected as the setup
 // target.
 func TestSetupCollected(t *testing.T) {
-	prog, _ := build(t, "@setup {{\n    shexec = true\n    --\n    mkdir -p out logs\n}}\nx: {{\n    true\n}}", nil)
+	prog, _ := build(t, "@setup {{\n    job.shexec = true\n    --\n    mkdir -p out logs\n}}\nx: {{\n    true\n}}", nil)
 	if prog.Setup == nil || !prog.Setup.HasBody {
 		t.Fatal("@setup target not collected")
 	}
@@ -93,7 +93,7 @@ func TestSetupRunsFirst(t *testing.T) {
 	// @setup makes a dir; the target writes into it. If setup didn't run first,
 	// the target's redirect would fail.
 	src := `@setup {{
-    shexec = true
+    job.shexec = true
     --
     mkdir -p sub
 }}
@@ -111,7 +111,7 @@ sub/out.txt: {{
 func TestSetupGoalTeardownOrder(t *testing.T) {
 	chdirTmp(t)
 	src := `@setup {{
-    shexec = true
+    job.shexec = true
     --
     echo setup >> order.log
 }}
@@ -120,7 +120,7 @@ out.txt: {{
     echo x > ${output}
 }}
 @teardown {{
-    shexec = true
+    job.shexec = true
     --
     echo teardown >> order.log
 }}

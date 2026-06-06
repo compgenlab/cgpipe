@@ -16,7 +16,7 @@ Two things enable wrapping: an **engine** and a per-target **image**.
 cgp.container.engine = "docker"
 
 out.bam: in.bam {{
-    container = "biocontainers/samtools:1.9"
+    job.container = "biocontainers/samtools:1.9"
     --
     samtools sort ${input} > ${output}
 }}
@@ -52,17 +52,17 @@ docker run --rm \
 
 cgp wrote your body to a temp file and ran it inside the image, bind-mounting the
 working directory (so `in.bam`/`out.bam` resolve) and mapping your user id (so the
-output isn't owned by root). The body itself is unchanged — drop the `container`
+output isn't owned by root). The body itself is unchanged — drop the `job.container`
 line and it runs bare.
 
 ## Per-target images
 
-Different jobs can use different images. Only the targets that name a `container`
+Different jobs can use different images. Only the targets that name a `job.container`
 are wrapped; others run on the host even with an engine configured:
 
 ```
 align.bam: reads.fq ref.fa {{
-    container = "biocontainers/bwa:0.7.17"
+    job.container = "biocontainers/bwa:0.7.17"
     --
     bwa mem ${ref} ${reads} > ${output}
 }}
@@ -79,10 +79,10 @@ container settings:
 
 ```
 out.bam: in.bam {{
-    container      = "img:1"
-    container.bind = ["/data", "/refs"]
-    container.env  = ["SAMPLE"]
-    container.opts = ["--shm-size=1g"]
+    job.container      = "img:1"
+    job.container.bind = ["/data", "/refs"]
+    job.container.env  = ["SAMPLE"]
+    job.container.opts = ["--shm-size=1g"]
     --
     run ${input} > ${output}
 }}
@@ -99,15 +99,15 @@ One setting requests GPUs for both the scheduler and the engine:
 
 ```
 train.model: data.tfrecord {{
-    container = "tensorflow/tensorflow:latest-gpu"
-    gpu       = 2
+    job.container = "tensorflow/tensorflow:latest-gpu"
+    job.gpu       = 2
     --
     train.py --data ${input} --out ${output}
 }}
 ```
 
 On SLURM this emits `#SBATCH --gres=gpu:2`; inside Docker it adds `--gpus`, and
-inside Singularity/Apptainer `--nv`. You don't keep two GPU flags in sync — `gpu`
+inside Singularity/Apptainer `--nv`. You don't keep two GPU flags in sync — `job.gpu`
 drives both.
 
 ## Next

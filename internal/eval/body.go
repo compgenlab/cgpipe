@@ -23,9 +23,9 @@ func (p *Program) RenderTarget(t *Target) (string, error) {
 }
 
 // JobContext renders a target's body and returns the resulting job variables
-// (the target's captured scope plus the directive settings, with global job.<x>
-// promoted to bare <x>) alongside the rendered body. Scheduler runners use this
-// to feed a submission template.
+// (the target's captured scope plus the directive settings, all under the job.<x>
+// namespace) alongside the rendered body. Scheduler runners use this to feed a
+// submission template.
 func (p *Program) JobContext(t *Target) (map[string]Value, string, error) {
 	sc, body, err := p.renderTargetScope(t)
 	if err != nil {
@@ -71,29 +71,29 @@ func (p *Program) RenderText(tmpl string, vars map[string]Value) (string, error)
 }
 
 // renderTargetScope builds the render scope for t (captured scope + input/output/
-// stem + global job.* promoted to bare names), evaluates the directive block as a
-// side effect, and returns the scope and the rendered body (with @pre/@post).
+// stem + the per-target job.name default), evaluates the directive block as a side
+// effect, and returns the scope and the rendered body (with @pre/@post). All job
+// settings live under the job.* namespace; ordinary user variables stay bare.
 func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 	sc := t.Scope.clone()
 	sc.set("input", StrList(t.Inputs))
 	sc.set("output", StrList(t.Outputs))
 	sc.set("stem", StrVal(t.Stem))
-	for k, v := range t.Scope.vars {
-		if bare, ok := strings.CutPrefix(k, "job."); ok && !sc.has(bare) {
-			sc.set(bare, v)
-		}
+	if !sc.has("job.name") {
+		sc.set("job.name", StrVal(defaultJobName(t)))
 	}
 	ip := &interp{sc: sc, out: io.Discard, prog: p}
 
 	// Render the main body first: its directive block sets per-job settings —
-	// including nopre / nopost — into sc, which then decide @pre / @post wrapping.
+	// including job.nopre / job.nopost — into sc, which then decide @pre / @post
+	// wrapping.
 	main, err := ip.renderBodyText(t.Body)
 	if err != nil {
 		return nil, "", err
 	}
 
 	var sections []string
-	if t.Special == "" && p.Pre != nil && !scopeTruthy(sc, "nopre") {
+	if t.Special == "" && p.Pre != nil && !scopeTruthy(sc, "job.nopre") {
 		s, err := ip.renderBodyText(p.Pre.Body)
 		if err != nil {
 			return nil, "", fmt.Errorf("@pre: %w", err)
@@ -101,7 +101,7 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 		sections = append(sections, s)
 	}
 	sections = append(sections, main)
-	if t.Special == "" && p.Post != nil && !scopeTruthy(sc, "nopost") {
+	if t.Special == "" && p.Post != nil && !scopeTruthy(sc, "job.nopost") {
 		s, err := ip.renderBodyText(p.Post.Body)
 		if err != nil {
 			return nil, "", fmt.Errorf("@post: %w", err)
@@ -113,11 +113,23 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 	return sc, body, nil
 }
 
+// defaultJobName is the job name used when a target sets no job.name. It mirrors
+// the scheduler's fallback: the primary output, else cgp.<special>, else cgp.job.
+func defaultJobName(t *Target) string {
+	if len(t.Outputs) > 0 {
+		return t.Outputs[0]
+	}
+	if t.Special != "" {
+		return "cgp." + t.Special
+	}
+	return "cgp.job"
+}
+
 // wrapContainer wraps the body to run inside a container when cgp.container.engine
-// and a per-target image (container = …) are both set.
+// and a per-target image (job.container = …) are both set.
 func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
 	engine := p.settingStr("cgp.container.engine")
-	image := scopeStr(sc, "container")
+	image := scopeStr(sc, "job.container")
 	if engine == "" || image == "" {
 		return body
 	}
@@ -125,7 +137,7 @@ func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
 	if e := strings.ToLower(engine); e == "singularity" || e == "apptainer" {
 		optsKey = "cgp.container.singularity_opts"
 	}
-	gpu := scopeStr(sc, "gpu")
+	gpu := scopeStr(sc, "job.gpu")
 	if gpu == "" {
 		gpu = p.settingStr("cgp.gpu")
 	}
@@ -141,16 +153,16 @@ func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
 	return container.Wrap(body, container.Spec{
 		Engine:     engine,
 		Image:      image,
-		WorkingDir: scopeStr(sc, "wd"),
-		BodyDir:    firstNonEmpty(scopeStr(sc, "container.body_dir"), p.settingStr("cgp.container.body_dir")),
-		Shell:      firstNonEmpty(scopeStr(sc, "container.shell"), p.settingStr("cgp.container.shell")),
+		WorkingDir: scopeStr(sc, "job.wd"),
+		BodyDir:    firstNonEmpty(scopeStr(sc, "job.container.body_dir"), p.settingStr("cgp.container.body_dir")),
+		Shell:      firstNonEmpty(scopeStr(sc, "job.container.shell"), p.settingStr("cgp.container.shell")),
 		GPU:        gpu,
 		UserMap:    userMap,
-		Binds:      append(scopeList(sc, "container.bind"), p.settingList("cgp.container.bind")...),
+		Binds:      append(scopeList(sc, "job.container.bind"), p.settingList("cgp.container.bind")...),
 		Inputs:     t.Inputs,
 		Outputs:    t.Outputs,
-		Env:        append(scopeList(sc, "container.env"), p.settingList("cgp.container.env")...),
-		Opts:       append(scopeList(sc, "container.opts"), p.settingList(optsKey)...),
+		Env:        append(scopeList(sc, "job.container.env"), p.settingList("cgp.container.env")...),
+		Opts:       append(scopeList(sc, "job.container.opts"), p.settingList(optsKey)...),
 	})
 }
 
