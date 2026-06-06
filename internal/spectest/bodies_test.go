@@ -17,7 +17,7 @@ func TestBodyTemplateSubstitution(t *testing.T) {
 // §6.2 A directive block before `--` sets per-job settings and is stripped from
 // the rendered shell.
 func TestDirectivesStripped(t *testing.T) {
-	got := render(t, "out: in {{\n    mem = \"16G\"\n    procs = 4\n    --\n    process ${input} > ${output}\n}}\n@default: out")
+	got := render(t, "out: in {{\n    job.mem = \"16G\"\n    job.procs = 4\n    --\n    process ${input} > ${output}\n}}\n@default: out")
 	lines := shellLines(got)
 	if len(lines) != 1 || lines[0] != "process in > out" {
 		t.Errorf("directives leaked into shell: %v", lines)
@@ -157,12 +157,12 @@ func TestDirectiveBlockControlFlow(t *testing.T) {
 		return "big = " + flag + `
 out: in {{
     if big {
-        mem = "16G"
+        job.mem = "16G"
     } else {
-        mem = "4G"
+        job.mem = "4G"
     }
     --
-    echo using ${mem}
+    echo using ${job.mem}
 }}`
 	}
 	if got := shellLines(render(t, mk("true"))); len(got) != 1 || got[0] != "echo using 16G" {
@@ -176,7 +176,7 @@ out: in {{
 // §6.5 Scoping: directive-block assignments are target-local and do not leak to
 // the global scope.
 func TestDirectiveAssignmentsDoNotLeak(t *testing.T) {
-	prog, _ := build(t, "out: in {{\n    mem = \"16G\"\n    --\n    work\n}}", nil)
+	prog, _ := build(t, "out: in {{\n    job.mem = \"16G\"\n    --\n    work\n}}", nil)
 	if _, ok := prog.Get("mem"); ok {
 		t.Error("a directive-block `mem =` leaked into the global scope")
 	}

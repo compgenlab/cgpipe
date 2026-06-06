@@ -4,8 +4,8 @@
 # different — a SITE marker and no `set -eo pipefail` / JOB_ID boilerplate.
 cgp.runner.slurm.template = "my.template.cgp"
 out.bam: {{
-    name   = "j"
-    custom = ["--exclusive"]
+    job.name   = "j"
+    job.custom = ["--exclusive"]
     --
     run > ${output}
 }}

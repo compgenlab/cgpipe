@@ -42,9 +42,9 @@ Here is a one-target pipeline that aligns reads:
 # Align reads to a reference.
 
 aligned.bam: ${reads} ${ref} {{
-    procs = 4
+    job.procs = 4
     --
-    bwa mem -t ${procs} ${ref} ${reads} | samtools sort -o ${output}
+    bwa mem -t ${job.procs} ${ref} ${reads} | samtools sort -o ${output}
 }}
 
 @default: aligned.bam
@@ -62,7 +62,7 @@ bwa mem -t 4 ref.fa reads.fq | samtools sort -o aligned.bam
 ```
 
 Add `-r slurm` — *nothing else changes* — and the very same target becomes an
-`sbatch` submission, with `procs = 4` mapped to the scheduler's CPU request:
+`sbatch` submission, with `job.procs = 4` mapped to the scheduler's CPU request:
 
 ```console
 $ cgp -dr -r slurm align.cgp --reads reads.fq --ref ref.fa

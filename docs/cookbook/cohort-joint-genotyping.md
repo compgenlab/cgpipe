@@ -24,8 +24,8 @@ intervals ?= "chr1 chr2 chr3 chrX".split(" ")
 
 # Gather: import all sample gVCFs into a GenomicsDB, then joint-genotype.
 cohort.vcf.gz: @{gvcf} ${ref} {{
-    name = "joint-genotype"
-    mem  = "32G"
+    job.name = "joint-genotype"
+    job.mem  = "32G"
     --
     gatk GenomicsDBImport ${if gvcf; "-V " + gvcf.join(" -V ")} \
         --genomicsdb-workspace-path cohort_db \
@@ -76,7 +76,7 @@ where each per-sample pipeline ends with an `export`:
 ```
 # call-one.cgp (use the full DNA-seq recipe in practice)
 ${sample}.g.vcf.gz: ${r1} ${r2} ${ref} {{
-    name = "call-${sample}"
+    job.name = "call-${sample}"
     --
     bwa mem ${ref} ${r1} ${r2} | samtools sort -o ${sample}.bam -
     gatk HaplotypeCaller -R ${ref} -I ${sample}.bam -ERC GVCF -O ${output}

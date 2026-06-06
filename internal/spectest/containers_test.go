@@ -7,7 +7,7 @@ import "testing"
 func TestContainerWrapDocker(t *testing.T) {
 	got := render(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
-    container = "biocontainers/samtools:1.9"
+    job.container = "biocontainers/samtools:1.9"
     --
     samtools sort ${input} > ${output}
 }}`)
@@ -27,7 +27,7 @@ out.txt: in.txt {{
 // §12 No engine ⇒ no wrapping, even with a container = image.
 func TestNoEngineNoWrap(t *testing.T) {
 	got := render(t, `out.bam: in.bam {{
-    container = "biocontainers/samtools:1.9"
+    job.container = "biocontainers/samtools:1.9"
     --
     samtools sort ${input} > ${output}
 }}`)
@@ -39,8 +39,8 @@ func TestNoEngineNoWrap(t *testing.T) {
 func TestContainerGPUDocker(t *testing.T) {
 	got := render(t, `cgp.container.engine = "docker"
 train.model: data.tf {{
-    container = "tf/tf:latest"
-    gpu = 2
+    job.container = "tf/tf:latest"
+    job.gpu = 2
     --
     train.py --data ${input} --out ${output}
 }}`)
@@ -51,8 +51,8 @@ train.model: data.tf {{
 func TestContainerSingularityGPU(t *testing.T) {
 	got := render(t, `cgp.container.engine = "singularity"
 out.bam: in.bam {{
-    container = "docker://biocontainers/bwa:0.7.17"
-    gpu = true
+    job.container = "docker://biocontainers/bwa:0.7.17"
+    job.gpu = true
     --
     bwa ${input} > ${output}
 }}`)
@@ -65,12 +65,12 @@ out.bam: in.bam {{
 func TestContainerDockerSettings(t *testing.T) {
 	got := render(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
-    container        = "img:1"
-    container.bind   = ["/data", "/refs"]
-    container.env    = ["SAMPLE"]
-    container.opts   = ["--shm-size=1g"]
-    container.body_dir = "/scratch"
-    container.shell  = "bash"
+    job.container        = "img:1"
+    job.container.bind   = ["/data", "/refs"]
+    job.container.env    = ["SAMPLE"]
+    job.container.opts   = ["--shm-size=1g"]
+    job.container.body_dir = "/scratch"
+    job.container.shell  = "bash"
     --
     run ${input} > ${output}
 }}`)
@@ -87,7 +87,7 @@ out.bam: in.bam {{
 func TestContainerUserMapToggle(t *testing.T) {
 	on := render(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
-    container = "img:1"
+    job.container = "img:1"
     --
     run ${input} > ${output}
 }}`)
@@ -96,7 +96,7 @@ out.bam: in.bam {{
 	off := render(t, `cgp.container.engine = "docker"
 cgp.container.user_map = false
 out.bam: in.bam {{
-    container = "img:1"
+    job.container = "img:1"
     --
     run ${input} > ${output}
 }}`)
@@ -107,9 +107,9 @@ out.bam: in.bam {{
 func TestContainerSingularitySettings(t *testing.T) {
 	got := render(t, `cgp.container.engine = "singularity"
 out.bam: in.bam {{
-    container      = "img.sif"
-    container.bind = ["/data"]
-    container.env  = ["SAMPLE"]
+    job.container      = "img.sif"
+    job.container.bind = ["/data"]
+    job.container.env  = ["SAMPLE"]
     --
     run ${input} > ${output}
 }}`)
@@ -123,7 +123,7 @@ func TestContainerGlobalBind(t *testing.T) {
 	got := render(t, `cgp.container.engine = "docker"
 cgp.container.bind = ["/shared"]
 out.bam: in.bam {{
-    container = "img:1"
+    job.container = "img:1"
     --
     run ${input} > ${output}
 }}`)

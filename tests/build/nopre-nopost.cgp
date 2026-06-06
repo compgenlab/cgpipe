@@ -9,8 +9,8 @@ wrapped.txt: {{
     echo a > ${output}
 }}
 bare.txt: {{
-    nopre = true
-    nopost = true
+    job.nopre = true
+    job.nopost = true
     --
     echo b > ${output}
 }}

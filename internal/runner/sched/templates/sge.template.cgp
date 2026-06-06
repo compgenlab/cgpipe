@@ -1,54 +1,54 @@
-#!${shell}
+#!${job.shell}
 #$ -w e
 #$ -terse
-#$ -N ${name.sub("/", "_")}
-% if hold {
+#$ -N ${job.name.sub("/", "_")}
+% if job.hold {
 #$ -h
 % }
-% if env {
+% if job.env {
 #$ -V
 % }
-% if walltime {
-#$ -l h_rt=${walltime}
+% if job.walltime {
+#$ -l h_rt=${job.walltime}
 % }
-% if procs > 1 {
-% if parallelenv {
-#$ -pe ${parallelenv} ${procs}
+% if job.procs > 1 {
+% if job.parallelenv {
+#$ -pe ${job.parallelenv} ${job.procs}
 % }
 % }
-% if mem {
-#$ -l h_vmem=${mem}
+% if job.mem {
+#$ -l h_vmem=${job.mem}
 % }
-% if gpu {
-#$ -l gpu=${gpu}
+% if job.gpu {
+#$ -l gpu=${job.gpu}
 % }
-% if depids {
-#$ -hold_jid ${depids}
+% if job.depids {
+#$ -hold_jid ${job.depids}
 % }
-% if queue {
-#$ -q ${queue}
+% if job.queue {
+#$ -q ${job.queue}
 % }
-% if account {
-#$ -A ${account}
+% if job.account {
+#$ -A ${job.account}
 % }
-% if mail {
-#$ -M ${mail}
-#$ -m ${mailtype}
+% if job.mail {
+#$ -M ${job.mail}
+#$ -m ${job.mailtype}
 % }
-% if stdout {
-#$ -o ${stdout}
+% if job.stdout {
+#$ -o ${job.stdout}
 % }
-% if stderr {
-#$ -e ${stderr}
+% if job.stderr {
+#$ -e ${job.stderr}
 % }
-% for c in custom {
+% for c in job.custom {
 #$ ${c}
 % }
 #$ -notify
 
 set -eo pipefail
 
-% for line in setup {
+% for line in job.setup {
 ${line}
 % }
 

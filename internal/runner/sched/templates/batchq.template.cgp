@@ -1,31 +1,31 @@
-#!${shell}
-#BATCHQ -name ${name}
-% if run_id {
-#BATCHQ -run-id ${run_id}
+#!${job.shell}
+#BATCHQ -name ${job.name}
+% if job.run_id {
+#BATCHQ -run-id ${job.run_id}
 % }
-% if hold {
+% if job.hold {
 #BATCHQ -hold
 % }
-% if procs > 1 {
-#BATCHQ -procs ${procs}
+% if job.procs > 1 {
+#BATCHQ -procs ${job.procs}
 % }
-% if mem {
-#BATCHQ -mem ${mem}
+% if job.mem {
+#BATCHQ -mem ${job.mem}
 % }
-% if walltime {
-#BATCHQ -walltime ${walltime}
+% if job.walltime {
+#BATCHQ -walltime ${job.walltime}
 % }
-% if depids {
-#BATCHQ -afterok ${depids}
+% if job.depids {
+#BATCHQ -afterok ${job.depids}
 % }
-% if mail {
-#BATCHQ -mail ${mail}
+% if job.mail {
+#BATCHQ -mail ${job.mail}
 % }
-% if stdout {
-#BATCHQ -stdout ${stdout}
+% if job.stdout {
+#BATCHQ -stdout ${job.stdout}
 % }
-% if stderr {
-#BATCHQ -stderr ${stderr}
+% if job.stderr {
+#BATCHQ -stderr ${job.stderr}
 % }
 % for input in _inputs {
 #BATCHQ -input ${input}
@@ -33,17 +33,17 @@
 % for output in _outputs {
 #BATCHQ -output ${output}
 % }
-% for c in custom {
+% for c in job.custom {
 #BATCHQ ${c}
 % }
 #BATCHQ -wd .
-% if env {
+% if job.env {
 #BATCHQ -env
 % }
 
 set -eo pipefail
 
-% for line in setup {
+% for line in job.setup {
 ${line}
 % }
 

@@ -8,7 +8,7 @@
 # columns available as ${sample} and ${input}.
 
 ${sample}.sum: ${input} {{
-    name = "sum-${sample}"
+    job.name = "sum-${sample}"
     --
     tr ' ' '\n' < ${input} | awk '{s += $1} END {print "${sample}:", s}' > ${output}
 }}

@@ -72,15 +72,15 @@ func captured(t *testing.T, dir, name string) string {
 // submitChain is a two-target pipeline: b.bam depends on a.bam, so a submits
 // first (job 1001) and b second (job 1002, depending on 1001).
 const submitChain = `a.bam: {{
-    name = "align"
-    mem  = "8G"
-    procs = 4
-    walltime = "12:00:00"
+    job.name = "align"
+    job.mem  = "8G"
+    job.procs = 4
+    job.walltime = "12:00:00"
     --
     echo a > ${output}
 }}
 b.bam: a.bam {{
-    name = "post"
+    job.name = "post"
     --
     cp ${input} ${output}
 }}
@@ -133,12 +133,12 @@ func TestOpportunisticSchedulerDep(t *testing.T) {
 	capture := installMocks(t, "slurm")
 	workdir := t.TempDir()
 	src := `prod.bam: {{
-    name = "prod"
+    job.name = "prod"
     --
     echo x > ${output}
 }}
 : prod.bam {{
-    name = "cleanup"
+    job.name = "cleanup"
     --
     rm -f prod.bam
 }}
@@ -160,12 +160,12 @@ func TestPostsubmitSeesJobID(t *testing.T) {
 	installMocks(t, "slurm")
 	workdir := t.TempDir()
 	src := `a.bam: {{
-    name = "a"
+    job.name = "a"
     --
     echo a > ${output}
 }}
 b.bam: a.bam {{
-    name = "b"
+    job.name = "b"
     --
     cp ${input} ${output}
 }}
@@ -199,12 +199,12 @@ func TestShexecRunsOnSubmitHost(t *testing.T) {
 	capture := installMocks(t, "slurm")
 	workdir := t.TempDir()
 	src := `@setup {{
-    shexec = true
+    job.shexec = true
     --
     echo ok > setup_marker.txt
 }}
 out.bam: {{
-    name = "j"
+    job.name = "j"
     --
     echo x > ${output}
 }}
@@ -274,7 +274,7 @@ func TestLedgerReuseAcrossRuns(t *testing.T) {
 	workdir := t.TempDir()
 	ledgerPath := filepath.Join(workdir, "ledger.db")
 	src := "cgp.ledger = \"" + ledgerPath + "\"\n" +
-		"a.bam: {{\n    name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
+		"a.bam: {{\n    job.name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
 	sch, _ := sched.For("slurm")
 
 	// Run 1: submits job 1001.
@@ -329,7 +329,7 @@ func TestGlobalHoldReleases(t *testing.T) {
 	capture := installMocks(t, "slurm")
 	workdir := t.TempDir()
 	src := "cgp.runner.slurm.global_hold = true\n" +
-		"a.bam: {{\n    name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
+		"a.bam: {{\n    job.name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
 	prog, _ := build(t, src, nil)
 	sch, _ := sched.For("slurm")
 	var out bytes.Buffer
@@ -350,7 +350,7 @@ func TestRealBatchqIfPresent(t *testing.T) {
 		t.Skip("no real batchq on PATH; mock-backed coverage in TestSchedulerSubmissionMatrix")
 	}
 	workdir := t.TempDir()
-	src := "a.txt: {{\n    name = \"a\"\n    --\n    echo hi > ${output}\n}}\n@default: a.txt"
+	src := "a.txt: {{\n    job.name = \"a\"\n    --\n    echo hi > ${output}\n}}\n@default: a.txt"
 	prog, _ := build(t, src, nil)
 	sch, _ := sched.For("batchq")
 	var out bytes.Buffer

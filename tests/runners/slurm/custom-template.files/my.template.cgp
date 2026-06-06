@@ -1,7 +1,7 @@
-#!${shell}
+#!${job.shell}
 # SITE TEMPLATE
-#SBATCH -J ${name}
-% for c in custom {
+#SBATCH -J ${job.name}
+% for c in job.custom {
 #SBATCH ${c}
 % }
 module load site/env

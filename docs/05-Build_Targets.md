@@ -98,28 +98,32 @@ is shell:
 
 ```
 out.txt: in.txt {{
-    procs = threads
-    mem   = "16G"
+    job.procs = threads
+    job.mem   = "16G"
     --
-    sort --parallel=${procs} ${input} > ${output}
+    sort --parallel=${job.procs} ${input} > ${output}
 }}
 ```
 
-Directive assignments don't emit shell — they configure the job (here `procs` and
-`mem`, which a scheduler turns into CPU and memory requests). The rendered shell is
-just:
+Directive assignments don't emit shell — they configure the job (here `job.procs`
+and `job.mem`, which a scheduler turns into CPU and memory requests). The rendered
+shell is just:
 
 ```bash
 sort --parallel=8 in.txt > out.txt
 ```
 
-The `job.` prefix is dropped inside a directive block: `mem` means the global
-`job.mem`. Ordinary cgp control flow is allowed there too (it's cgp mode).
+Per-job settings always carry the `job.` prefix — `job.mem`, `job.procs`,
+`job.name`, and so on — both here in a directive block and when set globally before
+your targets. Ordinary cgp control flow is allowed in the block too (it's cgp
+mode). A setting captured here applies to *this* target; set it globally and it
+becomes the default for every target defined after it (`job.procs` itself defaults
+to 1).
 
 > **`--` is the only thing that opens a directive block.** A body with **no `--`
 > is entirely shell** — a line that merely looks like a directive (e.g.
-> `mem = "16G"`) is passed through to the shell verbatim, not interpreted and not
-> warned about. To set per-job settings, you must write the `--`.
+> `job.mem = "16G"`) is passed through to the shell verbatim, not interpreted and
+> not warned about. To set per-job settings, you must write the `--`.
 
 The settings you can put here are the `job.*` surface — see
 [Running Jobs](08-Running_Jobs.md) and the

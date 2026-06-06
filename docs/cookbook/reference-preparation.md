@@ -18,22 +18,22 @@ if !ref { print "ERROR: --ref required"; exit 1 }
 
 # bwa index (produces ref.fa.bwt and friends; track the .bwt as the sentinel)
 ${ref}.bwt: ${ref} {{
-    name = "bwa-index"
-    mem  = "8G"
+    job.name = "bwa-index"
+    job.mem  = "8G"
     --
     bwa index ${input}
 }}
 
 # samtools faidx -> ref.fa.fai
 ${ref}.fai: ${ref} {{
-    name = "faidx"
+    job.name = "faidx"
     --
     samtools faidx ${input}
 }}
 
 # GATK/Picard sequence dictionary -> ref.dict
 ${ref.sub("\\.fa(sta)?$", "")}.dict: ${ref} {{
-    name = "seq-dict"
+    job.name = "seq-dict"
     --
     gatk CreateSequenceDictionary -R ${input}
 }}

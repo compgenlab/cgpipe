@@ -2,9 +2,9 @@
 # shell template after -- may read them. Directive assignments don't emit shell.
 threads = 8
 out.txt: in.txt {{
-    procs = threads
-    mem   = "16G"
+    job.procs = threads
+    job.mem   = "16G"
     --
-    sort --parallel=${procs} ${input} > ${output}
+    sort --parallel=${job.procs} ${input} > ${output}
 }}
 @default: out.txt

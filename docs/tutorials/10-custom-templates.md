@@ -2,30 +2,31 @@
 
 Real clusters have local requirements — an account to bill, a partition to target,
 a QoS, a mandatory `--constraint`. cgp gives you two levers for these: **named
-settings** that the scheduler templates already understand, and a **`custom`**
+settings** that the scheduler templates already understand, and a **`job.custom`**
 escape hatch for anything they don't.
 
 ## Named settings
 
-The SLURM template understands more than the common `name`/`mem`/`procs`/`walltime`.
-Set any of these in a directive block (or globally with the `job.` prefix in
-config):
+The SLURM template understands more than the common
+`job.name`/`job.mem`/`job.procs`/`job.walltime`. Set any of these in a directive
+block (the `job.` prefix is the same whether you set them per target or globally
+in config):
 
 | Setting | SLURM line |
 |---------|-----------|
-| `account` | `#SBATCH -A <account>` |
-| `queue` | `#SBATCH -p <queue>` (partition) |
-| `qos` | `#SBATCH --qos=<qos>` |
-| `nice` | `#SBATCH --nice=<nice>` |
-| `mail` | `#SBATCH --mail-type=… --mail-user=…` |
-| `stdout` / `stderr` | `#SBATCH -o` / `-e` |
+| `job.account` | `#SBATCH -A <account>` |
+| `job.queue` | `#SBATCH -p <queue>` (partition) |
+| `job.qos` | `#SBATCH --qos=<qos>` |
+| `job.nice` | `#SBATCH --nice=<nice>` |
+| `job.mail` | `#SBATCH --mail-type=… --mail-user=…` |
+| `job.stdout` / `job.stderr` | `#SBATCH -o` / `-e` |
 
 ```
 out.bam: {{
-    name    = "j"
-    account = "lab123"
-    queue   = "highmem"
-    qos     = "long"
+    job.name    = "j"
+    job.account = "lab123"
+    job.queue   = "highmem"
+    job.qos     = "long"
     --
     run > ${output}
 }}
@@ -51,15 +52,15 @@ job.account  = "lab123"
 job.queue    = "highmem"
 ```
 
-## The `custom` escape hatch
+## The `job.custom` escape hatch
 
-For directives cgp doesn't model, `custom` is a list of lines emitted verbatim as
-that scheduler's directives:
+For directives cgp doesn't model, `job.custom` is a list of lines emitted verbatim
+as that scheduler's directives:
 
 ```
 out.bam: {{
-    name   = "j"
-    custom = ["--exclusive", "--constraint=haswell"]
+    job.name   = "j"
+    job.custom = ["--exclusive", "--constraint=haswell"]
     --
     run ${output}
 }}
@@ -74,7 +75,7 @@ $ cgp -dr -r slurm pipeline.cgp
 ...
 ```
 
-Because `custom` lines are passed straight through, you can express any
+Because `job.custom` lines are passed straight through, you can express any
 site-specific `#SBATCH`/`#$`/`#PBS` directive without waiting for cgp to grow a
 setting for it. Set it globally (`job.custom = ["--account=lab123"]`) to apply it
 to every job.
@@ -86,15 +87,15 @@ cgp's body language (`${...}` substitution and `%`-control lines). The SLURM
 template, for example, contains:
 
 ```
-#!${shell}
-#SBATCH -J ${name}
-% if walltime {
-#SBATCH -t ${walltime}
+#!${job.shell}
+#SBATCH -J ${job.name}
+% if job.walltime {
+#SBATCH -t ${job.walltime}
 % }
-% if account {
-#SBATCH -A ${account}
+% if job.account {
+#SBATCH -A ${job.account}
 % }
-% for c in custom {
+% for c in job.custom {
 #SBATCH ${c}
 % }
 
@@ -102,7 +103,7 @@ set -eo pipefail
 ${_body}
 ```
 
-The `% if account { … }` blocks are why a setting only appears when you set it. The
+The `% if job.account { … }` blocks are why a setting only appears when you set it. The
 built-in templates (SLURM, SGE, PBS, BatchQ) live with the binary and cover the
 common cluster setups.
 
@@ -116,8 +117,9 @@ your **own** template. Start from the built-in:
 cgp show-template -r slurm > ~/.cgp/custom_template.cgp
 ```
 
-Edit that file (it's the body language: `${name}`, `${mem}`, `${procs}`,
-`${walltime}`, `${custom}`, `${depids}`, the rendered job as `${_body}`, etc.), and
+Edit that file (it's the body language: `${job.name}`, `${job.mem}`, `${job.procs}`,
+`${job.walltime}`, `${job.custom}`, `${job.depids}`, the rendered job as `${_body}`,
+etc.), and
 cgp uses it for the active scheduler runner. Two ways to point at a template:
 
 | Source | Scope |

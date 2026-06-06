@@ -35,7 +35,7 @@ func TestRenderIndexedInputOutput(t *testing.T) {
 }
 
 func TestRenderDirectivesStripped(t *testing.T) {
-	got := renderFirst(t, "out: in {{\n    mem = \"16G\"\n    procs = 4\n    --\n    process ${input} > ${output}\n}}")
+	got := renderFirst(t, "out: in {{\n    job.mem = \"16G\"\n    job.procs = 4\n    --\n    process ${input} > ${output}\n}}")
 	if strings.TrimSpace(got) != "process in > out" {
 		t.Errorf("render = %q (directives must not appear in shell)", got)
 	}
@@ -127,7 +127,7 @@ out: in {{
 func TestRenderContainerWrap(t *testing.T) {
 	got := renderFirst(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
-    container = "biocontainers/samtools:1.9"
+    job.container = "biocontainers/samtools:1.9"
     --
     samtools sort ${input} > ${output}
 }}`)

@@ -2,7 +2,7 @@
 # after the whole pipeline submits cleanly (scontrol release).
 cgp.runner.slurm.global_hold = true
 out.bam: {{
-    name = "j"
+    job.name = "j"
     --
     echo x > ${output}
 }}

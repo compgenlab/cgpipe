@@ -100,9 +100,13 @@ out1 out2 : in1 in2 {{
 ```
 - **Build vars** (in body): `${input}` `${output}` `${stem}` (+ `${input[0]}`,
   `${output[1]}`). `${input}` joins all inputs with spaces; index for one.
-- **Directive block** (before `--`): bare `name = value` set per-job settings
-  (`mem`, `procs`, `walltime`, `name`, `stdout`, `stderr`, `gpu`, `mail`, `account`,
-  `queue`, `qos`, `container`, `custom=[...]`, `shexec`, `nopre`, `nopost`).
+- **Directive block** (before `--`): set per-job settings under the `job.` namespace
+  (`job.mem`, `job.procs`, `job.walltime`, `job.name`, `job.stdout`, `job.stderr`,
+  `job.gpu`, `job.mail`, `job.account`, `job.queue`, `job.qos`, `job.container`,
+  `job.custom=[...]`, `job.shexec`, `job.nopre`, `job.nopost`). Read them back in the
+  body/template as `${job.procs}` etc. A bare name is always a user variable, never a
+  job setting, so `--name foo` (`name`) and `job.name` never collide. `job.procs`
+  defaults to 1; a setting is the default for targets defined after it.
   **No `--` ⇒ no directive block; the whole body is shell.**
 - Body is raw shell: only `\$`/`\@` are special. `\$(cmd)` and `\${VAR}` defer to
   the job's shell (vs `$(cmd)`/`${var}` which cgp evaluates at render time).
@@ -163,14 +167,14 @@ parts = []
 for c in chroms {
     parts += "${out}.${c}.vcf.gz"
     ^${out}.${c}.vcf.gz: ${bam} ${ref} {{
-        name = "call-chr${c}"
-        mem  = "8G"
+        job.name = "call-chr${c}"
+        job.mem  = "8G"
         --
         bcftools mpileup -r chr${c} -f ${ref} ${bam} | bcftools call -mv -O z -o ${output}
     }}
 }
 ${out}.vcf.gz: @{parts} {{
-    name = "merge"
+    job.name = "merge"
     --
     bcftools concat -O z -o ${output} ${input}
 }}

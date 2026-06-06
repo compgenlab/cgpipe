@@ -19,8 +19,8 @@ for a target's own files inside its body.
 command line; falls back to the first defined target.
 [Reserved Targets](06-Reserved_Targets.md#the-default-goal-default).
 
-**Directive.** A per-job setting (`mem`, `procs`, `name`, …) assigned in a body's
-**directive block**, before the `--` separator.
+**Directive.** A per-job setting (`job.mem`, `job.procs`, `job.name`, …) assigned
+in a body's **directive block**, before the `--` separator.
 [Build Targets](05-Build_Targets.md#directives-and-the----separator).
 
 **Directive block.** The optional leading section of a body, before `--`, written
@@ -63,7 +63,7 @@ built into cgp and never a file on disk. [Reserved Targets](06-Reserved_Targets.
 `batchq`, `graphviz`, or `html`. Chosen with `-r` or `cgp.runner`.
 [Running Jobs](08-Running_Jobs.md#runners).
 
-**Shexec.** `shexec = true` — run a body directly on the submit host instead of
+**Shexec.** `job.shexec = true` — run a body directly on the submit host instead of
 submitting it (for `@setup`/`@teardown`).
 [Reserved Targets](06-Reserved_Targets.md#setup-and-teardown).
 

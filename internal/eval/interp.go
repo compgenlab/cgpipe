@@ -324,6 +324,9 @@ func (ip *interp) resolveDollarBrace(inside string) (string, error) {
 	}
 	if _, unset := v.(UnsetVal); unset {
 		name := strings.TrimSpace(inside)
+		if strings.HasPrefix(name, "job.") {
+			return "", fmt.Errorf("undefined job setting ${%s}", name)
+		}
 		if stage, export, ok := strings.Cut(name, "."); ok && identPathRe.MatchString(stage) && identPathRe.MatchString(export) {
 			return "", fmt.Errorf("${%s}: stage %q has no value %q (it may not have run, or did not export it)", name, stage, export)
 		}

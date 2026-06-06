@@ -83,8 +83,8 @@ func TestMakeVarIndices(t *testing.T) {
 func TestDirectiveBlock(t *testing.T) {
 	src := "out: in\n    <%\n        job.mem = \"8G\"\n        job.name = \"x\"\n    %>\n    do-thing $< > $>\n"
 	got := convertOf(t, src)
-	if !strings.Contains(got, "mem = \"8G\"") || strings.Contains(got, "job.mem") {
-		t.Errorf("job. prefix not stripped:\n%s", got)
+	if !strings.Contains(got, "job.mem = \"8G\"") {
+		t.Errorf("job. prefix not preserved:\n%s", got)
 	}
 	if !strings.Contains(got, "\n    --\n") {
 		t.Errorf("directive separator -- missing:\n%s", got)

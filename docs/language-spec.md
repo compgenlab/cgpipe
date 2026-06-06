@@ -202,17 +202,17 @@ A body is **raw shell, not a cgp string literal**, so its escape rule differs fr
 A target body may begin with a **directive block** that sets per-job settings, separated from the shell by a line containing only `--`:
 
     aligned.bam: reads.fq ref.fa {{
-        mem      = "16G"
-        procs    = threads
-        walltime = "12:00:00"
-        container = "biocontainers/bwa:0.7.17"
+        job.mem      = "16G"
+        job.procs    = threads
+        job.walltime = "12:00:00"
+        job.container = "biocontainers/bwa:0.7.17"
         --
-        bwa mem -t ${procs} ${ref} ${reads} > ${output}
+        bwa mem -t ${job.procs} ${ref} ${reads} > ${output}
     }}
 
-- Before `--`: **cgp code**. Bare `IDENT = expr` assignments set per-job settings (the `job.` prefix is dropped — `mem` means the old `job.mem`). Ordinary cgp control flow is allowed here (it's cgp mode, no `%` prefix needed).
-- After `--`: the **shell template**.
-- `--` is **optional**, and it is the *only* thing that introduces a directive block. A body with **no `--` is entirely shell** — there is no directive section, and a line that happens to look like a directive (e.g. `mem = "16G"`) is passed through to the shell verbatim, not interpreted by cgp and not warned about. To set per-job settings you must open a directive block with `--`.
+- Before `--`: **cgp code**. Per-job settings are assigned under the **`job.` namespace** (`job.mem`, `job.procs`, …); a bare `IDENT = expr` sets an ordinary user variable, never a job setting (see [§11.4](#114-per-job-settings-the-job-namespace)). Ordinary cgp control flow is allowed here (it's cgp mode, no `%` prefix needed).
+- After `--`: the **shell template**. Job settings are read back with the prefix, e.g. `${job.procs}`; a bare `${procs}` is the user variable (and errors if unset).
+- `--` is **optional**, and it is the *only* thing that introduces a directive block. A body with **no `--` is entirely shell** — there is no directive section, and a line that happens to look like a directive (e.g. `job.mem = "16G"`) is passed through to the shell verbatim, not interpreted by cgp and not warned about. To set per-job settings you must open a directive block with `--`.
 
       copy.txt: input.txt {{
           cp ${input} ${output}
@@ -221,7 +221,7 @@ A target body may begin with a **directive block** that sets per-job settings, s
 ### 6.3 Inline conditionals
 `${if cond; true_value; false_value}` substitutes one fragment or the other; the else-clause may be omitted (`${if cond; true_value}` ⇒ empty when false):
 
-    bwa mem -t ${procs} ${if rg; "-R " + rg} ${ref} ${reads} > ${output}
+    bwa mem -t ${job.procs} ${if rg; "-R " + rg} ${ref} ${reads} > ${output}
 
 ### 6.4 In-body control flow (`%` lines)
 For control flow that must wrap *shell* lines (loops/conditionals that emit shell), a line whose first non-whitespace character is `%` is a **cgp code line**. The rule is simply: **`%` at line start ⇒ cgp; otherwise ⇒ shell.** `%`-lines use the same brace syntax as anywhere else — there is no `done`/`endif`:
@@ -352,12 +352,12 @@ The reserved targets:
     }}
 
     @setup {{
-        shexec = true
+        job.shexec = true
         --
         mkdir -p output logs
     }}
 
-`shexec = true` runs the body directly on the submission host instead of submitting it (the usual choice for `mkdir`-style setup); only `@setup`/`@teardown` may be shexec, and `@postsubmit` always is. Per-target opt-out of `@pre`/`@post` via `nopre = true` / `nopost = true` directives.
+`job.shexec = true` runs the body directly on the submission host instead of submitting it (the usual choice for `mkdir`-style setup); only `@setup`/`@teardown` may be shexec, and `@postsubmit` always is. Per-target opt-out of `@pre`/`@post` via `job.nopre = true` / `job.nopost = true` directives.
 
 `@postsubmit` runs once for **each** submitted job, on the submit host, immediately after that job is submitted. Its body sees the just-submitted job's `${input}` / `${output}` / `${stem}`, plus **`${jobid}`** — the scheduler-assigned job id (empty under the shell runner, which has no ids). A typical use is recording submissions:
 
@@ -527,8 +527,10 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 
 `global_hold` (hold all jobs until the pipeline submits cleanly) and host-environment capture are **not** defaults — enable them in `~/.cgp/config` if you want them. This keeps the core small; belt-and-suspenders behavior is opt-in.
 
-### 11.4 Per-job directives (the `job.*` surface, prefix dropped in bodies)
-Set globally as `job.<name>` for defaults, or as a bare `<name>` directive inside a target body's directive block. Resource/identity: `name`, `procs`, `mem`, `walltime`, `stdout`, `stderr`, `queue`, `account`, `mail`, `gpu`, `container`. Submission control: `env` (capture the submit-host environment — SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`), `hold` (submit this job held), `setup` (a list of shell lines emitted before the body in the submission script), `custom` (extra directive lines, verbatim). Assembly flags: `shexec`, `nopre`, `nopost`. Scheduler-specific (ignored elsewhere): `qos` (SLURM/PBS), `nice` (SLURM); SGE's `-pe` needs `cgp.runner.sge.parallelenv` when `procs > 1`. The friendly reference with per-scheduler mapping is the [Running Jobs chapter](README.md).
+### 11.4 Per-job settings (the `job.*` namespace)
+Per-job settings live under a single **`job.` namespace** — written the same way everywhere: as a global default (`job.<name> = …`), as a directive inside a target body's directive block, and read back in bodies/templates as `${job.<name>}`. A bare name is always an ordinary user variable, never a job setting, so a user variable and a job setting may share a base name without colliding (`--name foo` sets `name`; `job.name = …` sets the job's name). Settings are captured per target at definition time, so a `job.*` set earlier (globally or in an enclosing scope) is the default for every target defined after it; `job.procs` is seeded to `1`.
+
+Resource/identity: `job.name`, `job.procs`, `job.mem`, `job.walltime`, `job.stdout`, `job.stderr`, `job.queue`, `job.account`, `job.mail`, `job.gpu`, `job.container`. Submission control: `job.env` (capture the submit-host environment — SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`), `job.hold` (submit this job held), `job.setup` (a list of shell lines emitted before the body in the submission script), `job.custom` (extra directive lines, verbatim). Assembly flags: `job.shexec`, `job.nopre`, `job.nopost`. Scheduler-specific (ignored elsewhere): `job.qos` (SLURM/PBS), `job.nice` (SLURM); SGE's `-pe` needs `cgp.runner.sge.parallelenv` when `job.procs > 1`. The friendly reference with per-scheduler mapping is the [Running Jobs chapter](README.md).
 
 ---
 
@@ -537,31 +539,31 @@ Set globally as `job.<name>` for defaults, or as a bare `<name>` directive insid
 A target's body can be wrapped to run inside a container without changing the body itself. Wrapping is enabled when **both** a container engine and a per-target image are set:
 
 - `cgp.container.engine` — `docker`, `singularity`, or `apptainer` (set in config or the script). Unset disables all wrapping.
-- `container = "<image>"` — a per-target directive naming the image. A target with no `container` runs unwrapped even when an engine is configured.
+- `job.container = "<image>"` — a per-target directive naming the image. A target with no `job.container` runs unwrapped even when an engine is configured.
 
       aligned.bam: reads.fq ref.fa {{
-          container = "biocontainers/bwa:0.7.17"
-          mem       = "16G"
+          job.container = "biocontainers/bwa:0.7.17"
+          job.mem       = "16G"
           --
           bwa mem ${ref} ${reads} > ${output}
       }}
 
-When wrapping is active, cgp writes the rendered body to a temp file and executes it inside the image, bind-mounting the input and output paths automatically, setting the working directory, and (for Docker) mapping the host user. Additional settings, available globally as `cgp.container.<name>` and/or per target as `container.<name>`:
+When wrapping is active, cgp writes the rendered body to a temp file and executes it inside the image, bind-mounting the input and output paths automatically, setting the working directory, and (for Docker) mapping the host user. Additional settings, available globally as `cgp.container.<name>` and/or per target as `job.container.<name>`:
 
 | Setting | Purpose |
 |---------|---------|
-| `container.bind` / `cgp.container.bind` | Extra bind mounts (repeatable / list) |
-| `container.env` / `cgp.container.env` | Environment variables to pass through |
-| `container.opts` (or `cgp.container.docker_opts` / `cgp.container.singularity_opts`) | Raw extra flags for the engine |
-| `container.body_dir` / `cgp.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
-| `container.shell` / `cgp.container.shell` | Shell used to run the body inside the image (default `sh`) |
+| `job.container.bind` / `cgp.container.bind` | Extra bind mounts (repeatable / list) |
+| `job.container.env` / `cgp.container.env` | Environment variables to pass through |
+| `job.container.opts` (or `cgp.container.docker_opts` / `cgp.container.singularity_opts`) | Raw extra flags for the engine |
+| `job.container.body_dir` / `cgp.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
+| `job.container.shell` / `cgp.container.shell` | Shell used to run the body inside the image (default `sh`) |
 | `cgp.container.user_map` | Docker only: add `-u $(id -u):$(id -g)` (default on) |
 
 ### 12.1 GPUs
-`gpu` requests GPUs for a target and drives both layers at once:
+`job.gpu` requests GPUs for a target and drives both layers at once:
 
     train.model: data.tfrecord {{
-        gpu = 2
+        job.gpu = 2
         --
         train.py --data ${input} --out ${output}
     }}
@@ -703,8 +705,8 @@ Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, rep
         per_chrom += "${out}.${c}.vcf.gz"
 
         ^${out}.${c}.vcf.gz: ${bam} ${ref} {{
-            name = "call-chr${c}"
-            mem  = "8G"
+            job.name = "call-chr${c}"
+            job.mem  = "8G"
             --
             bcftools mpileup -r chr${c} -f ${ref} ${bam} ${extra_flags?} \
                 | bcftools call -mv -O z -o ${output}.tmp - \
@@ -713,8 +715,8 @@ Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, rep
     }
 
     ${out}: @{per_chrom} {{
-        name = "merge-${out.basename()}"
-        mem  = "4G"
+        job.name = "merge-${out.basename()}"
+        job.mem  = "4G"
         --
         bcftools concat -O z -o ${output}.tmp ${input} && mv ${output}.tmp ${output}
     }}

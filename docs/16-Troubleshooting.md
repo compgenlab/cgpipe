@@ -78,14 +78,14 @@ out.txt: {{
 
 ### A directive seems to be ignored
 
-If you set `mem` or `procs` but it had no effect, check for the `--` separator. A
-body with **no `--` is entirely shell** — a `mem = "8G"` line with no `--` above it
-is passed through to the shell as a (broken) command, not interpreted as a
-directive. Open the directive block:
+If you set `job.mem` or `job.procs` but it had no effect, check for the `--`
+separator. A body with **no `--` is entirely shell** — a `job.mem = "8G"` line with
+no `--` above it is passed through to the shell as a (broken) command, not
+interpreted as a directive. Open the directive block:
 
 ```
 out.bam: in.bam {{
-    mem = "8G"
+    job.mem = "8G"
     --
     ...
 }}
@@ -116,7 +116,7 @@ working directory. cgp mounts the workdir (and `/tmp`) but not arbitrary paths �
 the others explicitly:
 
 ```
-container.bind = ["/data", "/refs"]
+job.container.bind = ["/data", "/refs"]
 ```
 
 [Containers and GPUs](09-Containers_and_GPUs.md#tuning-the-invocation).

@@ -29,7 +29,7 @@ parts = []
 for c in chroms {
     parts += "${out}.${c}.vcf.gz"
     ^${out}.${c}.vcf.gz: ${bam} ${ref} {{
-        name = "call-chr${c}"
+        job.name = "call-chr${c}"
         --
         bcftools mpileup -r chr${c} -f ${ref} ${bam} \
             | bcftools call -mv -O z -o ${output}
@@ -37,7 +37,7 @@ for c in chroms {
 }
 
 ${out}.vcf.gz: @{parts} {{
-    name = "merge"
+    job.name = "merge"
     --
     bcftools concat -O z -o ${output} ${input}
 }}

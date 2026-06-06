@@ -46,12 +46,12 @@ get the same wrapper for free.
 ## Opting a job out
 
 Some jobs shouldn't be wrapped — a quick `mkdir`, or a job whose logging would be
-noise. Opt out per target with the `nopre` / `nopost` directives:
+noise. Opt out per target with the `job.nopre` / `job.nopost` directives:
 
 ```
 bare.txt: {{
-    nopre  = true
-    nopost = true
+    job.nopre  = true
+    job.nopost = true
     --
     echo b > ${output}
 }}
@@ -63,16 +63,16 @@ bare.txt: {{
 
 `@pre`/`@post` run per job. For work that should happen **once** — before anything
 else, or after everything — use `@setup` and `@teardown`. These usually run on the
-submit host rather than as submitted jobs, via `shexec = true`:
+submit host rather than as submitted jobs, via `job.shexec = true`:
 
 ```
 @setup {{
-    shexec = true
+    job.shexec = true
     --
     mkdir -p logs
 }}
 @teardown {{
-    shexec = true
+    job.shexec = true
     --
     echo "pipeline complete"
 }}

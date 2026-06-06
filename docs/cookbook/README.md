@@ -19,7 +19,7 @@ in your reference and reads and they're ready to run.
 
 1. Copy the `.cgp` block into a file.
 2. Make sure the tools it lists are on your `PATH` (or set `cgp.container.engine`
-   and add `container = "..."` directives — see
+   and add `job.container = "..."` directives — see
    [Containers & GPUs](../09-Containers_and_GPUs.md)).
 3. Preview it with `cgp -dr recipe.cgp <args>` — this renders the exact commands
    without running them.
@@ -27,8 +27,8 @@ in your reference and reads and they're ready to run.
    (`cgp -r slurm recipe.cgp <args>`). Configure your cluster once in
    `~/.cgp/config` (see the [Configuration Reference](../13-Configuration_Reference.md)).
 
-The resource directives (`mem`, `procs`, `walltime`) are starting points — tune
-them for your data and cluster.
+The resource directives (`job.mem`, `job.procs`, `job.walltime`) are starting points
+— tune them for your data and cluster.
 
 ## See also
 

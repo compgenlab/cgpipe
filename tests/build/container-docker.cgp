@@ -2,7 +2,7 @@
 # container; input/output paths and the working dir are bind-mounted.
 cgp.container.engine = "docker"
 out.bam: in.bam {{
-    container = "biocontainers/samtools:1.9"
+    job.container = "biocontainers/samtools:1.9"
     --
     samtools sort ${input} > ${output}
 }}

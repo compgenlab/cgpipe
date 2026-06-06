@@ -13,11 +13,11 @@
 threads ?= 4
 
 result.txt: data/reads.txt {{
-    name     = "analyze"
-    procs    = threads
-    mem      = "8G"
-    walltime = "01:00:00"
+    job.name     = "analyze"
+    job.procs    = threads
+    job.mem      = "8G"
+    job.walltime = "01:00:00"
     --
-    wc -w < ${input} | xargs -I{} echo "processed {} reads with ${procs} threads" > ${output}
+    wc -w < ${input} | xargs -I{} echo "processed {} reads with ${job.procs} threads" > ${output}
 }}
 @default: result.txt

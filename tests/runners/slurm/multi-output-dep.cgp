@@ -1,12 +1,12 @@
 # A multi-output upstream feeds two inputs to one downstream job; the duplicate
 # afterok dependency on the single producer is collapsed (afterok:1001, once).
 a.bam a.bai: {{
-    name = "align"
+    job.name = "align"
     --
     echo a > a.bam; echo i > a.bai
 }}
 merged.bam: a.bam a.bai {{
-    name = "merge"
+    job.name = "merge"
     --
     cat ${input} > ${output}
 }}
