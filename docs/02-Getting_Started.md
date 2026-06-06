@@ -88,15 +88,15 @@ core of what cgp gives you.
 cgp is a single static binary with no runtime to install — no Python, no JVM, no
 shared libraries.
 
-**Download a release (recommended).** Grab the tarball for your platform from the
+**Download a release (recommended).** Grab the binary for your platform from the
 project's [Releases page](https://github.com/compgen-io/cgp/releases) — they're
-named `cgp-<version>-<os>-<arch>.tar.gz` (e.g. `cgp-v0.1.0-linux-amd64.tar.gz`,
-`...-darwin-arm64.tar.gz` for Apple Silicon). Extract it and put the `cgp` binary
-on your `PATH`:
+named `cgp-<version>-<os>-<arch>` (e.g. `cgp-v0.1.0-linux-amd64`,
+`cgp-v0.1.0-darwin-arm64` for Apple Silicon). It's a single uncompressed binary;
+make it executable and put it on your `PATH`:
 
 ```sh
-tar xzf cgp-v0.1.0-linux-amd64.tar.gz
-install cgp-v0.1.0-linux-amd64/cgp ~/bin/cgp     # somewhere on your PATH
+chmod +x cgp-v0.1.0-linux-amd64
+install cgp-v0.1.0-linux-amd64 ~/bin/cgp     # somewhere on your PATH
 cgp version
 ```
 

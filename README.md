@@ -29,9 +29,9 @@ cgp convert old.cgp -o new.cgp   # migrate a legacy cgpipe script
 
 ## Install
 
-cgp is a single static binary. Download the tarball for your platform from the
+cgp is a single static binary. Download the one for your platform from the
 [Releases page](https://github.com/compgen-io/cgp/releases)
-(`cgp-<version>-<os>-<arch>.tar.gz`), extract it, and put `cgp` on your `PATH`. See
+(`cgp-<version>-<os>-<arch>`), make it executable, and put it on your `PATH`. See
 [Getting Started](docs/02-Getting_Started.md#install) for details.
 
 ## Documentation
