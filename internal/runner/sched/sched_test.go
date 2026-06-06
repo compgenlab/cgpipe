@@ -2,6 +2,7 @@ package sched
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,6 +25,53 @@ func program(t *testing.T, src string) *eval.Program {
 		t.Fatalf("eval: %v", err)
 	}
 	return p
+}
+
+// installBatchqStatus puts a mock `batchq` on a temp PATH whose `status <id>`
+// prints "<id> <STATUS>" using the per-id status from the given map (and exits 0
+// even for finished jobs, like the real tool). An id absent from the map prints
+// nothing (unknown job).
+func installBatchqStatus(t *testing.T, status map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	var cases strings.Builder
+	for id, st := range status {
+		fmt.Fprintf(&cases, "    %s) echo \"%s %s\" ;;\n", id, id, st)
+	}
+	script := "#!/bin/bash\n[ \"$1\" = status ] || exit 0\ncase \"$2\" in\n" +
+		cases.String() + "esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "batchq"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestBatchqActiveAndState(t *testing.T) {
+	installBatchqStatus(t, map[string]string{
+		"j-hold": "USERHOLD", "j-wait": "WAITING", "j-queued": "QUEUED",
+		"j-proxy": "PROXYQUEUED", "j-run": "RUNNING",
+		"j-ok": "SUCCESS", "j-fail": "FAILED", "j-cancel": "CANCELED",
+	})
+	active := map[string]bool{
+		"j-hold": true, "j-wait": true, "j-queued": true, "j-proxy": true, "j-run": true,
+		"j-ok": false, "j-fail": false, "j-cancel": false,
+		"j-unknown": false, // not reported at all
+	}
+	for id, want := range active {
+		if got := batchqActive(id); got != want {
+			t.Errorf("batchqActive(%q) = %v, want %v", id, got, want)
+		}
+	}
+	state := map[string]string{
+		"j-hold": "queued", "j-wait": "queued", "j-queued": "queued", "j-proxy": "queued",
+		"j-run": "running", "j-ok": "done", "j-fail": "failed", "j-cancel": "failed",
+		"j-unknown": "",
+	}
+	for id, want := range state {
+		if got := batchqState(id); got != want {
+			t.Errorf("batchqState(%q) = %q, want %q", id, got, want)
+		}
+	}
 }
 
 // renderDry runs a scheduler in dry-run mode and returns the rendered scripts.
