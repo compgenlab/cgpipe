@@ -62,7 +62,8 @@ var schedulers = map[string]Scheduler{
 		SubCmd: []string{"batchq", "submit"}, HoldArgs: []string{"--hold"},
 		DepSep:     ",",
 		ReleaseCmd: func(id string) []string { return []string{"batchq", "release", id} },
-		IsActive:   func(id string) bool { return exec.Command("batchq", "status", id).Run() == nil },
+		IsActive:   batchqActive,
+		State:      batchqState,
 	},
 }
 
@@ -111,6 +112,50 @@ func slurmState(id string) string {
 	case "COMPLETED":
 		return "done"
 	case "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY", "BOOT_FAIL", "DEADLINE", "PREEMPTED":
+		return "failed"
+	}
+	return ""
+}
+
+// batchqStatus returns the status word BatchQ reports for a job (e.g. "RUNNING",
+// "SUCCESS"), or "" if the job is unknown or the query fails. `batchq status <id>`
+// prints one "<jobid> <STATUS>" line per job and exits 0 even for finished jobs —
+// so the status word, not the exit code, is what tells active from done.
+func batchqStatus(id string) string {
+	out, err := exec.Command("batchq", "status", id).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[0] == id {
+			return f[1]
+		}
+	}
+	return ""
+}
+
+// batchqActive reports whether a BatchQ job is still pending or running. The end
+// states (SUCCESS, FAILED, CANCELED) are NOT active, so a canceled/finished job
+// is treated as stale and resubmitted rather than reused.
+func batchqActive(id string) bool {
+	switch batchqStatus(id) {
+	case "USERHOLD", "WAITING", "QUEUED", "PROXYQUEUED", "RUNNING":
+		return true
+	}
+	return false
+}
+
+// batchqState maps a BatchQ status to the report vocabulary; "" means unknown.
+func batchqState(id string) string {
+	switch batchqStatus(id) {
+	case "USERHOLD", "WAITING", "QUEUED", "PROXYQUEUED":
+		return "queued"
+	case "RUNNING":
+		return "running"
+	case "SUCCESS":
+		return "done"
+	case "FAILED", "CANCELED":
 		return "failed"
 	}
 	return ""
