@@ -26,6 +26,7 @@ jobs:
       - run: go build ./...
       - run: go test ./...
       - run: make spec
+      - run: examples/check.sh
 
   lint:
     name: gofmt + vet

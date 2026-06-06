@@ -57,6 +57,12 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 | `internal/convert/` | best-effort migrator from legacy cgpipe scripts |
 | `docs/`           | language specification and (later) the docs site |
 
+## Examples
+
+Runnable, self-contained pipelines live in [`examples/`](examples/) — from a
+one-line hello to scatter-gather, manifest fan-out, and stage workflows. They use
+only coreutils, so they run anywhere; `examples/check.sh` runs them all.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,28 @@
+#!/usr/bin/env cgp
+#
+# Scatter-gather: count words in each document in parallel, then total them.
+# This is the same shape as per-chromosome variant calling — a `for` loop emits
+# one job per unit of work, results accumulate in a list, and a final job merges
+# them. The per-document counts are temporary (^): intermediates that exist only
+# to feed the merge.
+#
+# Run:  cgp pipeline.cgp | bash   (then: cat total.txt)
+
+docs   = ["doc1", "doc2", "doc3"]
+counts = []
+
+for d in docs {
+    counts += "${d}.count"
+    ^${d}.count: data/${d}.txt {{
+        name = "count-${d}"
+        --
+        wc -w < ${input} > ${output}
+    }}
+}
+
+total.txt: @{counts} {{
+    name = "total"
+    --
+    cat ${input} | awk '{s += $1} END {print s, "words total"}' > ${output}
+}}
+@default: total.txt
