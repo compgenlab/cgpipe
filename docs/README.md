@@ -29,12 +29,14 @@ New here? Start with **[Getting Started](02-Getting_Started.md)**.
 | 17 | [Comparisons](17-Comparisons.md) | How cgp compares to Snakemake, Nextflow, WDL |
 | — | [Language Specification](language-spec.md) | The precise, normative reference |
 | — | [Tutorials index](07-Pipeline_Tutorials.md) | The fourteen worked tutorials |
+| — | [Cookbook](cookbook/) | End-to-end recipes for real workflows (DNA-seq, RNA-seq, ChIP/ATAC, …) |
 | — | [cgp in one page](cgp-for-llms.md) | Dense single-file reference (paste into an LLM, or skim as a cheatsheet) |
 | — | [Examples](../examples/) | Runnable, self-contained pipelines to run and adapt |
 
 ## I want to…
 
 - **…write my first pipeline.** → [Getting Started](02-Getting_Started.md) → [Tutorial 1: Hello, target](tutorials/01-hello.md).
+- **…start from a real-workflow template.** → the [Cookbook](cookbook/) (DNA-seq, RNA-seq, ChIP/ATAC, joint genotyping, …).
 - **…look up a syntax detail.** → [Language Syntax](03-Language_Syntax.md), [Build Targets](05-Build_Targets.md), [Methods Reference](04-Methods_Reference.md).
 - **…fan out work over chromosomes / samples / lanes.** → [Tutorial 4: Map-reduce](tutorials/04-map-reduce.md) (in-file) and [Tutorial 11: Manifest fan-out](tutorials/11-manifest-fanout.md) (one run per sample).
 - **…clean up intermediates without breaking restarts.** → [Tutorial 5: Opportunistic cleanup](tutorials/05-opportunistic-cleanup.md).
