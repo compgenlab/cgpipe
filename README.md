@@ -27,7 +27,16 @@ cgp pipeline.cgp -dr             # dry run: print the rendered shell scripts
 cgp convert old.cgp -o new.cgp   # migrate a legacy cgpipe script
 ```
 
-## Build
+## Install
+
+cgp is a single static binary. Download the tarball for your platform from the
+[Releases page](https://github.com/compgen-io/cgp/releases)
+(`cgp-<version>-<os>-<arch>.tar.gz`), extract it, and put `cgp` on your `PATH`. See
+[Getting Started](docs/02-Getting_Started.md#install) for details.
+
+## Build from source
+
+Pure Go, no CGO:
 
 ```sh
 go build ./...
@@ -35,7 +44,7 @@ go test ./...
 go build -o bin/cgp ./cmd/cgp
 ```
 
-Cross-compilation is a plain `GOOS`/`GOARCH` build (no CGO):
+Cross-compilation is a plain `GOOS`/`GOARCH` build:
 
 ```sh
 GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp

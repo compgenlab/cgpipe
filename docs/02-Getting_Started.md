@@ -85,20 +85,35 @@ core of what cgp gives you.
 
 ### Install
 
-cgp is pure Go and builds to a single static binary:
+cgp is a single static binary with no runtime to install — no Python, no JVM, no
+shared libraries.
+
+**Download a release (recommended).** Grab the tarball for your platform from the
+project's [Releases page](https://github.com/compgen-io/cgp/releases) — they're
+named `cgp-<version>-<os>-<arch>.tar.gz` (e.g. `cgp-v0.1.0-linux-amd64.tar.gz`,
+`...-darwin-arm64.tar.gz` for Apple Silicon). Extract it and put the `cgp` binary
+on your `PATH`:
 
 ```sh
-go build -o bin/cgp ./cmd/cgp
+tar xzf cgp-v0.1.0-linux-amd64.tar.gz
+install cgp-v0.1.0-linux-amd64/cgp ~/bin/cgp     # somewhere on your PATH
+cgp version
 ```
 
-Cross-compiling for another platform is a plain `GOOS`/`GOARCH` build (no CGO):
+**Build from source.** If you have Go (1.25+), build it directly — it's pure Go, so
+no C toolchain or CGO is involved:
 
 ```sh
-GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
+go build -o ~/bin/cgp ./cmd/cgp
 ```
 
-Put the resulting binary somewhere on your `PATH` (e.g. `~/bin/cgp`). The
-project's `make all` cross-builds release binaries named `bin/cgp.<os>_<arch>`.
+Cross-compiling for another platform is a plain `GOOS`/`GOARCH` build:
+
+```sh
+GOOS=linux GOARCH=arm64 go build -o cgp-linux-arm64 ./cmd/cgp
+```
+
+(`make all` cross-builds every supported target into `bin/cgp.<os>_<arch>`.)
 
 ### Write your first pipeline
 
