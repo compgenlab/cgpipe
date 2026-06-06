@@ -22,7 +22,7 @@ scale.
 ```sh
 cgp pipeline.cgp                 # build @default (or the first target)
 cgp pipeline.cgp out.bam         # build a specific target
-cgp pipeline.cgp -sample p42     # set a pipeline variable
+cgp pipeline.cgp --sample p42    # set a pipeline variable
 cgp pipeline.cgp -dr             # dry run: print the rendered shell scripts
 cgp convert old.cgp -o new.cgp   # migrate a legacy cgpipe script
 ```

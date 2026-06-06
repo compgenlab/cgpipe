@@ -212,7 +212,7 @@ A target body may begin with a **directive block** that sets per-job settings, s
 
 - Before `--`: **cgp code**. Bare `IDENT = expr` assignments set per-job settings (the `job.` prefix is dropped — `mem` means the old `job.mem`). Ordinary cgp control flow is allowed here (it's cgp mode, no `%` prefix needed).
 - After `--`: the **shell template**.
-- `--` is **optional**: with no directives, the entire body is shell:
+- `--` is **optional**, and it is the *only* thing that introduces a directive block. A body with **no `--` is entirely shell** — there is no directive section, and a line that happens to look like a directive (e.g. `mem = "16G"`) is passed through to the shell verbatim, not interpreted by cgp and not warned about. To set per-job settings you must open a directive block with `--`.
 
       copy.txt: input.txt {{
           cp ${input} ${output}
@@ -675,25 +675,29 @@ Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, rep
     #!/usr/bin/env cgp
     #
     # Per-chromosome variant calling with a merge step.
-
-    runid ?= "run.$(date +%Y%m%d-%H%M)"
-    log = "logs/call-${runid}.log"
+    #
+    # Options:
+    #     --bam FILE   input alignments (indexed BAM)
+    #     --ref FILE   reference FASTA
+    #     --out FILE   merged, bgzip-compressed output VCF (.vcf.gz)
 
     if !bam { print "ERROR: --bam required"; exit 1 }
     if !ref { print "ERROR: --ref required"; exit 1 }
+    if !out { print "ERROR: --out required"; exit 1 }
 
     chroms   = "1 2 3 4 5 X Y".split(" ")
     per_chrom = []
 
     for c in chroms {
-        per_chrom += "${out}.${c}.vcf"
+        per_chrom += "${out}.${c}.vcf.gz"
 
-        ^${out}.${c}.vcf: ${bam} ${ref} {{
+        ^${out}.${c}.vcf.gz: ${bam} ${ref} {{
             name = "call-chr${c}"
             mem  = "8G"
             --
             bcftools mpileup -r chr${c} -f ${ref} ${bam} ${extra_flags?} \
-                | bcftools call -mv - > ${output}.tmp && mv ${output}.tmp ${output}
+                | bcftools call -mv -O z -o ${output}.tmp - \
+                && mv ${output}.tmp ${output}
         }}
     }
 
@@ -717,10 +721,3 @@ Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, rep
         fi
     }}
 
----
-
-## Open items
-
-These language details are intentionally not yet pinned down:
-
-- **Directive/shell disambiguation when `--` is omitted.** A body with no `--` is entirely shell; the explicit `--` is the canonical way to introduce a directive block. Whether to additionally warn on a directive-looking line in a no-`--` body is undecided.

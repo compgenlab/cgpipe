@@ -1,0 +1,128 @@
+# Troubleshooting
+
+When a pipeline misbehaves, these are the tools and the common errors, with what
+each one means.
+
+## Start with `-dr`
+
+The first move, almost always, is a dry run. `-dr` renders exactly what a real run
+would do — the assembled shell script, or the scheduler submission scripts — without
+running anything:
+
+```sh
+cgp -dr pipeline.cgp
+cgp -dr -r slurm pipeline.cgp
+```
+
+If a variable resolved wrong, a path came out malformed, or a directive didn't take
+effect, you'll see it in the rendered output. Reach for `-dr` before guessing.
+
+## `$(cmd)` runs at render time — even under `-dr`
+
+The single most surprising behavior. cgp's own `$(cmd)` command substitution is
+evaluated *while the body is rendered* — which means it runs during a dry run too,
+because rendering is what evaluates it. So:
+
+```
+out.txt: {{
+    echo "built $(date)" > ${output}
+}}
+```
+
+bakes the render-time date into the script. If you wanted the command to run in the
+**job's** shell at run time, escape it:
+
+```
+out.txt: {{
+    echo "built \$(date)" > ${output}
+}}
+```
+
+`\$(date)` is emitted verbatim and runs when the job runs. The same applies to
+`\${VAR}` for shell variables you don't want cgp to interpret.
+
+## Common errors
+
+### `no rule to make "X" (needed by [Y])`
+
+A target needs input `X`, but `X` doesn't exist on disk and no rule produces it.
+Either the file is genuinely missing, or you have a typo in an output/input name so
+two rules don't connect. Under a scheduler with a [ledger](10-The_Ledger.md), `X`
+is also looked up there — if its owning job is still active, the dependency wires
+up instead of erroring.
+
+### `undefined variable in ${nope}`
+
+A `${nope}` referenced a variable that was never set, which is an error. If empty is
+acceptable, use `${nope?}` (yields `""` when unset). If it's required, guard it up
+front so the failure is clear:
+
+```
+if !ref { print "ERROR: --ref required"; exit 1 }
+```
+
+### `expected }}, got EOF`
+
+A `{{ }}` body wasn't closed by a **lone `}}` on its own line**. Single-line bodies
+aren't allowed — put the closing `}}` on its own line:
+
+```
+# wrong
+out.txt: {{ echo hi > ${output} }}
+
+# right
+out.txt: {{
+    echo hi > ${output}
+}}
+```
+
+### A directive seems to be ignored
+
+If you set `mem` or `procs` but it had no effect, check for the `--` separator. A
+body with **no `--` is entirely shell** — a `mem = "8G"` line with no `--` above it
+is passed through to the shell as a (broken) command, not interpreted as a
+directive. Open the directive block:
+
+```
+out.bam: in.bam {{
+    mem = "8G"
+    --
+    ...
+}}
+```
+
+### A boolean flag swallowed the filename
+
+`cgp --adaptive pipeline.cgp` reads `pipeline.cgp` as the value of `--adaptive`.
+Put the pipeline file first (`cgp pipeline.cgp --adaptive`), or write
+`--adaptive=true`.
+
+## Inspecting state
+
+- **`cgp ledger dump <db>`** — the full provenance of every recorded job; grep it
+  for an output to see who produced it and with what command.
+  [The Ledger](10-The_Ledger.md#inspecting-the-ledger-cgp-ledger).
+- **`cgp ledger unlock <db>`** — if a run died and left a lock, and you're sure
+  nothing is active, clear it.
+- **`-r graphviz` / `-r html`** — visualize the dependency graph and (with a ledger)
+  each output's live state. [Tutorial 14](tutorials/14-status-report.md).
+- **`dumpvars`** — drop this statement into a script to print all in-scope variables
+  at that point.
+
+## Containers: a bind-mount surprise
+
+If a containerized job can't see a file, it's usually outside the auto-mounted
+working directory. cgp mounts the workdir (and `/tmp`) but not arbitrary paths — add
+the others explicitly:
+
+```
+container.bind = ["/data", "/refs"]
+```
+
+[Containers and GPUs](09-Containers_and_GPUs.md#tuning-the-invocation).
+
+## Next
+
+- **[Glossary](15-Glossary.md)** — look up a term.
+- **[language-spec.md](language-spec.md)** — the precise behavior when a doc is
+  ambiguous.
