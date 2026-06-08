@@ -74,6 +74,145 @@ func TestBatchqActiveAndState(t *testing.T) {
 	}
 }
 
+// installSgeStatus puts a mock `qstat` on a temp PATH whose bare `qstat` lists
+// one "<id> <prior> <name> <user> <state> ..." row per entry (state in the 5th
+// column, as real SGE prints it). An id absent from the map is not listed.
+func installSgeStatus(t *testing.T, status map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	var rows strings.Builder
+	for id, st := range status {
+		fmt.Fprintf(&rows, "echo \"%s 0.5 job mbreese %s 06/08/2026 all.q 1\"\n", id, st)
+	}
+	script := "#!/bin/bash\n[ $# -eq 0 ] || exit 1\n" +
+		"echo 'job-ID prior name user state submit queue slots'\n" +
+		"echo '---'\n" + rows.String() + "exit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "qstat"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// installPbsStatus puts a mock `qstat` on a temp PATH whose `qstat -f <id>` prints
+// a "job_state = <code>" line for known ids and exits non-zero for unknown ones
+// (as real PBS does once a job ages out).
+func installPbsStatus(t *testing.T, status map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	var cases strings.Builder
+	for id, st := range status {
+		fmt.Fprintf(&cases, "    %s) echo \"    job_state = %s\" ;;\n", id, st)
+	}
+	script := "#!/bin/bash\n[ \"$1\" = -f ] || exit 1\ncase \"$2\" in\n" +
+		cases.String() + "    *) exit 1 ;;\nesac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "qstat"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// installScontrolStatus puts a mock `scontrol` on a temp PATH whose
+// `scontrol -o show job <id>` echoes "JobId=<id> <attrs>" for known ids (attrs is
+// the raw "JobState=… Reason=…" tail) and exits non-zero for unknown ones.
+func installScontrolStatus(t *testing.T, attrs map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	var cases strings.Builder
+	for id, a := range attrs {
+		fmt.Fprintf(&cases, "    %s) echo \"JobId=%s %s\" ;;\n", id, id, a)
+	}
+	script := "#!/bin/bash\n[ \"$1\" = -o ] || exit 1\ncase \"$4\" in\n" +
+		cases.String() + "    *) exit 1 ;;\nesac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "scontrol"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestSgeActiveAndState(t *testing.T) {
+	installSgeStatus(t, map[string]string{
+		"j-queued": "qw", "j-hold": "hqw", "j-run": "r", "j-transfer": "t", "j-susp": "s",
+		"j-err": "Eqw", "j-del": "dr",
+	})
+	active := map[string]bool{
+		"j-queued": true, "j-hold": true, "j-run": true, "j-transfer": true, "j-susp": true,
+		"j-err": false, "j-del": false,
+		"j-unknown": false, // not listed at all
+	}
+	for id, want := range active {
+		if got := sgeActive(id); got != want {
+			t.Errorf("sgeActive(%q) = %v, want %v", id, got, want)
+		}
+	}
+	state := map[string]string{
+		"j-queued": "queued", "j-hold": "queued", "j-run": "running", "j-transfer": "running",
+		"j-susp": "running", "j-err": "failed", "j-del": "failed", "j-unknown": "",
+	}
+	for id, want := range state {
+		if got := sgeState(id); got != want {
+			t.Errorf("sgeState(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestPbsActiveAndState(t *testing.T) {
+	installPbsStatus(t, map[string]string{
+		"j-queued": "Q", "j-run": "R", "j-hold": "H", "j-wait": "W",
+		"j-exit": "E", "j-complete": "C", "j-susp": "S",
+	})
+	active := map[string]bool{
+		"j-queued": true, "j-run": true, "j-hold": true,
+		"j-wait": false, "j-exit": false, "j-complete": false, "j-susp": false,
+		"j-unknown": false, // qstat -f exits non-zero
+	}
+	for id, want := range active {
+		if got := pbsActive(id); got != want {
+			t.Errorf("pbsActive(%q) = %v, want %v", id, got, want)
+		}
+	}
+	state := map[string]string{
+		"j-queued": "queued", "j-hold": "queued", "j-wait": "queued",
+		"j-run": "running", "j-exit": "running", "j-susp": "running",
+		"j-complete": "done", "j-unknown": "",
+	}
+	for id, want := range state {
+		if got := pbsState(id); got != want {
+			t.Errorf("pbsState(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestSlurmActiveAndState(t *testing.T) {
+	installScontrolStatus(t, map[string]string{
+		"j-pending": "JobState=PENDING Reason=None",
+		"j-run":     "JobState=RUNNING Reason=None",
+		"j-dep":     "JobState=PENDING Reason=DependencyNeverSatisfied",
+		"j-done":    "JobState=COMPLETED Reason=None",
+		"j-fail":    "JobState=FAILED Reason=NonZeroExitCode",
+		"j-cancel":  "JobState=CANCELLED Reason=None",
+	})
+	active := map[string]bool{
+		"j-pending": true, "j-run": true,
+		"j-dep":  false, // pending but dependency can never be satisfied
+		"j-done": false, "j-fail": false, "j-cancel": false,
+		"j-unknown": false, // aged out of scontrol
+	}
+	for id, want := range active {
+		if got := slurmActive(id); got != want {
+			t.Errorf("slurmActive(%q) = %v, want %v", id, got, want)
+		}
+	}
+	state := map[string]string{
+		"j-pending": "queued", "j-dep": "queued", "j-run": "running",
+		"j-done": "done", "j-fail": "failed", "j-cancel": "failed", "j-unknown": "",
+	}
+	for id, want := range state {
+		if got := slurmState(id); got != want {
+			t.Errorf("slurmState(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
 // renderDry runs a scheduler in dry-run mode and returns the rendered scripts.
 func renderDry(t *testing.T, name, src string) string {
 	t.Helper()

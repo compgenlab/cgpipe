@@ -48,14 +48,16 @@ var schedulers = map[string]Scheduler{
 		SubCmd: []string{"qsub"}, HoldArgs: []string{"-h", "u"},
 		DepSep: ",", MailType: "ae",
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
-		IsActive:   func(id string) bool { return exec.Command("qstat", "-j", id).Run() == nil },
+		IsActive:   sgeActive,
+		State:      sgeState,
 	},
 	"pbs": {
 		Name: "pbs", Template: pbsTmpl,
 		SubCmd: []string{"qsub"}, HoldArgs: []string{"-h"},
 		DepSep: ":", MailType: "abe", PrepareMem: pbsMem,
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
-		IsActive:   func(id string) bool { return exec.Command("qstat", id).Run() == nil },
+		IsActive:   pbsActive,
+		State:      pbsState,
 	},
 	"batchq": {
 		Name: "batchq", Template: batchqTmpl,
@@ -157,6 +159,88 @@ func batchqState(id string) string {
 		return "done"
 	case "FAILED", "CANCELED":
 		return "failed"
+	}
+	return ""
+}
+
+// sgeStatus returns the SGE state code (e.g. "r", "qw", "Eqw") for a job, or ""
+// if the job is no longer listed. `qstat` prints one row per job with the state
+// in the 5th whitespace-separated column; a finished job drops off the list.
+func sgeStatus(id string) string {
+	out, err := exec.Command("qstat").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 5 && f[0] == id {
+			return f[4]
+		}
+	}
+	return ""
+}
+
+// sgeActive reports whether an SGE job is still queued, running, or suspended.
+// Unlike a bare `qstat -j` exit-code check, an error (Eqw) or deletion (dr/dt)
+// state counts as stale, so the target is resubmitted rather than reused.
+func sgeActive(id string) bool {
+	switch sgeStatus(id) {
+	case "qw", "hqw", "hRwq", "r", "t", "Rr", "Rt", "s", "S", "T":
+		return true
+	}
+	return false
+}
+
+// sgeState maps an SGE state code to the report vocabulary; "" means unknown.
+func sgeState(id string) string {
+	switch st := sgeStatus(id); st {
+	case "qw", "hqw", "hRwq":
+		return "queued"
+	case "r", "t", "Rr", "Rt", "s", "S", "T":
+		return "running"
+	case "Eqw", "dr", "dt":
+		return "failed"
+	}
+	return ""
+}
+
+// pbsStatus returns the PBS/Torque job_state code (e.g. "R", "Q", "C") for a job,
+// or "" if the job is unknown. `qstat -f <id>` prints "job_state = <code>" among
+// its `key = value` lines; a finished job eventually drops off (qstat exits != 0).
+func pbsStatus(id string) string {
+	out, err := exec.Command("qstat", "-f", id).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		kv := strings.SplitN(strings.TrimSpace(line), " = ", 2)
+		if len(kv) == 2 && kv[0] == "job_state" {
+			return strings.TrimSpace(kv[1])
+		}
+	}
+	return ""
+}
+
+// pbsActive reports whether a PBS/Torque job is still queued, running, or held.
+// Completed (C) or exiting (E) jobs — which `qstat` keeps listing for a while —
+// count as stale, so the target is resubmitted rather than reused.
+func pbsActive(id string) bool {
+	switch pbsStatus(id) {
+	case "Q", "R", "H":
+		return true
+	}
+	return false
+}
+
+// pbsState maps a PBS job_state to the report vocabulary; "" means unknown.
+func pbsState(id string) string {
+	switch pbsStatus(id) {
+	case "Q", "H", "W", "T":
+		return "queued"
+	case "R", "E", "S":
+		return "running"
+	case "C":
+		return "done"
 	}
 	return ""
 }
