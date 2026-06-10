@@ -112,6 +112,9 @@ To force a rebuild now, delete the bad file (or run with `-force`).
 - **`cgp ledger dump <dir>`** — the full provenance of every recorded job; grep it
   for an output to see who produced it and with what command.
   [The Ledger](11-The_Ledger.md#inspecting-the-ledger-cgp-ledger).
+- **`cgp ledger status [-r RUNNER] [-output] <dir>`** — ask the scheduler what is
+  happening with the recorded jobs right now (native status per job, or per output
+  reconciled against the file on disk).
 - **`cgp ledger vacuum <dir>`** — compact the ledger to a single `snapshot.jsonl`,
   dropping jobs that no longer own a current output.
 - **`-r graphviz` / `-r html`** — visualize the dependency graph and (with a ledger)

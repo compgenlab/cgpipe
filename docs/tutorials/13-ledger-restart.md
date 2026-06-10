@@ -77,6 +77,7 @@ earlier stage's jobs are still queued to produce.
 ```sh
 cgp ledger dump jobs.ledger                  # everything, as TSV
 cgp ledger search -o aligned.bam jobs.ledger # just jobs producing aligned.bam
+cgp ledger status -r slurm jobs.ledger       # live scheduler status per job
 cgp ledger vacuum jobs.ledger                # compact, dropping jobs that own no current output
 ```
 
