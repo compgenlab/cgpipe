@@ -76,6 +76,7 @@ Nested string arg escapes its quotes: `"${name.sub(\".bam\",\"\")}"`.
 if a > 1 { ... } elif b { ... } else { ... }
 for i in 1..3 { ... }          # range
 for s in ["a","b"] { ... }     # list
+for s in xs with i { ... }     # `with i` = 1-based loop counter (alongside the element)
 for cond { ... }               # while-style
 print a, b            # stdout (comma args space-joined); inside a body, appends to the script
 include "other.cgp"   # inline another file (global context) — shared defaults/targets
@@ -108,6 +109,12 @@ out1 out2 : in1 in2 {{
   job setting, so `--name foo` (`name`) and `job.name` never collide. `job.procs`
   defaults to 1; a setting is the default for targets defined after it.
   **No `--` ⇒ no directive block; the whole body is shell.**
+- **Array jobs**: set `job.array = <int>` (the element's task index, e.g. `with i`)
+  on a fan-out rule and cgp submits all its elements as ONE scheduler array
+  (slurm/batchq; sge/pbs → one job per element). Elements must be
+  submission-compatible (same `job.*` but the index) with unique indices, else error.
+  A gather depends on the exact tasks (`afterok:<id>_<i>`); restarts submit only the
+  stale indices. Element-wise array→array (needs aftercorr) isn't supported yet.
 - Body is raw shell: only `\$`/`\@` are special. `\$(cmd)` and `\${VAR}` defer to
   the job's shell (vs `$(cmd)`/`${var}` which cgp evaluates at render time).
 - **Inline conditional** for optional flags: `bwa ${if rg; "-R " + rg} ...`.
@@ -143,6 +150,7 @@ map per scheduler (`mem="8G"` → SLURM `--mem=8000`, `procs=4` → `-c 4`).
 Dependencies are derived from `output: input` edges (SLURM `afterok:<id>`).
 One-off: `cgp sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
 Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgp sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
+Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
 
 ## Ledger (optional), workflows, manifests
 - **Ledger** (`cgp.ledger = "jobs.db"`): records which job owns which output;

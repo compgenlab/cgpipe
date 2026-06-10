@@ -58,8 +58,8 @@ func TestStructural(t *testing.T) {
 }
 
 func TestKeywordsAndIdents(t *testing.T) {
-	eq(t, kinds(`if elif else for in true false foo`), []token.Kind{
-		token.IF, token.ELIF, token.ELSE, token.FOR, token.IN,
+	eq(t, kinds(`if elif else for in with true false foo`), []token.Kind{
+		token.IF, token.ELIF, token.ELSE, token.FOR, token.IN, token.WITH,
 		token.TRUE, token.FALSE, token.IDENT,
 	})
 }

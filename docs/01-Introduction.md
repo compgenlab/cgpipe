@@ -64,11 +64,11 @@ emits the body when the target needs to run.
 | [Language Syntax](03-Language_Syntax.md) · [Methods](04-Methods_Reference.md) | look up types, variables, operators, methods |
 | [Build Targets](05-Build_Targets.md) · [Reserved Targets](06-Reserved_Targets.md) | write real rules: wildcards, temp files, hooks |
 | [Pipeline Tutorials](07-Pipeline_Tutorials.md) | learn by worked example |
-| [Running Jobs](08-Running_Jobs.md) · [Containers & GPUs](09-Containers_and_GPUs.md) | submit to a scheduler, request resources, run in containers |
-| [The Ledger](10-The_Ledger.md) | understand restarts and cross-run reuse |
-| [Workflows](11-Workflows.md) · [Manifests & Fan-out](12-Manifests_and_Fanout.md) | chain pipelines and run them across many samples |
-| [Configuration Reference](13-Configuration_Reference.md) | every `cgp.*` and `job.*` setting |
-| [Troubleshooting](16-Troubleshooting.md) · [Glossary](15-Glossary.md) | debug a problem, look up a term |
+| [Running Jobs](08-Running_Jobs.md) · [Containers & GPUs](10-Containers_and_GPUs.md) | submit to a scheduler, request resources, run in containers |
+| [The Ledger](11-The_Ledger.md) | understand restarts and cross-run reuse |
+| [Workflows](12-Workflows.md) · [Manifests & Fan-out](13-Manifests_and_Fanout.md) | chain pipelines and run them across many samples |
+| [Configuration Reference](14-Configuration_Reference.md) | every `cgp.*` and `job.*` setting |
+| [Troubleshooting](17-Troubleshooting.md) · [Glossary](16-Glossary.md) | debug a problem, look up a term |
 | [language-spec.md](language-spec.md) | the precise, normative language reference |
 
 Reference → [language specification](language-spec.md).

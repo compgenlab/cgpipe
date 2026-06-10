@@ -52,7 +52,7 @@ cgp -r html pipeline.cgp > status.html
 
 The legend covers the five states — **done**, **running**, **queued**, **failed**,
 **pending** — and each output is colored by where it stands. The state is resolved
-from disk existence first, then, when a [ledger](../10-The_Ledger.md) and scheduler
+from disk existence first, then, when a [ledger](../11-The_Ledger.md) and scheduler
 are configured, from the owning job's live scheduler state. So an output present on
 disk shows **done**, one whose job is still queued shows **queued**, and one not
 yet started shows **pending**.
@@ -74,7 +74,7 @@ cgp -r html align.cgp -manifest-tsv samples.tsv > cohort.html
 ## Next
 
 You've reached the end of the tutorials. For the full reference, see
-[The Ledger](../10-The_Ledger.md), [Running Jobs](../08-Running_Jobs.md), and the
-[Configuration Reference](../13-Configuration_Reference.md).
+[The Ledger](../11-The_Ledger.md), [Running Jobs](../08-Running_Jobs.md), and the
+[Configuration Reference](../14-Configuration_Reference.md).
 
 Reference → [Running Jobs § Runners](../08-Running_Jobs.md#runners).

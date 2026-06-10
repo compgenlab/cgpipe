@@ -152,6 +152,14 @@ func TestForForms(t *testing.T) {
 	if fc.Var != "" || fc.Cond == nil {
 		t.Fatalf("for-cond: %#v", fc)
 	}
+	fwi := only(t, `for c in chroms with i { print c }`).(*ast.For)
+	if fwi.Var != "c" || fwi.IndexVar != "i" || fwi.Iter == nil {
+		t.Fatalf("for-in-with: %#v", fwi)
+	}
+	// Without `with`, IndexVar stays empty.
+	if only(t, `for c in chroms { print c }`).(*ast.For).IndexVar != "" {
+		t.Fatal("for-in: IndexVar should be empty without `with`")
+	}
 }
 
 func TestPrintExitUnset(t *testing.T) {

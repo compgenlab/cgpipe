@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J merged.vcf
+#SBATCH -d afterok:1001_1:1001_2:1001_3
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+bcftools concat calls.chr1.vcf calls.chr2.vcf calls.chr3.vcf > merged.vcf
+

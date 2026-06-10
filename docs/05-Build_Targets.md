@@ -127,7 +127,7 @@ to 1).
 
 The settings you can put here are the `job.*` surface — see
 [Running Jobs](08-Running_Jobs.md) and the
-[Configuration Reference](13-Configuration_Reference.md).
+[Configuration Reference](14-Configuration_Reference.md).
 
 ## Inline conditionals
 

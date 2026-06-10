@@ -549,6 +549,50 @@ func TestSubDryRun(t *testing.T) {
 	}
 }
 
+// cgp sub --array submits the fan-out as ONE job array: a single --array=1-N
+// header and a `case` over the scheduler's task-id var, one branch per file.
+func TestSubArray(t *testing.T) {
+	t.Chdir(t.TempDir())
+	out := captureStdout(t, func() int {
+		return run([]string{"sub", "-r", "slurm", "-dr", "-n", "qc", "--array", "echo {}", "--", "a", "b", "c"})
+	})
+	for _, want := range []string{
+		"#SBATCH --array=1-3",
+		`case "$SLURM_ARRAY_TASK_ID" in`,
+		"1) echo a ;;", "2) echo b ;;", "3) echo c ;;",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("cgp sub --array output missing %q\n--- got ---\n%s", want, out)
+		}
+	}
+}
+
+// --array with a {}-expanded --after is rejected: a per-element dependency cannot
+// be expressed by a single array submission's one dependency directive.
+func TestSubArrayPerElementAfterRejected(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if code := run([]string{"sub", "-r", "slurm", "-dr", "--array", "-a", "{@}.done", "echo {}", "--", "a", "b"}); code == 0 {
+		t.Fatal("cgp sub --array with a {}-expanded --after should fail")
+	}
+}
+
+// --array on a runner without array support falls back to one job per file.
+func TestSubArrayUnsupportedRunnerFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("a.in", []byte("A\n"), 0o644)
+	os.WriteFile("b.in", []byte("B\n"), 0o644)
+	// default shell runner has no arrays → per-file fallback still produces outputs.
+	if code := run([]string{"sub", "--array", "-o", "{@.in}.out", "cp {} {@.in}.out", "--", "a.in", "b.in"}); code != 0 {
+		t.Fatalf("cgp sub --array shell fallback = %d, want 0", code)
+	}
+	for _, f := range []string{"a.out", "b.out"} {
+		if !fileThere(dir, f) {
+			t.Errorf("array fallback did not produce %s", f)
+		}
+	}
+}
+
 // §15.2 cgp ledger vacuum runs against a ledger db.
 func TestLedgerVacuumCLI(t *testing.T) {
 	dir := t.TempDir()

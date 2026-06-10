@@ -44,6 +44,10 @@ options:
     -d, --deps IDS       depend on existing job ids (comma-separated; repeatable)
     -a, --after PATH     depend on the active job that owns PATH in the ledger (repeatable)
     -f, --files-from F   read fan-out files from F, one per line (- = stdin; only once)
+    --array              submit the fan-out as ONE job array (slurm/batchq/pbs); each
+                         task runs one file's command, dispatched by the scheduler's
+                         array task-id. shell/sge fall back to one job per file. A
+                         {}-expanded --after is rejected (per-element dependency).
     -r, --runner NAME    runner: shell (default), slurm, sge, pbs, batchq
     -l, --ledger PATH    ledger database
     -dr                  dry run: render the job(s) instead of submitting
@@ -66,6 +70,7 @@ func runSub(args []string) int {
 	var runnerName, ledgerPath, filesFrom string
 	filesFromSet := false
 	dryRun := false
+	asArray := false
 	settings := map[string]eval.Value{}
 	var cmdParts, files []string
 
@@ -107,6 +112,9 @@ flags:
 			return 0
 		case "-dr":
 			dryRun = true
+			i++
+		case "-array", "--array":
+			asArray = true
 			i++
 		case "-n", "--name":
 			v, ok := val()
@@ -278,6 +286,41 @@ flags:
 		return submitOne(strings.Join(cmdParts, " "), name, outs, ins, after)
 	}
 
+	// Array fan-out: a single `--array=1-N` submission over the whole file list,
+	// dispatched at run time by the scheduler's task-id var. Supported on the
+	// schedulers with native array support (slurm/batchq/pbs); shell/sge fall
+	// through to the per-file loop below.
+	if asArray {
+		if taskVar := arrayTaskVar(runnerName); taskVar != "" {
+			// A {}-expanded -a/--after is a per-element dependency, which one array
+			// submission (a single dependency directive) cannot express.
+			for _, a := range after {
+				if strings.Contains(a, "{") {
+					fmt.Fprintln(os.Stderr, "cgp sub: --array cannot use a {}-expanded --after "+
+						"(per-element dependency); use a fixed --after, or drop --array")
+					return 2
+				}
+			}
+			var body strings.Builder
+			fmt.Fprintf(&body, "case \"$%s\" in\n", taskVar)
+			var jobIns, jobOuts []string
+			for idx, f := range fanFiles {
+				n := idx + 1
+				fmt.Fprintf(&body, "  %d) %s ;;\n", n, strings.Join(substAll(cmdParts, f, n), " "))
+				jobIns = append(jobIns, f)
+				jobIns = append(jobIns, substAll(ins, f, n)...)
+				jobOuts = append(jobOuts, substAll(outs, f, n)...)
+			}
+			fmt.Fprintf(&body, "  *) echo \"cgp: no array task $%s\" >&2; exit 1 ;;\nesac\n", taskVar)
+			settings["job.array"] = eval.StrVal(fmt.Sprintf("1-%d", len(fanFiles)))
+			if dryRun {
+				fmt.Printf("# ── array job: %d tasks ──\n", len(fanFiles))
+			}
+			return submitOne(body.String(), name, dedupeStrings(jobOuts), dedupeStrings(jobIns), after)
+		}
+		fmt.Fprintf(os.Stderr, "cgp sub: --array is not supported for this runner; submitting one job per file\n")
+	}
+
 	// Fan-out: one independent job per file, with `{}` expansion against it.
 	for idx, f := range fanFiles {
 		n := idx + 1
@@ -302,6 +345,34 @@ flags:
 		}
 	}
 	return 0
+}
+
+// arrayTaskVar returns the shell variable that carries the array task index at run
+// time for a runner that supports job arrays, or "" for runners that do not (shell,
+// sge), which then fall back to one job per file.
+func arrayTaskVar(runner string) string {
+	switch runner {
+	case "slurm":
+		return "SLURM_ARRAY_TASK_ID"
+	case "batchq":
+		return "BATCHQ_ARRAY_TASK_ID"
+	case "pbs":
+		return "PBS_ARRAY_INDEX"
+	}
+	return ""
+}
+
+// dedupeStrings returns ss with duplicates removed, preserving first-seen order.
+func dedupeStrings(ss []string) []string {
+	seen := make(map[string]bool, len(ss))
+	out := ss[:0:0]
+	for _, s := range ss {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // readFilesFrom reads a fan-out file list (one path per non-empty line, trimmed)

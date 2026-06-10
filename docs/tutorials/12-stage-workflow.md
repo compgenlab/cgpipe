@@ -71,11 +71,11 @@ knowing about the other.
 Under the shell runner each stage finishes before the next starts, so `call` simply
 finds the file `align` wrote. On a scheduler, `align`'s jobs may still be queued
 when `call` submits — cgp wires the cross-stage `afterok` dependency through the
-[ledger](../10-The_Ledger.md), so configure `cgp.ledger` for scheduler workflows.
+[ledger](../11-The_Ledger.md), so configure `cgp.ledger` for scheduler workflows.
 
 ## Next
 
 - **[Tutorial 13: Restartable pipelines and the ledger](13-ledger-restart.md)**
 
-Reference → [Workflows](../11-Workflows.md),
+Reference → [Workflows](../12-Workflows.md),
 [language-spec.md §13](../language-spec.md#13-workflows-stage-and-export).

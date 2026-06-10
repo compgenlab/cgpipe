@@ -96,7 +96,7 @@ echo "Hello, Marcus!" > hello.txt
 
 This is the heart of cgp: you describe outputs, and it only does the work that is
 actually needed. (For real inputs, "needed" means *the output is missing or older
-than an input* — see [The Ledger](../10-The_Ledger.md) for the full staleness
+than an input* — see [The Ledger](../11-The_Ledger.md) for the full staleness
 story.)
 
 ## See the help text

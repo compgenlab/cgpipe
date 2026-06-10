@@ -86,4 +86,4 @@ the per-sample columns.)
   over `@{samples}.counts.txt`, then feed a differential-expression script.
 
 See [Tutorial 11: Manifest fan-out](../tutorials/11-manifest-fanout.md) and the
-[Manifests chapter](../12-Manifests_and_Fanout.md).
+[Manifests chapter](../13-Manifests_and_Fanout.md).

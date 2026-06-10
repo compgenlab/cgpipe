@@ -251,6 +251,9 @@ func (p *parser) parseFor() ast.Stmt {
 		node.Var = p.advance().Lit
 		p.expect(token.IN)
 		node.Iter = p.parseExpr(0)
+		if p.accept(token.WITH) { // optional `with i` enumerate counter
+			node.IndexVar = p.expect(token.IDENT).Lit
+		}
 	} else {
 		node.Cond = p.parseExpr(0)
 	}

@@ -38,7 +38,7 @@ per-chromosome jobs, and a manifest *is* how you fan out over a cohort — no sp
 operators. The same expression language guards required arguments and computes
 output names.
 
-**A focused ledger, not a global cache.** cgp's [ledger](10-The_Ledger.md) records
+**A focused ledger, not a global cache.** cgp's [ledger](11-The_Ledger.md) records
 exactly one thing — which job owns which output — to make cross-run and cross-stage
 reuse safe. It isn't a content-addressed cache of every result; restarts are plain
 file-timestamp checks. Less magic, fewer surprises about *why* something did or

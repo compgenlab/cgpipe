@@ -23,6 +23,9 @@
 % if job.depids {
 #SBATCH -d afterok:${job.depids}
 % }
+% if job.array {
+#SBATCH --array=${job.array}
+% }
 % if job.qos {
 #SBATCH --qos=${job.qos}
 % }

@@ -31,27 +31,27 @@ or submitting. [Running Jobs](08-Running_Jobs.md#dry-runs).
 
 **Export.** `export name = expr` — a stage pipeline exposing a value to its
 workflow as `${stage.name}`; a no-op when the pipeline runs standalone.
-[Workflows](11-Workflows.md#exposing-values-with-export).
+[Workflows](12-Workflows.md#exposing-values-with-export).
 
 **Fan-out.** Running one pipeline once per row of a manifest (across a cohort).
-[Manifests and Fan-out](12-Manifests_and_Fanout.md).
+[Manifests and Fan-out](13-Manifests_and_Fanout.md).
 
 **Goal.** A target requested to be built — on the command line, or via `@default`.
 
 **Ledger.** The optional SQLite database recording which job owns (last produced)
 which output. Enables cross-run reuse; stores no mtimes and no job state.
-[The Ledger](10-The_Ledger.md).
+[The Ledger](11-The_Ledger.md).
 
 **Manifest.** A table (TSV/CSV/JSON) or glob of `.cgp` files whose rows each supply
 variables for one run of a pipeline.
-[Manifests and Fan-out](12-Manifests_and_Fanout.md).
+[Manifests and Fan-out](13-Manifests_and_Fanout.md).
 
 **Opportunistic job.** A target with no outputs (`: inputs`) that runs only if its
 inputs already exist, never forcing them — the pattern for guarded cleanup.
 [Build Targets](05-Build_Targets.md#opportunistic-jobs).
 
 **Owner.** The job that last produced a given output path, per the ledger.
-[The Ledger](10-The_Ledger.md#what-it-does-and-doesnt-track).
+[The Ledger](11-The_Ledger.md#what-it-does-and-doesnt-track).
 
 **Pipeline.** A `.cgp` file describing a dependency graph of targets. (A file with
 `stage` statements is a *workflow* instead.)
@@ -71,11 +71,11 @@ submitting it (for `@setup`/`@teardown`).
 into bodies with `@name`. [Build Targets](05-Build_Targets.md#snippets).
 
 **Stage.** One pipeline within a workflow, declared with `stage NAME FILE ARGS…`.
-[Workflows](11-Workflows.md#declaring-stages).
+[Workflows](12-Workflows.md#declaring-stages).
 
 **Staleness.** Whether an output needs rebuilding — true if it's missing or older
 than an input. Decided by file timestamps, not the ledger.
-[The Ledger](10-The_Ledger.md#restart-is-timestamp-based).
+[The Ledger](11-The_Ledger.md#restart-is-timestamp-based).
 
 **Stem.** The text a wildcard `%` matched, available as `${stem}`.
 [Build Targets](05-Build_Targets.md#wildcards).
@@ -91,4 +91,4 @@ staleness looks *through* it to its inputs. cgp never auto-deletes it.
 [Build Targets](05-Build_Targets.md#wildcards).
 
 **Workflow.** A `.cgp` file that chains pipelines with `stage` statements, threading
-exported values between them. [Workflows](11-Workflows.md).
+exported values between them. [Workflows](12-Workflows.md).

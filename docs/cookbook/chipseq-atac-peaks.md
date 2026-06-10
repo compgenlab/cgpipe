@@ -75,7 +75,7 @@ cgp -r slurm chipseq-atac-peaks.cgp --sample H3K27ac \
   the control input.
 - **Paired-end:** change the aligner rule to take `R1`/`R2` and use `-f BAMPE` in
   MACS2.
-- Run a cohort of marks/samples with a [manifest](../12-Manifests_and_Fanout.md)
+- Run a cohort of marks/samples with a [manifest](../13-Manifests_and_Fanout.md)
   whose columns are `sample`, `treat`, `control`.
 
 See [Build Targets](../05-Build_Targets.md) (multiple inputs and wildcards).

@@ -121,7 +121,7 @@
       "patterns": [
         {
           "name": "keyword.control.cgp",
-          "match": "\\b(if|elif|else|for|in)\\b"
+          "match": "\\b(if|elif|else|for|in|with)\\b"
         },
         {
           "name": "constant.language.boolean.cgp",

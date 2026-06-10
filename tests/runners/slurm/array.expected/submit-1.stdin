@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J call
+#SBATCH --mem=8000
+#SBATCH --array=1,2,3
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+case "$SLURM_ARRAY_TASK_ID" in
+1)
+call_variants --region chr1 aligned.bam > calls.chr1.vcf
+
+;;
+2)
+call_variants --region chr2 aligned.bam > calls.chr2.vcf
+
+;;
+3)
+call_variants --region chr3 aligned.bam > calls.chr3.vcf
+
+;;
+*) echo "cgp: no array task $SLURM_ARRAY_TASK_ID" >&2; exit 1 ;;
+esac
+

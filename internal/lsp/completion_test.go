@@ -17,6 +17,9 @@ func TestCompletionsIncludeKeywordsBuiltinsAndReserved(t *testing.T) {
 	if it, ok := findItem(items, "if"); !ok || it.Kind != ciKeyword {
 		t.Errorf("keyword `if` = %+v (ok=%v), want kind ciKeyword", it, ok)
 	}
+	if it, ok := findItem(items, "with"); !ok || it.Kind != ciKeyword {
+		t.Errorf("keyword `with` = %+v (ok=%v), want kind ciKeyword", it, ok)
+	}
 	if it, ok := findItem(items, "print"); !ok || it.Kind != ciFunction {
 		t.Errorf("built-in `print` = %+v (ok=%v), want kind ciFunction", it, ok)
 	}

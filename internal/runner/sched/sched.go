@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,10 @@ type Scheduler struct {
 	ReleaseCmd func(string) []string // command to release a held job
 	IsActive   func(string) bool     // is a job id still queued/running? (for ledger reuse)
 	State      func(string) string   // normalized live state for reports: queued|running|done|failed|"" (unknown); optional
+	// ArrayTaskVar is the run-time environment variable carrying a job array's task
+	// index (e.g. SLURM_ARRAY_TASK_ID). "" means the scheduler has no array support,
+	// so array groups fall back to one job per element.
+	ArrayTaskVar string
 }
 
 var schedulers = map[string]Scheduler{
@@ -39,9 +44,10 @@ var schedulers = map[string]Scheduler{
 		Name: "slurm", Template: slurmTmpl,
 		SubCmd: []string{"sbatch", "--parsable"}, HoldArgs: []string{"-H"},
 		DepSep: ":", MailType: "END,FAIL", PrepareMem: slurmMem,
-		ReleaseCmd: func(id string) []string { return []string{"scontrol", "release", id} },
-		IsActive:   slurmActive,
-		State:      slurmState,
+		ReleaseCmd:   func(id string) []string { return []string{"scontrol", "release", id} },
+		IsActive:     slurmActive,
+		State:        slurmState,
+		ArrayTaskVar: "SLURM_ARRAY_TASK_ID",
 	},
 	"sge": {
 		Name: "sge", Template: sgeTmpl,
@@ -58,14 +64,19 @@ var schedulers = map[string]Scheduler{
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
 		IsActive:   pbsActive,
 		State:      pbsState,
+		// No ArrayTaskVar: pipeline-array task ids on PBS use a different subjob
+		// format (12345[i]) than SLURM/BatchQ's <base>_<i>, so pipeline arrays fall
+		// back to per-element submission on PBS. (cgp sub --array has no downstream
+		// task-id deps and still renders #PBS -J.)
 	},
 	"batchq": {
 		Name: "batchq", Template: batchqTmpl,
 		SubCmd: []string{"batchq", "submit"}, HoldArgs: []string{"--hold"},
-		DepSep:     ",",
-		ReleaseCmd: func(id string) []string { return []string{"batchq", "release", id} },
-		IsActive:   batchqActive,
-		State:      batchqState,
+		DepSep:       ",",
+		ReleaseCmd:   func(id string) []string { return []string{"batchq", "release", id} },
+		IsActive:     batchqActive,
+		State:        batchqState,
+		ArrayTaskVar: "BATCHQ_ARRAY_TASK_ID",
 	},
 }
 
@@ -495,38 +506,16 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	if v, ok := vars["job.shexec"]; ok && eval.Truthy(v) {
 		return b.shExec(runner.Label(t), body)
 	}
-	if m, ok := vars["job.mem"]; ok && b.sch.PrepareMem != nil {
-		vars["job.mem"] = eval.StrVal(b.sch.PrepareMem(eval.Stringify(m)))
-	}
-	// Normalize a boolean gpu (job.gpu = true) to a count for the scheduler directive.
-	if v, ok := vars["job.gpu"]; ok {
-		if b, isBool := v.(eval.BoolVal); isBool {
-			if bool(b) {
-				vars["job.gpu"] = eval.IntVal(1)
-			} else {
-				delete(vars, "job.gpu")
-			}
+	// An integer job.array is a pipeline array-membership marker (the element's task
+	// index), consumed by the driver/SubmitArray — a lone target is not an array, so
+	// strip it here. A string job.array (a literal index spec, e.g. from
+	// `cgp sub --array`) is kept and rendered into the array directive.
+	if v, ok := vars["job.array"]; ok {
+		if _, isInt := v.(eval.IntVal); isInt {
+			delete(vars, "job.array")
 		}
 	}
-	// job.procs / job.name / job.custom / job.setup come pre-seeded from eval
-	// (globals + the per-target job.name default). job.shell and the scheduler/
-	// config-derived settings below are genuinely runner-owned, so default here.
-	setDefault(vars, "job.shell", eval.StrVal(b.shell))
-	if _, ok := vars["job.mail"]; ok {
-		setDefault(vars, "job.mailtype", eval.StrVal(b.sch.MailType))
-	}
-	vars["_body"] = eval.StrVal(body)
-	vars["_inputs"] = eval.StrList(t.Inputs)
-	vars["_outputs"] = eval.StrList(t.Outputs)
-	if len(deps) > 0 {
-		vars["job.depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
-	}
-	if pe := b.cfg("cgp.runner.sge.parallelenv"); pe != "" {
-		setDefault(vars, "job.parallelenv", eval.StrVal(pe))
-	}
-	if rid := b.cfg("cgp.run_id"); rid != "" {
-		setDefault(vars, "job.run_id", eval.StrVal(rid))
-	}
+	b.finalizeVars(vars, body, t.Inputs, t.Outputs, deps)
 
 	script, err := b.prog.RenderText(b.sch.Template, vars)
 	if err != nil {
@@ -553,6 +542,171 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	return id, nil
 }
 
+// finalizeVars applies the scheduler/config normalization shared by Submit and
+// SubmitArray: mem/gpu normalization, runner-owned defaults, the body and
+// input/output lists, and the dependency directive.
+func (b *backend) finalizeVars(vars map[string]eval.Value, body string, inputs, outputs, deps []string) {
+	if m, ok := vars["job.mem"]; ok && b.sch.PrepareMem != nil {
+		vars["job.mem"] = eval.StrVal(b.sch.PrepareMem(eval.Stringify(m)))
+	}
+	// Normalize a boolean gpu (job.gpu = true) to a count for the scheduler directive.
+	if v, ok := vars["job.gpu"]; ok {
+		if bb, isBool := v.(eval.BoolVal); isBool {
+			if bool(bb) {
+				vars["job.gpu"] = eval.IntVal(1)
+			} else {
+				delete(vars, "job.gpu")
+			}
+		}
+	}
+	// job.procs / job.name / job.custom / job.setup come pre-seeded from eval; the
+	// runner-owned settings below default here.
+	setDefault(vars, "job.shell", eval.StrVal(b.shell))
+	if _, ok := vars["job.mail"]; ok {
+		setDefault(vars, "job.mailtype", eval.StrVal(b.sch.MailType))
+	}
+	vars["_body"] = eval.StrVal(body)
+	vars["_inputs"] = eval.StrList(inputs)
+	vars["_outputs"] = eval.StrList(outputs)
+	if len(deps) > 0 {
+		vars["job.depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
+	}
+	if pe := b.cfg("cgp.runner.sge.parallelenv"); pe != "" {
+		setDefault(vars, "job.parallelenv", eval.StrVal(pe))
+	}
+	if rid := b.cfg("cgp.run_id"); rid != "" {
+		setDefault(vars, "job.run_id", eval.StrVal(rid))
+	}
+}
+
+// SubmitArray submits a group of array-member targets (parallel indices[]) as a
+// single scheduler job array, returning each member's per-task job id
+// (<arrayid>_<index>). The members must be submission-compatible (same job.*
+// settings apart from the index); the differing per-element commands become the
+// branches of a `case` keyed by the scheduler's task-id variable. Schedulers
+// without array support (ArrayTaskVar == "") fall back to one job per element.
+func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps []string) (map[*eval.Target]string, error) {
+	deps = dedupeIDs(deps)
+	if b.sch.ArrayTaskVar == "" {
+		out := make(map[*eval.Target]string, len(members))
+		for _, m := range members {
+			id, err := b.Submit(m, deps)
+			if err != nil {
+				return nil, err
+			}
+			out[m] = id
+		}
+		return out, nil
+	}
+
+	type elem struct {
+		t    *eval.Target
+		idx  int
+		body string
+	}
+	var elems []elem
+	var baseVars map[string]eval.Value
+	var baseSig string
+	for i, m := range members {
+		vars, body, err := b.prog.JobContext(m)
+		if err != nil {
+			return nil, err
+		}
+		sig := arraySignature(vars)
+		if i == 0 {
+			baseVars, baseSig = vars, sig
+		} else if sig != baseSig {
+			return nil, fmt.Errorf("array %q: element %q is not submission-compatible with the first element "+
+				"(differing job.* settings) — all array tasks share one set of resources/name; "+
+				"split the divergent element out or drop job.array",
+				runner.Label(members[0]), runner.Label(m))
+		}
+		elems = append(elems, elem{m, indices[i], body})
+	}
+	sort.Slice(elems, func(i, j int) bool { return elems[i].idx < elems[j].idx })
+
+	// Index spec for the --array header (e.g. "1,2,4") and the dispatch table.
+	var spec, casebody strings.Builder
+	fmt.Fprintf(&casebody, "case \"$%s\" in\n", b.sch.ArrayTaskVar)
+	var allIn, allOut []string
+	for i, e := range elems {
+		if i > 0 {
+			spec.WriteByte(',')
+		}
+		spec.WriteString(strconv.Itoa(e.idx))
+		fmt.Fprintf(&casebody, "%d)\n%s\n;;\n", e.idx, e.body)
+		allIn = append(allIn, e.t.Inputs...)
+		allOut = append(allOut, e.t.Outputs...)
+	}
+	fmt.Fprintf(&casebody, "*) echo \"cgp: no array task $%s\" >&2; exit 1 ;;\nesac\n", b.sch.ArrayTaskVar)
+
+	vars := baseVars
+	vars["job.array"] = eval.StrVal(spec.String())
+	b.finalizeVars(vars, casebody.String(), uniqueStrings(allIn), uniqueStrings(allOut), deps)
+
+	script, err := b.prog.RenderText(b.sch.Template, vars)
+	if err != nil {
+		src := b.templateSrc
+		if src == "" {
+			src = "built-in"
+		}
+		return nil, fmt.Errorf("runner %s: rendering array template (%s): %w", b.sch.Name, src, err)
+	}
+	baseID, err := b.submitScript(runner.Label(members[0])+"[]", script)
+	if err != nil {
+		return nil, err
+	}
+
+	// Each element's outputs are owned by its own task id (<base>_<index>), so a
+	// downstream dependency resolves to the exact task that produces what it needs.
+	out := make(map[*eval.Target]string, len(elems))
+	for _, e := range elems {
+		taskID := baseID + "_" + strconv.Itoa(e.idx)
+		out[e.t] = taskID
+		if b.ledger != nil && baseID != "" && len(e.t.Outputs) > 0 {
+			if err := b.ledger.Record(ledger.Job{
+				JobID: taskID, RunID: b.runID, Name: eval.Stringify(vars["job.name"]), Pipeline: b.opts.Pipeline,
+				WorkingDir: b.wd, User: b.user, SubmitTime: time.Now().Unix(),
+				Outputs: e.t.Outputs, Temp: e.t.Temp, Inputs: e.t.Inputs, Deps: deps,
+				Script: e.body, Settings: jobSettings(vars),
+			}); err != nil {
+				return nil, fmt.Errorf("ledger record: %w", err)
+			}
+		}
+	}
+	return out, nil
+}
+
+// arraySignature is a deterministic fingerprint of a member's job.* settings,
+// excluding job.array (the per-element index). Members of one array must share it.
+func arraySignature(vars map[string]eval.Value) string {
+	var keys []string
+	for k := range vars {
+		if strings.HasPrefix(k, "job.") && k != "job.array" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, "%s=%s;", k, eval.Stringify(vars[k]))
+	}
+	return b.String()
+}
+
+// uniqueStrings returns ss with duplicates removed, preserving first-seen order.
+func uniqueStrings(ss []string) []string {
+	seen := make(map[string]bool, len(ss))
+	out := ss[:0:0]
+	for _, s := range ss {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // jobSettings extracts the per-job settings worth recording (mem, procs,
 // walltime, container, gpu, …) from the render vars: scalar job.* values, minus
 // the name (recorded separately as NAME) and the internal plumbing. Keys are
@@ -561,7 +715,7 @@ func jobSettings(vars map[string]eval.Value) map[string]string {
 	skip := map[string]bool{
 		"name":   true, // recorded as NAME
 		"depids": true, "custom": true, "setup": true, "shell": true,
-		"run_id": true, "parallelenv": true, "mailtype": true,
+		"run_id": true, "parallelenv": true, "mailtype": true, "array": true,
 	}
 	out := map[string]string{}
 	for k, v := range vars {

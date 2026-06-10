@@ -10,7 +10,24 @@ import (
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgen-io/cgp/internal/token"
 )
+
+// arrayBackend is an optional Backend capability: submit a group of array-member
+// targets as one scheduler job array, returning each member's per-task job id. A
+// backend that doesn't implement it (shell, graphviz, …) falls back to submitting
+// each member individually.
+type arrayBackend interface {
+	SubmitArray(members []*eval.Target, indices []int, deps []string) (map[*eval.Target]string, error)
+}
+
+// arrayGroup is a set of targets from one declaration (same source position) that
+// each set job.array to their task index — submitted together as one array.
+type arrayGroup struct {
+	name    string // a representative label, for error messages
+	members []*eval.Target
+	index   map[*eval.Target]int
+}
 
 // Backend runs or submits a single target. deps are the job ids of upstream
 // targets that ran/submitted in this build (for wiring scheduler dependencies);
@@ -56,6 +73,8 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 		resolving:     map[*eval.Target]bool{},
 		jobID:         map[*eval.Target]string{},
 		done:          map[*eval.Target]bool{},
+		arrayOf:       map[*eval.Target]*arrayGroup{},
+		arrayDone:     map[*arrayGroup]bool{},
 	}
 	for _, t := range p.Targets {
 		// A target with no outputs is opportunistic: it runs after the goals, only
@@ -81,6 +100,10 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 		for _, o := range t.Outputs {
 			r.candidates[o] = append(r.candidates[o], t)
 		}
+	}
+
+	if err := r.detectArrays(); err != nil {
+		return err
 	}
 
 	goals := opts.Goals
@@ -147,6 +170,9 @@ type driver struct {
 	resolving map[*eval.Target]bool
 	jobID     map[*eval.Target]string
 	done      map[*eval.Target]bool
+
+	arrayOf   map[*eval.Target]*arrayGroup // array members → their group
+	arrayDone map[*arrayGroup]bool         // group already submitted
 }
 
 func (r *driver) buildGoal(goal string) error {
@@ -169,13 +195,37 @@ func (r *driver) buildGoal(goal string) error {
 }
 
 // submit ensures target t (and any prerequisites it needs) are run/submitted,
-// returning t's job id.
+// returning t's job id. Array members are submitted as a group (once).
 func (r *driver) submit(t *eval.Target) (string, error) {
 	if r.done[t] {
 		return r.jobID[t], nil
 	}
+	if g := r.arrayOf[t]; g != nil {
+		if err := r.submitArrayGroup(g); err != nil {
+			return "", err
+		}
+		return r.jobID[t], nil
+	}
 	r.done[t] = true
 
+	deps, err := r.collectDeps(t)
+	if err != nil {
+		return "", err
+	}
+	if !t.HasBody {
+		return "", nil // bodyless aggregator
+	}
+	id, err := r.doSubmit(t, deps)
+	if err != nil {
+		return "", err
+	}
+	r.jobID[t] = id
+	return id, nil
+}
+
+// collectDeps resolves t's inputs, submitting any in-run producers and gathering
+// their job ids (plus external/ledger producers for inputs not on disk).
+func (r *driver) collectDeps(t *eval.Target) ([]string, error) {
 	var deps []string
 	for _, in := range t.Inputs {
 		pt := r.producerFor(in)
@@ -191,28 +241,159 @@ func (r *driver) submit(t *eval.Target) (string, error) {
 		}
 		sub, err := r.resolve(pt)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if sub.willRun || !r.statExists(in) {
 			id, err := r.submit(pt)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
 			if id != "" {
 				deps = append(deps, id)
 			}
 		}
 	}
+	return deps, nil
+}
 
-	if !t.HasBody {
-		return "", nil // bodyless aggregator
+// detectArrays groups targets that mark themselves with a job.array task index
+// (from one declaration) so the backend can submit them as one scheduler array.
+func (r *driver) detectArrays() error {
+	groups := map[token.Pos]*arrayGroup{}
+	for _, t := range r.prog.Targets {
+		// Only real (bodied, output-producing) targets whose body even mentions
+		// job.array are candidates — this keeps non-array pipelines free of the
+		// extra per-target render below.
+		if !t.HasBody || len(t.Outputs) == 0 || !strings.Contains(t.Body, "job.array") {
+			continue
+		}
+		idx, ok, err := r.prog.ArrayIndex(t)
+		if err != nil {
+			return fmt.Errorf("%s: %w", Label(t), err)
+		}
+		if !ok {
+			continue
+		}
+		g := groups[t.Pos]
+		if g == nil {
+			g = &arrayGroup{name: Label(t), index: map[*eval.Target]int{}}
+			groups[t.Pos] = g
+		}
+		for _, m := range g.members {
+			if g.index[m] == idx {
+				return fmt.Errorf("array %q: duplicate job.array index %d — each element's index must be unique", g.name, idx)
+			}
+		}
+		g.members = append(g.members, t)
+		g.index[t] = idx
+		r.arrayOf[t] = g
 	}
-	id, err := r.doSubmit(t, deps)
-	if err != nil {
-		return "", err
+	return nil
+}
+
+// submitArrayGroup submits a whole array group at once: it resolves each stale
+// member's dependencies, requires them to be identical across the group (a single
+// array submission carries one dependency directive — per-element dependencies
+// would need aftercorr), then hands the stale members to the backend as one array.
+func (r *driver) submitArrayGroup(g *arrayGroup) error {
+	if r.arrayDone[g] {
+		return nil
 	}
-	r.jobID[t] = id
-	return id, nil
+	r.arrayDone[g] = true
+
+	var stale []*eval.Target
+	var idxs []int
+	var commonDeps []string
+	have := false
+	for _, m := range g.members {
+		if r.done[m] {
+			continue
+		}
+		r.done[m] = true
+		deps, err := r.collectDeps(m)
+		if err != nil {
+			return err
+		}
+		res, err := r.resolve(m)
+		if err != nil {
+			return err
+		}
+		// Sparse: include a member when it is stale OR any of its outputs is missing
+		// (temp outputs don't count toward willRun, but a downstream still needs them
+		// built). Up-to-date members are skipped, so a restart submits only the gaps.
+		if !m.HasBody || (!res.willRun && r.outputsPresent(m)) {
+			continue
+		}
+		if !have {
+			commonDeps, have = deps, true
+		} else if !sameDeps(commonDeps, deps) {
+			return fmt.Errorf("array %q has per-element dependencies (an element-wise array→array edge); "+
+				"that needs aftercorr, which is not yet supported — submit one job per target instead "+
+				"(drop job.array on one of the rules)", g.name)
+		}
+		stale = append(stale, m)
+		idxs = append(idxs, g.index[m])
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+
+	ids := map[*eval.Target]string{}
+	if ab, ok := r.backend.(arrayBackend); ok {
+		got, err := ab.SubmitArray(stale, idxs, commonDeps)
+		if err != nil {
+			return err
+		}
+		ids = got
+	} else {
+		// Backend without array support (shell, graphviz, …): one submit per member.
+		for _, m := range stale {
+			id, err := r.backend.Submit(m, commonDeps)
+			if err != nil {
+				return err
+			}
+			ids[m] = id
+		}
+	}
+	for _, m := range stale {
+		r.jobID[m] = ids[m]
+		if r.prog.Postsubmit != nil && r.prog.Postsubmit.HasBody {
+			if err := r.backend.PostSubmit(m, ids[m]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// outputsPresent reports whether every one of t's outputs is on disk.
+func (r *driver) outputsPresent(t *eval.Target) bool {
+	for _, o := range t.Outputs {
+		if !r.statExists(o) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameDeps reports whether two dependency-id lists are equal as sets.
+func sameDeps(a, b []string) bool {
+	sa, sb := map[string]bool{}, map[string]bool{}
+	for _, x := range a {
+		sa[x] = true
+	}
+	for _, x := range b {
+		sb[x] = true
+	}
+	if len(sa) != len(sb) {
+		return false
+	}
+	for k := range sa {
+		if !sb[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // doSubmit submits a target and then runs the @postsubmit hook (once per

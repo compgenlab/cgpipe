@@ -46,7 +46,7 @@ ${sample}.qc: ${sample}.fastp.json ${sample}.trim.R1_fastqc.html
   `${output[0]}` … `${output[2]}`.
 - **Manifest fan-out.** Write the pipeline for one sample, then run it across a
   cohort with `-manifest-tsv` — each row's `sample`/`r1`/`r2` columns become the
-  variables. See the [Manifests chapter](../12-Manifests_and_Fanout.md).
+  variables. See the [Manifests chapter](../13-Manifests_and_Fanout.md).
 - **A sentinel aggregator** (`${sample}.qc`) groups the two QC outputs into one goal.
 
 ## Run it

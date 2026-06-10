@@ -40,7 +40,7 @@ translates them into its own header lines. The common ones:
 | `job.queue` | Queue / partition |
 | `job.account` | Accounting/billing project |
 | `job.mail` | Notification address |
-| `job.gpu` | GPUs to request (see [Containers & GPUs](09-Containers_and_GPUs.md)) |
+| `job.gpu` | GPUs to request (see [Containers & GPUs](10-Containers_and_GPUs.md)) |
 | `job.env` | Capture the submit-host environment into the job (SLURM `--export=ALL`, SGE/PBS `-V`, BatchQ `-env`) |
 | `job.hold` | Submit this job held (release it later by hand) |
 | `job.setup` | A list of shell lines emitted at the top of the submission script, before the body |
@@ -59,7 +59,7 @@ targets (`job.mem = "4G"`) or inside a body's directive block (`job.mem = "4G"`)
 A setting is captured per target at definition time, so a global `job.mem = "8G"`
 near the top becomes the default for every target defined after it, unless a
 target overrides it. To hold the *entire* pipeline until it submits cleanly, see
-`global_hold` in the [Configuration Reference](13-Configuration_Reference.md).
+`global_hold` in the [Configuration Reference](14-Configuration_Reference.md).
 
 ### The same job, four schedulers
 
@@ -161,7 +161,7 @@ b.bam: a.bam {{ job.name = "post"; -- ; cp ${input} ${output} }}
 
 You never write `afterok` yourself — it follows from the `output: input` edges.
 Cross-*run* and cross-*stage* dependencies are resolved through the
-[ledger](10-The_Ledger.md).
+[ledger](11-The_Ledger.md).
 
 ## Dry runs
 
@@ -174,7 +174,7 @@ cgp -dr -r slurm pipeline.cgp
 
 > Remember that cgp's own `$(cmd)` substitution runs at render time, so it executes
 > under `-dr` too. Use `\$(cmd)` to defer to the job's shell. See
-> [Troubleshooting](16-Troubleshooting.md).
+> [Troubleshooting](17-Troubleshooting.md).
 
 ## One-off jobs: `cgp sub`
 
@@ -247,11 +247,16 @@ Fan-out jobs are independent siblings: each fan-out file is its job's primary in
 `-d`/`--deps` applies to every job, and `-a`/`--after` is resolved per file (after
 `{}` expansion). Use `-dr` to preview every rendered job before submitting.
 
+To submit the whole fan-out as a **single scheduler array job** instead of N
+separate ones, add `--array` — see [Array Jobs](09-Array_Jobs.md).
+
 ## Next
 
-- **[Containers and GPUs](09-Containers_and_GPUs.md)** — run bodies in images,
+- **[Array Jobs](09-Array_Jobs.md)** — submit a fan-out as one scheduler array;
+  `for … with i`.
+- **[Containers and GPUs](10-Containers_and_GPUs.md)** — run bodies in images,
   request GPUs.
-- **[Configuration Reference](13-Configuration_Reference.md)** — every setting,
+- **[Configuration Reference](14-Configuration_Reference.md)** — every setting,
   precedence, and where to put cluster defaults.
 
 Reference → [language-spec.md §11.4](language-spec.md#114-per-job-settings-the-job-namespace),

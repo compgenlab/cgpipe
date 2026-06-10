@@ -52,12 +52,12 @@ overrides a config default.
 | `cgp.runner.<name>.global_hold` | Submit every job held until the whole pipeline submits cleanly, then release (scheduler runners; off by default) |
 | `cgp.runner.sge.parallelenv` | SGE parallel-environment name, used for `-pe <pe> <procs>` when `job.procs > 1` |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of printing it (default off) |
-| `cgp.ledger` | Ledger database path; enables [cross-run tracking](10-The_Ledger.md) |
+| `cgp.ledger` | Ledger database path; enables [cross-run tracking](11-The_Ledger.md) |
 | `cgp.run_id` | Run identifier |
 | `cgp.shell` | Default shell for rendered bodies |
 | `cgp.dryrun` | Set by `-dr` / `CGP_DRYRUN` |
 | `cgp.container.engine` | `docker`, `singularity`/`apptainer`; unset disables container wrapping |
-| `cgp.container.*` | Bind mounts, env passthrough, engine opts (see [Containers & GPUs](09-Containers_and_GPUs.md)) |
+| `cgp.container.*` | Bind mounts, env passthrough, engine opts (see [Containers & GPUs](10-Containers_and_GPUs.md)) |
 | `cgp.gpu` | Default GPU count for all targets |
 
 Some belt-and-suspenders behaviors are **opt-in**, not default — for instance
@@ -129,6 +129,6 @@ specifics on top of this personal baseline.
 
 ## Next
 
-- **[Running Jobs](08-Running_Jobs.md)** · **[Containers & GPUs](09-Containers_and_GPUs.md)** · **[The Ledger](10-The_Ledger.md)**
+- **[Running Jobs](08-Running_Jobs.md)** · **[Containers & GPUs](10-Containers_and_GPUs.md)** · **[The Ledger](11-The_Ledger.md)**
 
 Reference → [language-spec.md §11](language-spec.md#11-configuration).

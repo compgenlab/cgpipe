@@ -63,7 +63,7 @@ cgp align.cgp -manifest-tsv samples.tsv --ref /refs/hg38.fa
 The same pipeline works with CSV (`-manifest-csv`), JSON (`-manifest-json`, an
 array of objects), or a glob of `.cgp` manifest files (`-manifest`) when a row
 needs computed or list-valued variables. See
-[Manifests and Fan-out](../12-Manifests_and_Fanout.md).
+[Manifests and Fan-out](../13-Manifests_and_Fanout.md).
 
 ## One report for the whole cohort
 
@@ -78,5 +78,5 @@ cgp -r html align.cgp -manifest-tsv samples.tsv > cohort.html
 - **[Tutorial 12: Stage workflows](12-stage-workflow.md)** — fan a multi-stage
   workflow over a cohort.
 
-Reference → [Manifests and Fan-out](../12-Manifests_and_Fanout.md),
+Reference → [Manifests and Fan-out](../13-Manifests_and_Fanout.md),
 [language-spec.md §14](../language-spec.md#14-manifests-and-fan-out).

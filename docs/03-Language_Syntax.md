@@ -177,7 +177,7 @@ print "$(echo ${name})"     # sample-1
 
 > **`$(cmd)` runs even under `-dr`,** because rendering the script is what
 > evaluates it. To defer a command to the *job's* shell at run time, write
-> `\$(cmd)`. See [Troubleshooting](16-Troubleshooting.md).
+> `\$(cmd)`. See [Troubleshooting](17-Troubleshooting.md).
 
 ### Escaping
 
@@ -225,7 +225,14 @@ for n < 3 {
 }
 ```
 
-Loop variables remain set after the loop (no separate scope).
+Add `with <name>` to a `for…in` to bind a **1-based** loop counter alongside the
+element — handy for numbering iterations (e.g. [array task ids](09-Array_Jobs.md)):
+
+```
+for s in ["a", "b", "c"] with i { print i, s }   # 1 a / 2 b / 3 c
+```
+
+Loop variables remain set after the loop (no separate scope) — the counter too.
 
 ## Statements
 
@@ -233,7 +240,7 @@ Loop variables remain set after the loop (no separate scope).
 |-----------|---------|
 | `print expr [, expr …]` | Write to stdout (comma-separated args, space-joined). Inside a body, appends to the rendered script instead. |
 | `include "path"` | Inline another `.cgp` file in global context — the composition mechanism (see [Tutorial 8](tutorials/08-include.md)) |
-| `export name = expr` | Expose a value to a calling [workflow](11-Workflows.md); a no-op standalone |
+| `export name = expr` | Expose a value to a calling [workflow](12-Workflows.md); a no-op standalone |
 | `eval expr` | Evaluate a string-valued expression as cgp source at run time |
 | `unset name` | Remove a variable |
 | `exit [code]` | Stop the pipeline (`exit` ⇒ `exit 0`); the code becomes cgp's exit status |

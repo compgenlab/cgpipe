@@ -153,12 +153,14 @@ type (
 		Else   []Stmt
 	}
 	// For is `for Var in Iter { Body }` (Cond nil) or `for Cond { Body }` (Var "", Iter nil).
+	// An optional `with IndexVar` on the `in` form binds a 1-based loop counter.
 	For struct {
-		PosV token.Pos
-		Var  string
-		Iter Expr
-		Cond Expr
-		Body []Stmt
+		PosV     token.Pos
+		Var      string
+		IndexVar string // optional `with i` counter; "" when absent
+		Iter     Expr
+		Cond     Expr
+		Body     []Stmt
 	}
 	// Include inlines another .cgp file at this point (global context).
 	Include struct {

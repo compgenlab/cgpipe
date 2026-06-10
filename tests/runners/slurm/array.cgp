@@ -1,0 +1,20 @@
+# A for-loop fan-out marked with `job.array` (the element's task index, via
+# `with i`) is submitted as ONE scheduler job array, not one job per element.
+# The gather depends on each element's per-task id (afterok:<id>_<i>).
+chroms = ["chr1", "chr2", "chr3"]
+calls  = []
+for c in chroms with i {
+    calls += "calls.${c}.vcf"
+    ^calls.${c}.vcf: aligned.bam {{
+        job.array = i
+        job.name  = "call"
+        job.mem   = "8G"
+        --
+        call_variants --region ${c} ${input} > ${output}
+    }}
+}
+merged.vcf: @{calls} {{
+    --
+    bcftools concat ${input} > ${output}
+}}
+@default: merged.vcf
