@@ -41,19 +41,20 @@ func TestLedgerOwnershipAndVacuum(t *testing.T) {
 	}
 }
 
-// §10.6 Unlock removes the lockfile by hand, so a fresh opener can acquire it.
+// §10 The JSONL ledger takes no cross-process lock, so multiple writers can open
+// the same directory and Unlock is a deprecated no-op.
 func TestLedgerUnlock(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "l.db")
-	lg, err := ledger.Open(path)
+	dir := filepath.Join(t.TempDir(), "ledger")
+	lg, err := ledger.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ledger.Unlock(path); err != nil {
+	if err := ledger.Unlock(dir); err != nil {
 		t.Fatalf("unlock: %v", err)
 	}
-	lg2, err := ledger.Open(path)
+	lg2, err := ledger.Open(dir) // no lock to contend with
 	if err != nil {
-		t.Fatalf("reopen after unlock: %v", err)
+		t.Fatalf("second open: %v", err)
 	}
 	lg2.Close()
 	lg.Close()

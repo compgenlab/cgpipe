@@ -1,7 +1,10 @@
 package ledger
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -146,6 +149,120 @@ func TestVacuumKeepsCurrentOwners(t *testing.T) {
 	if got := owner(t, l, "other.bam"); got != "300" {
 		t.Fatalf("owner = %q, want 300", got)
 	}
+}
+
+// TestFoldMultiWriterLastWins simulates two separate processes each appending to
+// their own log file and both claiming the same output: the later record (by the
+// (ts,host,pid,seq) order) must win — the scenario a single shared SQLite file
+// couldn't survive.
+func TestFoldMultiWriterLastWins(t *testing.T) {
+	dir := t.TempDir()
+	writeLog(t, dir, "hostA-10-100-1.jsonl",
+		record{Ts: 100, Seq: 1, Host: "hostA", Pid: 10, Job: Job{JobID: "A", Outputs: []string{"out.bam"}}})
+	writeLog(t, dir, "hostB-20-200-1.jsonl",
+		record{Ts: 200, Seq: 1, Host: "hostB", Pid: 20, Job: Job{JobID: "B", Outputs: []string{"out.bam"}}})
+
+	l, err := OpenRead(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if got := owner(t, l, "out.bam"); got != "B" {
+		t.Fatalf("owner = %q, want B (later record wins across writers)", got)
+	}
+	if n, _ := l.CountJobs(); n != 2 {
+		t.Fatalf("jobs = %d, want 2", n)
+	}
+}
+
+// TestFoldToleratesTornLine makes sure a partial trailing record (a writer that
+// crashed mid-append) never makes the whole ledger unreadable.
+func TestFoldToleratesTornLine(t *testing.T) {
+	dir := t.TempDir()
+	good, _ := json.Marshal(record{Ts: 100, Seq: 1, Host: "h", Pid: 1,
+		Job: Job{JobID: "ok", Outputs: []string{"a"}}})
+	content := string(good) + "\n" + `{"ts":200,"job_id":"trunc","outp` // truncated
+	if err := os.WriteFile(filepath.Join(dir, "h-1-1-1.jsonl"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, err := OpenRead(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if got := owner(t, l, "a"); got != "ok" {
+		t.Fatalf("owner = %q, want ok (torn trailing line must not break the read)", got)
+	}
+	if n, _ := l.CountJobs(); n != 1 {
+		t.Fatalf("jobs = %d, want 1 (torn record skipped)", n)
+	}
+}
+
+// TestVacuumCompactsToSnapshot checks that vacuum collapses the per-process logs
+// into a single snapshot.jsonl holding only the current owners.
+func TestVacuumCompactsToSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Record(Job{JobID: "1", Outputs: []string{"x"}})
+	l.Record(Job{JobID: "2", Outputs: []string{"x"}}) // 1 orphaned
+	l.Record(Job{JobID: "3", Outputs: []string{"y"}})
+	if err := l.Vacuum(); err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+
+	if names := jsonlNames(t, dir); len(names) != 1 || names[0] != snapshotName {
+		t.Fatalf("after vacuum dir = %v, want [%s]", names, snapshotName)
+	}
+	l2, err := OpenRead(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l2.Close()
+	if n, _ := l2.CountJobs(); n != 2 {
+		t.Fatalf("jobs after vacuum = %d, want 2", n)
+	}
+	if got := owner(t, l2, "x"); got != "2" {
+		t.Fatalf("owner x = %q, want 2", got)
+	}
+	if got := owner(t, l2, "y"); got != "3" {
+		t.Fatalf("owner y = %q, want 3", got)
+	}
+}
+
+func writeLog(t *testing.T, dir, name string, recs ...record) {
+	t.Helper()
+	var b strings.Builder
+	for _, r := range recs {
+		j, err := json.Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.Write(j)
+		b.WriteByte('\n')
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func jsonlNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".jsonl") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func TestReopenPersists(t *testing.T) {

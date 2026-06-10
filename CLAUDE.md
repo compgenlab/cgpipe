@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`cgp` is a small interpreted language and runner for generating and submitting job scripts — the Go rewrite of [cgpipe-jvm](https://github.com/compgen-io/cgpipe-jvm). It reads a `.cgp` pipeline, builds a dependency graph of *outputs*, decides what is stale, and renders/submits each target through a backend (local shell or a batch scheduler). It ships as a single static binary (pure Go, no CGO) with an optional SQLite-backed job ledger for fast restarts at scale.
+`cgp` is a small interpreted language and runner for generating and submitting job scripts — the Go rewrite of [cgpipe-jvm](https://github.com/compgen-io/cgpipe-jvm). It reads a `.cgp` pipeline, builds a dependency graph of *outputs*, decides what is stale, and renders/submits each target through a backend (local shell or a batch scheduler). It ships as a single static binary (pure Go, no CGO, no external dependencies) with an optional append-only (JSONL) job ledger for fast restarts at scale.
 
 The language is specified in [`docs/language-spec.md`](docs/language-spec.md) — this is the design authority. **On a spec-vs-test discrepancy, default to the test being correct** (fix the spec, or fix the test first if the test itself is wrong). Behavior changes should update the spec in the same change.
 
@@ -65,7 +65,7 @@ lexer → parser → ast → eval (→ Program: dependency graph) → runner.Bui
   - `runner/shell` — default; renders the graph to one bash script (a function per target) and optionally executes it.
   - `runner/sched` — the template-based scheduler backends (SLURM/SGE/PBS/BatchQ). Each `Scheduler` is a struct of submit command + template + dependency wiring; templates live in `runner/sched/templates`. A user can override just the template via `cgp.runner.<name>.template` or `~/.cgp/custom_template.cgp` (resolved in `newBackend`); `cgp show-template -r <name>` prints the built-in to scaffold one.
   - `runner/graphviz` — emits DOT; `runner/report` — HTML status report read from the ledger.
-- **`internal/ledger`** — optional SQLite ledger (modernc.org/sqlite, no CGO). Records only **which job owns (last produced) which output**, plus inputs/edges. It stores **no job state** (the scheduler owns liveness) and **no file metadata** (the filesystem owns staleness). Core query: "who owns output X?" — used to wire dependencies on jobs from prior runs/earlier stages still in the queue. Single-writer per ledger (`lock.go`).
+- **`internal/ledger`** — optional append-only ledger: a **directory of JSONL files**, one per writer process (`<host>-<pid>-…​.jsonl`), folded into an in-memory view on read (last record wins per output, by a `(ts,host,pid,seq)` order). Records only **which job owns (last produced) which output**, plus inputs/edges. Stores **no job state** (the scheduler owns liveness) and **no file metadata** (the filesystem owns staleness). Core query: "who owns output X?" — used to wire dependencies on jobs from prior runs/earlier stages still in the queue. No cross-process lock (each writer owns its file); `Vacuum` compacts to `snapshot.jsonl`. Robust on NFS/Lustre, where a shared mmap'd DB file is not.
 
 ### Cross-cutting flows (start in `cmd/cgp/main.go`)
 
@@ -81,5 +81,5 @@ The CLI argument grammar is unusual and handled in `main.go` + `args.go`: single
 
 ## Conventions
 
-- Standard library only where practical; the one external dependency is `modernc.org/sqlite` (pure Go) for the ledger.
+- Standard library only — the module has **no external dependencies** (`go.mod` lists none). Keep it that way unless there's a compelling reason.
 - `cgp`'s own `$(…)` command substitution runs at *render* time (even under `-dr`); use `\$(…)` to defer to the job's shell.

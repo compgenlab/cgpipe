@@ -38,8 +38,9 @@ workflow as `${stage.name}`; a no-op when the pipeline runs standalone.
 
 **Goal.** A target requested to be built — on the command line, or via `@default`.
 
-**Ledger.** The optional SQLite database recording which job owns (last produced)
-which output. Enables cross-run reuse; stores no mtimes and no job state.
+**Ledger.** The optional directory of append-only JSONL files recording which job
+owns (last produced) which output. Enables cross-run reuse; stores no mtimes and
+no job state.
 [The Ledger](11-The_Ledger.md).
 
 **Manifest.** A table (TSV/CSV/JSON) or glob of `.cgp` files whose rows each supply

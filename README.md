@@ -4,14 +4,14 @@
 the Go rewrite of [cgpipe](https://github.com/compgen-io/cgpipe-jvm). It keeps
 cgpipe's spirit (shebang scripts, output-first targets, a tiny shell-friendly
 DSL, a persistent job ledger) while shipping as a single static binary with no
-JVM, fast startup, and an SQLite-backed ledger designed for fast restarts at
+JVM, fast startup, and an append-only job ledger designed for fast restarts at
 scale.
 
 > **Status: early development.** The language is specified in
 > [`docs/language-spec.md`](docs/language-spec.md). `cgp` runs pipelines with the
 > local shell or a batch scheduler — the full language, dependency resolution
 > (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
-> the optional SQLite ledger (cross-run reuse of still-queued jobs) are
+> the optional job ledger (cross-run reuse of still-queued jobs) are
 > implemented, plus `cgp sub` for one-off job submission, config-file loading,
 > container/GPU wrapping, `-manifest*` fan-out (run a pipeline once per manifest
 > row/file), and multi-pipeline `stage` composition (chain standalone pipelines
@@ -68,7 +68,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 | `internal/parser/`| hand-rolled recursive-descent parser |
 | `internal/eval/`  | evaluator: scope, control flow, target collection → dependency graph; renders shell bodies (`${…}`, `%`-control lines) |
 | `internal/runner/` | drive a graph to a backend; `runner/shell` (default), `runner/sched` (slurm/sge/pbs/batchq), `runner/graphviz`, `runner/report` (html) |
-| `internal/ledger/` | optional SQLite job ledger (output → owning job) |
+| `internal/ledger/` | optional append-only (JSONL) job ledger (output → owning job) |
 | `internal/container/` | container/GPU command wrapping (docker/singularity) |
 | `internal/manifest/` | manifest loaders (tsv/csv/json/cgp) for fan-out |
 | `internal/convert/` | best-effort migrator from legacy cgpipe scripts |

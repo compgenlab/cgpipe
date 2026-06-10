@@ -52,7 +52,7 @@ overrides a config default.
 | `cgp.runner.<name>.global_hold` | Submit every job held until the whole pipeline submits cleanly, then release (scheduler runners; off by default) |
 | `cgp.runner.sge.parallelenv` | SGE parallel-environment name, used for `-pe <pe> <procs>` when `job.procs > 1` |
 | `cgp.runner.shell.autoexec` | Shell runner: execute the assembled script instead of printing it (default off) |
-| `cgp.ledger` | Ledger database path; enables [cross-run tracking](11-The_Ledger.md) |
+| `cgp.ledger` | Ledger directory path; enables [cross-run tracking](11-The_Ledger.md) |
 | `cgp.run_id` | Run identifier |
 | `cgp.shell` | Default shell for rendered bodies |
 | `cgp.dryrun` | Set by `-dr` / `CGP_DRYRUN` |
@@ -121,7 +121,7 @@ job.mem ?= "4G"
 cgp.container.engine = "singularity"
 
 # Keep a ledger so restarts are cheap and cross-run reuse works.
-cgp.ledger = "/scratch/${USER}/cgp-ledger.db"
+cgp.ledger = "/scratch/${USER}/cgp.ledger"
 ```
 
 Pipelines then start clean — often just `include "defaults.cgp"` for project

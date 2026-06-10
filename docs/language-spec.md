@@ -437,47 +437,29 @@ Three responsibilities are kept strictly separate:
 - **Ledger** records identity/ownership and dependency edges.
 - **Scheduler** owns live job state (queued/running/done). cgp asks `squeue`/`qstat`; the ledger stores **no** job state.
 
-The ledger therefore stores **no file metadata (no mtimes)** and **no job state**. Enabled via `cgp.ledger` (a path).
+The ledger therefore stores **no file metadata (no mtimes)** and **no job state**. Enabled via `cgp.ledger` (a directory path).
 
 ### 10.2 Storage
-SQLite (`modernc.org/sqlite`, pure Go), single-writer per ledger. Schema (v1):
+The ledger is a **directory** of append-only JSON-lines (JSONL) files; `cgp.ledger` names the directory (created if absent). There is no shared database file and **no cross-process lock**.
 
-    CREATE TABLE jobs (
-        job_id      TEXT PRIMARY KEY,   -- scheduler id (or shell-runner synthetic id)
-        run_id      TEXT,               -- optional, e.g. "align-20260604"
-        name        TEXT,               -- job/target name
-        pipeline    TEXT,               -- the pipeline filename run, e.g. "align.cgp"
-        working_dir TEXT,
-        user        TEXT,
-        submit_time INTEGER,
-        start_time  INTEGER,            -- reserved for an external updater; core never writes/reads
-        end_time    INTEGER,            --   "
-        return_code INTEGER             --   "
-    );
-    CREATE INDEX jobs_by_run ON jobs(run_id);
+- **One line = one job record.** Each submission appends a single JSON object (a complete job, with `outputs`/`inputs`/`deps`/`settings`/`script` nested in it) to a file, then `fsync`s it. A record carries an ordering header — `ts` (write time, Unix ns), `seq` (per-writer counter), `host`, `pid` — followed by the job fields:
 
-    CREATE TABLE output_owner (         -- authoritative "who owns this path now"
-        path   TEXT PRIMARY KEY,
-        job_id TEXT NOT NULL REFERENCES jobs(job_id)
-    );
+      {"ts":1733356800123456789,"seq":1,"host":"node01","pid":4823,
+       "job_id":"1002","run_id":"align-20260604","name":"align","pipeline":"align.cgp",
+       "working_dir":"/scratch/me","user":"me","submit_time":1733356800,
+       "deps":["1001"],"outputs":["aligned.bam"],"inputs":["trimmed.fq"],
+       "settings":{"mem":"8000"},"script":"bwa mem trimmed.fq > aligned.bam"}
 
-    CREATE TABLE job_outputs (          -- full history; provenance + vacuum source
-        job_id  TEXT NOT NULL REFERENCES jobs(job_id),
-        path    TEXT NOT NULL,
-        is_temp INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (job_id, path)
-    );
-    CREATE INDEX job_outputs_by_path ON job_outputs(path);
+- **One file per writer process,** named `<host>-<pid>-<nanos>-<n>.jsonl`. Because each process appends only to its own file, concurrent runs never write the same file and need no lock — robust on NFS/Lustre, where shared-file locking is unreliable.
+- **Reading folds the directory** into an in-memory view: every record is read and the **latest one wins**, per job id and per output path, ordered by the total order `(ts, host, pid, seq)`. Within one writer this is exact append order; across writers `ts` decides, with host/pid/seq as deterministic tie-breakers. A malformed trailing line (a writer that crashed mid-append) is skipped, never fatal.
+- **`snapshot.jsonl`** is the compacted baseline written by `vacuum` (§10.3); it is read like any other file, just first.
 
-    CREATE TABLE job_inputs   ( job_id TEXT NOT NULL REFERENCES jobs(job_id), path   TEXT NOT NULL, PRIMARY KEY (job_id, path) );
-    CREATE TABLE job_deps     ( job_id TEXT NOT NULL REFERENCES jobs(job_id), dep_id TEXT NOT NULL, PRIMARY KEY (job_id, dep_id) );
-    CREATE TABLE job_settings ( job_id TEXT NOT NULL REFERENCES jobs(job_id), key    TEXT NOT NULL, value TEXT );
-    CREATE TABLE job_src      ( job_id TEXT NOT NULL REFERENCES jobs(job_id), lineno INTEGER NOT NULL, line TEXT, PRIMARY KEY (job_id, lineno) );
+The `submit_time` field (whole seconds) is the job's recorded submission time, used to order `cgp ledger dump`/`search` output; the `ts` header (nanoseconds) is the separate fold-ordering key.
 
 ### 10.3 Ownership and vacuum
-- **Lookup:** `SELECT job_id FROM output_owner WHERE path = ?`.
-- **Claim (last job wins):** on submit, each output runs `INSERT INTO output_owner(path, job_id) VALUES(?,?) ON CONFLICT(path) DO UPDATE SET job_id = excluded.job_id`. The overwrite encodes recency — no ordering column needed. This covers both "previous owner failed" and "previous owner succeeded but an input changed, so a new job re-produces the output."
-- **Vacuum** (`cgp ledger vacuum`): keep every job referenced by `output_owner`, drop the rest (cascade to child tables), in one transaction. The last owner of each path survives even if it failed.
+- **Lookup:** the folded view maps each output path to the job id of the latest record that produced it.
+- **Claim (last job wins):** a submitted job appends a record listing its outputs; on the next fold, that record's ordering key supersedes any earlier claim of the same path. Recency is encoded by the `(ts, host, pid, seq)` order — no ordering column or in-place update needed. This covers both "previous owner failed" and "previous owner succeeded but an input changed, so a new job re-produces the output."
+- **Vacuum** (`cgp ledger vacuum`): re-fold the directory, write the jobs that still own at least one output to a fresh `snapshot.jsonl` (temp file + atomic rename), then remove the per-process logs that were folded. The last owner of each path survives even if it failed. Logs still being appended by a live local process are left in place and reclaimed by a later vacuum once idle, so run it when the ledger is otherwise quiet.
 
 ### 10.4 Restart
 Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. The `-force` option rebuilds every target in the goal graph regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
@@ -487,8 +469,8 @@ Because staleness is mtime-based and cgp tracks ownership, **not** job success (
 ### 10.5 Cross-run and cross-stage reuse
 When a ledger is configured and a scheduler runner is in use, an input that has **no in-run producer** and **isn't on disk yet** is looked up in the ledger: if its owning job is still active (per `squeue`/`qstat`), the new work is wired as a scheduler dependency (`afterok:<id>`) of that in-flight job instead of being treated as a "no rule to make" error or duplicated. This is what makes re-running a pipeline before it has finished safe, and it is also how a later workflow [stage](#13-workflows-stage-and-export) waits on a file an earlier stage's jobs are still queued to produce. With the shell runner each job has already completed (the file exists), so the lookup is unnecessary.
 
-### 10.6 Lockfile
-The ledger SQLite database is opened with `nolock=1` and guarded by a separate NFS-safe lockfile (`O_CREAT|O_EXCL`) so it is safe on network filesystems without a client/server process. A stale lock left by a dead process on the same host is stolen automatically; otherwise cgp waits briefly and then errors. `cgp ledger unlock <db>` removes a lock by hand.
+### 10.6 Concurrency
+The ledger takes **no lock**. Each process appends only to its own file, so concurrent runs sharing one ledger directory simply each write a separate file; reads fold them together (§10.2). A reader loads the directory once at open time, so a peer's records written during a run are seen on the next open, not mid-run — at worst this resubmits an already-queued job (a performance hiccup), never corruption. `cgp ledger unlock <dir>` is retained for compatibility and is a no-op (there is no lock to clear).
 
 ---
 
@@ -518,7 +500,7 @@ The configuration namespace is `cgp.*`. User-scoped state lives under a single r
 
 | Variable | Purpose |
 |----------|---------|
-| `cgp.ledger` | Ledger path; enables cross-run job tracking |
+| `cgp.ledger` | Ledger directory path; enables cross-run job tracking |
 | `cgp.run_id` | Run identifier (also `CGP_RUN_ID`) |
 | `cgp.runner` | `shell`, `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` |
 | `cgp.runner.<name>.<setting>` | Runner-specific |
@@ -644,7 +626,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
 
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] <command ...> [-- <file ...>]
-    cgp ledger {dump|search|vacuum|unlock} <db>
+    cgp ledger {dump|search|vacuum|unlock} <dir>
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
     cgp lsp
@@ -691,9 +673,9 @@ Each fan-out file becomes its job's primary declared input; fan-out jobs are ind
 **Array fan-out (`--array`).** With `--array`, the fan-out is submitted as a single scheduler **job array** (`--array=1-N`) instead of N independent jobs. Each file becomes one array task: the rendered body is a `case` over the scheduler's task-id variable (`$SLURM_ARRAY_TASK_ID`, `$BATCHQ_ARRAY_TASK_ID`, `$PBS_ARRAY_INDEX`) with one branch per file, each the file's fully `{}`-expanded command. Supported on `slurm`/`batchq`/`pbs`; `sge` and `shell` fall back to one job per file. A fixed `-d`/`-a` applies to the whole array; a `{}`-expanded `-a/--after` is rejected, because a single array submission carries one dependency directive and so cannot express a per-element dependency. See the [Array Jobs chapter](README.md).
 
 ### 15.2 `cgp ledger`
-- `cgp ledger dump <db>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`/`START`/`END`, `RETCODE`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).
-- `cgp ledger search [filters] <db>` writes the same TSV for the jobs matching the filters (combined with AND; substring match except `-id`): `-i PATH` (an input contains), `-o PATH` (an output contains), `-g PATTERN` (a job-script line contains — grep), `-name NAME` (job name contains), `-id JOBID` (exact). A non-matching search prints nothing.
-- `cgp ledger vacuum <db>` keeps only the last owner of each path and drops the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <db>` removes a stale lockfile ([§10.6](#106-lockfile)).
+- `cgp ledger dump <dir>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).
+- `cgp ledger search [filters] <dir>` writes the same TSV for the jobs matching the filters (combined with AND; substring match except `-id`): `-i PATH` (an input contains), `-o PATH` (an output contains), `-g PATTERN` (a job-script line contains — grep), `-name NAME` (job name contains), `-id JOBID` (exact). A non-matching search prints nothing.
+- `cgp ledger vacuum <dir>` compacts the ledger to a single `snapshot.jsonl`, keeping only the last owner of each path and dropping the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <dir>` is a deprecated no-op ([§10.6](#106-concurrency)).
 
 `dump` and `search` open the ledger read-only, so they are safe to run while a pipeline is in flight.
 
