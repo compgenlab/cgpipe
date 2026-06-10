@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
@@ -209,6 +210,46 @@ func TestSlurmActiveAndState(t *testing.T) {
 	for id, want := range state {
 		if got := slurmState(id); got != want {
 			t.Errorf("slurmState(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestSlurmStatusAndEndTime(t *testing.T) {
+	installScontrolStatus(t, map[string]string{
+		"j-pending": "JobState=PENDING EndTime=Unknown",
+		"j-run":     "JobState=RUNNING EndTime=Unknown",
+		"j-done":    "JobState=COMPLETED EndTime=2024-01-02T03:04:05",
+	})
+	status := map[string]string{
+		"j-pending": "PENDING", "j-run": "RUNNING", "j-done": "COMPLETED",
+		"j-unknown": "", // aged out of scontrol
+	}
+	for id, want := range status {
+		if got := slurmStatus(id); got != want {
+			t.Errorf("slurmStatus(%q) = %q, want %q", id, got, want)
+		}
+	}
+
+	// A completed job exposes its EndTime; a pending job ("Unknown") and an
+	// aged-out job do not.
+	if _, ok := slurmEndTime("j-pending"); ok {
+		t.Errorf("slurmEndTime(j-pending) ok=true, want false")
+	}
+	if _, ok := slurmEndTime("j-unknown"); ok {
+		t.Errorf("slurmEndTime(j-unknown) ok=true, want false")
+	}
+	want := time.Date(2024, 1, 2, 3, 4, 5, 0, time.Local).Unix()
+	if got, ok := slurmEndTime("j-done"); !ok || got != want {
+		t.Errorf("slurmEndTime(j-done) = %d,%v, want %d,true", got, ok, want)
+	}
+}
+
+// Every scheduler must wire a native Status probe (cgp ledger status relies on it).
+func TestSchedulersWireStatus(t *testing.T) {
+	for _, name := range Names() {
+		s, _ := For(name)
+		if s.Status == nil {
+			t.Errorf("scheduler %q has no Status func", name)
 		}
 	}
 }

@@ -626,7 +626,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
 
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] <command ...> [-- <file ...>]
-    cgp ledger {dump|search|vacuum} <dir>
+    cgp ledger {dump|search|status|vacuum} <dir>
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
     cgp lsp
@@ -675,9 +675,12 @@ Each fan-out file becomes its job's primary declared input; fan-out jobs are ind
 ### 15.2 `cgp ledger`
 - `cgp ledger dump <dir>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).
 - `cgp ledger search [filters] <dir>` writes the same TSV for the jobs matching the filters (combined with AND; substring match except `-id`): `-i PATH` (an input contains), `-o PATH` (an output contains), `-g PATTERN` (a job-script line contains — grep), `-name NAME` (job name contains), `-id JOBID` (exact). A non-matching search prints nothing.
+- `cgp ledger status [-r RUNNER] [-output] <dir>` probes the scheduler for the live status of recorded jobs. It needs a scheduler runner: `-r RUNNER` (slurm/sge/pbs/batchq), else `cgp.runner` from config; a non-scheduler runner is rejected. `<dir>` likewise falls back to `cgp.ledger`. The displayed status is the scheduler's **native** word (e.g. `PENDING`, `PROXYQUEUED`, `qw`), not the normalized report vocabulary.
+  - **Job mode** (default) writes `<jobid>\t<STATUS>\t<name>` per recorded job; `STATUS` is `UNKNOWN` once a job has aged out of the scheduler.
+  - **Output mode** (`-output`) writes `<output>\t<jobid>\t<STATUS>` per owned output (the most recent owning job, [§10.3](#103-ownership-and-vacuum)). A still-active job shows its live native status; a finished or aged-out job is reconciled against the file's mtime: `COMPLETE` (aged out, file present and not older than `submit_time`) or `DIRTY` (missing, older than `submit_time`, or — when the scheduler reports an end time — modified more than five minutes after it). The end-time upper bound is best-effort and applied only where the scheduler exposes a completion time (SLURM via `scontrol`; batchq via `batchq status -e`).
 - `cgp ledger vacuum <dir>` compacts the ledger to a single `snapshot.jsonl`, keeping only the last owner of each path and dropping the rest ([§10.3](#103-ownership-and-vacuum)). There is no `unlock` subcommand — the ledger takes no lock ([§10.6](#106-concurrency)).
 
-`dump` and `search` open the ledger read-only, so they are safe to run while a pipeline is in flight.
+`dump`, `search`, and `status` open the ledger read-only, so they are safe to run while a pipeline is in flight.
 
 ### 15.3 `cgp convert` — migrate an older script
 `cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgp-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgpipe.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgp-convert:` comment for you to review.

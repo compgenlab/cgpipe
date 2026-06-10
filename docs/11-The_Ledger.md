@@ -77,6 +77,7 @@ rather than resubmitting:
 ```
 cgp ledger dump <dir>                   dump all jobs as key/value TSV
 cgp ledger search [filters] <dir>       dump jobs matching the filters
+cgp ledger status [-r RUNNER] [-output] <dir>   live scheduler status per job (or output)
 cgp ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
 ```
 
@@ -115,6 +116,49 @@ $ cgp ledger search -o aligned.bam jobs.ledger
 1002	OUTPUT	aligned.bam
 ...
 ```
+
+### Status
+
+`status` asks the scheduler what is happening with the recorded jobs right now —
+a pipeline-free view of the queue. It needs a scheduler runner to query: pass
+`-r <runner>` or let it pick up `cgp.runner` (and, if you omit `<dir>`,
+`cgp.ledger`) from your config.
+
+The status word shown is the scheduler's **native** one, so cluster-specific
+states stay visible (SLURM `PENDING`/`COMPLETED`, batchq `PROXYQUEUED`, SGE `qw`,
+…). A job the scheduler no longer knows about reads `UNKNOWN`.
+
+```console
+$ cgp ledger status -r batchq jobs.ledger
+1001	SUCCESS	trim
+1002	RUNNING	align
+1003	PROXYQUEUED	merge
+```
+
+With `-output`, each row is an **output file** mapped to the most recent job that
+claims it, and the status is reconciled against the file on disk:
+
+```console
+$ cgp ledger status -r batchq -output jobs.ledger
+trimmed.fq	1001	SUCCESS
+aligned.bam	1002	RUNNING
+old.bam	1009	COMPLETE
+stray.bam	1010	DIRTY
+```
+
+For a job still queued or running, the row is just that live status. For a
+finished or aged-out job the file's modification time is checked against the
+job's submit time (and, where the scheduler reports one, its end time):
+
+- **COMPLETE** — the owning job has aged out of the scheduler but the file exists
+  and is at least as new as the job's submission.
+- **DIRTY** — the file is missing, older than the job's submission, or was
+  modified well after the job ended (more than five minutes) — i.e. it does not
+  line up with the job that is supposed to have produced it.
+
+The end-time upper bound is best-effort: it is applied only for schedulers that
+report a completion time (SLURM via `scontrol`, batchq via `batchq status -e`), so
+on others only the submit-time lower bound is enforced.
 
 ### Vacuum
 

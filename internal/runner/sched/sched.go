@@ -33,6 +33,14 @@ type Scheduler struct {
 	ReleaseCmd func(string) []string // command to release a held job
 	IsActive   func(string) bool     // is a job id still queued/running? (for ledger reuse)
 	State      func(string) string   // normalized live state for reports: queued|running|done|failed|"" (unknown); optional
+	// Status returns the scheduler's native status word for a job (e.g. SLURM
+	// "PENDING", batchq "PROXYQUEUED"), or "" if the job is unknown/aged out. Used
+	// by `cgp ledger status` to show scheduler-specific states verbatim.
+	Status func(string) string
+	// EndTime returns the job's completion time (Unix seconds) when the scheduler
+	// exposes one, with ok=false otherwise. Best-effort: used by `cgp ledger status`
+	// as the upper bound of the output-mtime window. Only some schedulers implement it.
+	EndTime func(string) (int64, bool)
 	// ArrayTaskVar is the run-time environment variable carrying a job array's task
 	// index (e.g. SLURM_ARRAY_TASK_ID). "" means the scheduler has no array support,
 	// so array groups fall back to one job per element.
@@ -47,6 +55,8 @@ var schedulers = map[string]Scheduler{
 		ReleaseCmd:   func(id string) []string { return []string{"scontrol", "release", id} },
 		IsActive:     slurmActive,
 		State:        slurmState,
+		Status:       slurmStatus,
+		EndTime:      slurmEndTime,
 		ArrayTaskVar: "SLURM_ARRAY_TASK_ID",
 	},
 	"sge": {
@@ -56,6 +66,7 @@ var schedulers = map[string]Scheduler{
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
 		IsActive:   sgeActive,
 		State:      sgeState,
+		Status:     sgeStatus,
 	},
 	"pbs": {
 		Name: "pbs", Template: pbsTmpl,
@@ -64,6 +75,7 @@ var schedulers = map[string]Scheduler{
 		ReleaseCmd: func(id string) []string { return []string{"qrls", id} },
 		IsActive:   pbsActive,
 		State:      pbsState,
+		Status:     pbsStatus,
 		// No ArrayTaskVar: pipeline-array task ids on PBS use a different subjob
 		// format (12345[i]) than SLURM/BatchQ's <base>_<i>, so pipeline arrays fall
 		// back to per-element submission on PBS. (cgp sub --array has no downstream
@@ -76,6 +88,8 @@ var schedulers = map[string]Scheduler{
 		ReleaseCmd:   func(id string) []string { return []string{"batchq", "release", id} },
 		IsActive:     batchqActive,
 		State:        batchqState,
+		Status:       batchqStatus,
+		EndTime:      batchqEndTime,
 		ArrayTaskVar: "BATCHQ_ARRAY_TASK_ID",
 	},
 }
@@ -104,20 +118,25 @@ func slurmActive(id string) bool {
 	return reason != "DependencyNeverSatisfied"
 }
 
-// slurmState maps a SLURM JobState (from `scontrol show job`) to the report
-// vocabulary; "" means unknown (e.g. the job has aged out of scontrol).
-func slurmState(id string) string {
+// slurmStatus returns the native SLURM JobState word (e.g. "PENDING", "RUNNING",
+// "COMPLETED") from `scontrol -o show job`, or "" if the job is unknown (aged out).
+func slurmStatus(id string) string {
 	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
 	if err != nil {
 		return ""
 	}
-	state := ""
 	for _, tok := range strings.Fields(string(out)) {
 		if kv := strings.SplitN(tok, "=", 2); len(kv) == 2 && kv[0] == "JobState" {
-			state = kv[1]
+			return kv[1]
 		}
 	}
-	switch state {
+	return ""
+}
+
+// slurmState maps a SLURM JobState (from `scontrol show job`) to the report
+// vocabulary; "" means unknown (e.g. the job has aged out of scontrol).
+func slurmState(id string) string {
+	switch slurmStatus(id) {
 	case "PENDING":
 		return "queued"
 	case "RUNNING", "CONFIGURING", "COMPLETING", "RESIZING":
@@ -128,6 +147,32 @@ func slurmState(id string) string {
 		return "failed"
 	}
 	return ""
+}
+
+// slurmEndTime returns a job's completion time (Unix seconds) from the
+// EndTime field of `scontrol -o show job`, with ok=false when the field is
+// absent, not yet known ("Unknown"/"None"), or unparseable. SLURM prints it as
+// a local-time "YYYY-MM-DDTHH:MM:SS" timestamp.
+func slurmEndTime(id string) (int64, bool) {
+	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	if err != nil {
+		return 0, false
+	}
+	for _, tok := range strings.Fields(string(out)) {
+		kv := strings.SplitN(tok, "=", 2)
+		if len(kv) != 2 || kv[0] != "EndTime" {
+			continue
+		}
+		if kv[1] == "Unknown" || kv[1] == "None" || kv[1] == "" {
+			return 0, false
+		}
+		t, err := time.ParseInLocation("2006-01-02T15:04:05", kv[1], time.Local)
+		if err != nil {
+			return 0, false
+		}
+		return t.Unix(), true
+	}
+	return 0, false
 }
 
 // batchqStatus returns the status word BatchQ reports for a job (e.g. "RUNNING",
@@ -172,6 +217,29 @@ func batchqState(id string) string {
 		return "failed"
 	}
 	return ""
+}
+
+// batchqEndTime returns a job's completion time (Unix seconds) via `batchq status
+// -e <id>`. The -sbet flags ask batchq to append times to the status line
+// (s=submit, b=begin, e=end, t=wall); with -e the line is "<jobid> <STATUS>
+// <end>", where <end> is an RFC3339 UTC timestamp (e.g. 2026-06-10T12:34:56Z — no
+// spaces, so the space-delimited line stays parseable). ok=false when the job is
+// unknown or has no end time yet (e.g. still running, where the field is absent or
+// not a valid timestamp).
+func batchqEndTime(id string) (int64, bool) {
+	out, err := exec.Command("batchq", "status", "-e", id).Output()
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 3 && f[0] == id {
+			if t, err := time.Parse(time.RFC3339, f[2]); err == nil {
+				return t.Unix(), true
+			}
+		}
+	}
+	return 0, false
 }
 
 // sgeStatus returns the SGE state code (e.g. "r", "qw", "Eqw") for a job, or ""
