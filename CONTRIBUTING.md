@@ -25,8 +25,8 @@ a `gofmt`/`go vet` lint job. All must pass.
 
 - The language is defined in [`docs/language-spec.md`](docs/language-spec.md).
   Behavior changes should update the spec in the same PR.
-- Standard library only where practical. The one planned external dependency is
-  `modernc.org/sqlite` (pure Go, no CGO) for the ledger.
+- Standard library only — the module has no external dependencies. Keep it that
+  way unless there's a compelling reason.
 - Keep the parser hand-rolled and the error messages good.
 
 ## License

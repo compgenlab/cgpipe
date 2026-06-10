@@ -30,7 +30,7 @@ The pitch, in five points:
   or generate per-chromosome jobs with an ordinary `for` loop. No channels, no
   operators.
 - **A single static binary.** `cgp` is one file with no runtime to install. Fast
-  startup, and an optional SQLite *ledger* that makes restarts cheap at scale.
+  startup, and an optional *ledger* that makes restarts cheap at scale.
 
 ### The same script, two backends
 

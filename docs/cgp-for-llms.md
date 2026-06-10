@@ -153,7 +153,7 @@ Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-str
 Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
 
 ## Ledger (optional), workflows, manifests
-- **Ledger** (`cgp.ledger = "jobs.db"`): records which job owns which output;
+- **Ledger** (`cgp.ledger = "jobs.ledger"`, a directory): records which job owns which output;
   enables cross-run reuse of still-queued jobs (scheduler runners). Restart is
   mtime-based regardless; `-force` rebuilds all. Inspect: `cgp ledger dump/search/vacuum/unlock`.
 - **Workflow** (chain pipelines): `stage NAME FILE --arg ...`; a stage exposes a

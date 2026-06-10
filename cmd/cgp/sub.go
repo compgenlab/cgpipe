@@ -49,7 +49,7 @@ options:
                          array task-id. shell/sge fall back to one job per file. A
                          {}-expanded --after is rejected (per-element dependency).
     -r, --runner NAME    runner: shell (default), slurm, sge, pbs, batchq
-    -l, --ledger PATH    ledger database
+    -l, --ledger PATH    ledger directory
     -dr                  dry run: render the job(s) instead of submitting
     -h, --help           show this help
 

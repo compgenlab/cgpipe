@@ -9,10 +9,10 @@ import (
 )
 
 const ledgerUsage = `usage:
-    cgp ledger dump <db>                       dump all jobs as key/value TSV
-    cgp ledger search [filters] <db>           dump jobs matching the filters
-    cgp ledger vacuum <db>                      drop jobs that own no current output
-    cgp ledger unlock <db>                      remove a stale lockfile
+    cgp ledger dump <dir>                      dump all jobs as key/value TSV
+    cgp ledger search [filters] <dir>          dump jobs matching the filters
+    cgp ledger vacuum <dir>                     compact the ledger, dropping jobs that own no current output
+    cgp ledger unlock <dir>                     deprecated no-op (the ledger takes no lock)
 
 search filters (substring match; combined with AND):
     -i PATH      an input path contains PATH

@@ -29,7 +29,7 @@ in-flight jobs:
 
 ```
 #!/usr/bin/env cgp
-cgp.ledger = "jobs.db"
+cgp.ledger = "jobs.ledger"
 cgp.runner = "slurm"
 
 trimmed.fq: a.fastq {{
@@ -52,7 +52,7 @@ The first submission records ownership and the dependency edge:
 $ cgp pipeline.cgp
 1001
 1002
-$ cgp ledger dump jobs.db
+$ cgp ledger dump jobs.ledger
 1001	NAME	trim
 1001	OUTPUT	trimmed.fq
 1002	NAME	align
@@ -75,10 +75,9 @@ earlier stage's jobs are still queued to produce.
 ## Inspecting and maintaining the ledger
 
 ```sh
-cgp ledger dump jobs.db                  # everything, as TSV
-cgp ledger search -o aligned.bam jobs.db # just jobs producing aligned.bam
-cgp ledger vacuum jobs.db                # drop jobs that own no current output
-cgp ledger unlock jobs.db                # clear a stale lock (no run active)
+cgp ledger dump jobs.ledger                  # everything, as TSV
+cgp ledger search -o aligned.bam jobs.ledger # just jobs producing aligned.bam
+cgp ledger vacuum jobs.ledger                # compact, dropping jobs that own no current output
 ```
 
 ## Next

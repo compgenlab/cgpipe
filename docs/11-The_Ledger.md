@@ -1,15 +1,15 @@
 # The Ledger
 
-The **ledger** is an optional SQLite database that records **which job last
-produced which output file**. A pipeline runs correctly without one — restarts work
-off file timestamps alone. The ledger adds one capability: **safe coordination
-across separate runs and stages**, so you can re-run a pipeline whose jobs are
-still queued without resubmitting or colliding.
+The **ledger** is an optional on-disk record of **which job last produced which
+output file**. A pipeline runs correctly without one — restarts work off file
+timestamps alone. The ledger adds one capability: **safe coordination across
+separate runs and stages**, so you can re-run a pipeline whose jobs are still
+queued without resubmitting or colliding.
 
-Enable it with a path:
+Enable it with a path — the ledger is a **directory**, created if it doesn't exist:
 
 ```
-cgp.ledger = "/scratch/me/jobs.db"
+cgp.ledger = "/scratch/me/jobs.ledger"
 ```
 
 ## What it does and doesn't track
@@ -24,8 +24,21 @@ The ledger deliberately keeps three concerns separate:
 - **The scheduler owns live state.** Whether a job is queued, running, or done is
   answered by `squeue`/`qstat`. The ledger stores **no job state**.
 
-That separation is why the ledger stays small and never goes stale: it's a
+That separation is why the ledger stays small and never goes stale: it's an
 ownership map, not a cache of the world.
+
+## How it's stored
+
+The ledger directory holds **append-only JSON-lines files** — one line per
+recorded job. Each running process appends to **its own file**
+(`<host>-<pid>-…​.jsonl`); no file is ever shared between processes, and **no lock
+is taken**. Reading folds every file together, newest record winning per output.
+
+This layout is deliberately robust on shared filesystems (NFS, Lustre): appending
+to a private file is the safest operation such filesystems offer, a half-written
+record can never corrupt more than its own trailing line, and two runs touching
+the same ledger at once simply each write their own file. The files are plain text
+— you can `cat`, `grep`, or `jq` them directly.
 
 ## Restart is timestamp-based
 
@@ -62,16 +75,16 @@ rather than resubmitting:
 ## Inspecting the ledger: `cgp ledger`
 
 ```
-cgp ledger dump <db>                    dump all jobs as key/value TSV
-cgp ledger search [filters] <db>        dump jobs matching the filters
-cgp ledger vacuum <db>                  drop jobs that own no current output
-cgp ledger unlock <db>                  remove a stale lockfile
+cgp ledger dump <dir>                   dump all jobs as key/value TSV
+cgp ledger search [filters] <dir>       dump jobs matching the filters
+cgp ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
+cgp ledger unlock <dir>                 deprecated no-op (the ledger takes no lock)
 ```
 
 `dump` prints every job as key/value TSV — provenance you can grep:
 
 ```console
-$ cgp ledger dump jobs.db
+$ cgp ledger dump jobs.ledger
 1001	PIPELINE	led.cgp
 1001	NAME	trim
 1001	OUTPUT	trimmed.fq
@@ -98,22 +111,23 @@ Note `1002 DEP 1001` — the recorded dependency edge. `search` narrows by filte
 | `-id JOBID` | the job id (exact) |
 
 ```console
-$ cgp ledger search -o aligned.bam jobs.db
+$ cgp ledger search -o aligned.bam jobs.ledger
 1002	NAME	align
 1002	OUTPUT	aligned.bam
 ...
 ```
 
-### Vacuum and unlock
+### Vacuum
 
-The ledger keeps full history. `vacuum` drops every job that no longer owns a
-current output (the last owner of each path always survives, even if it failed),
-reclaiming space in one transaction.
+The ledger keeps full history, accumulating one record per submission. `vacuum`
+rewrites the directory as a single compacted `snapshot.jsonl` containing only the
+jobs that still own a current output — the last owner of each path always
+survives, even if it failed. Per-process logs still being appended by a live run
+are left in place and reclaimed by a later vacuum once idle. Run it when nothing
+else is writing the ledger.
 
-The database is guarded by an NFS-safe lockfile so it's safe on network
-filesystems. A stale lock from a dead process on the same host is stolen
-automatically; otherwise cgp waits briefly, then errors. `cgp ledger unlock <db>`
-removes a lock by hand if you're sure no run is active.
+`unlock` is retained only for compatibility and does nothing: the ledger takes no
+cross-process lock, so there is never a stale lock to clear.
 
 ## Next
 
