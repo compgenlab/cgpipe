@@ -101,12 +101,48 @@ func TestRunPipelineHelp(t *testing.T) {
 func TestSubShellCreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	if code := run([]string{"sub", "-o", "out.txt", "--", "echo hi > ${output}"}); code != 0 {
+	if code := run([]string{"sub", "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
 		t.Fatalf("cgp sub = %d, want 0", code)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "out.txt"))
 	if err != nil || string(b) != "hi\n" {
 		t.Fatalf("out.txt = %q, err=%v", string(b), err)
+	}
+}
+
+// cgp sub fan-out: files after -- submit one job each, with `{}` substitution.
+func TestSubFanout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("a.in", []byte("AAA\n"), 0o644)
+	os.WriteFile("b.in", []byte("BBB\n"), 0o644)
+	// {} -> each file, {@.in} -> basename minus the .in suffix.
+	if code := run([]string{"sub", "-n", "cp{#}", "-o", "{@.in}.out", "cp {} {@.in}.out", "--", "a.in", "b.in"}); code != 0 {
+		t.Fatalf("cgp sub fan-out = %d, want 0", code)
+	}
+	for _, c := range []struct{ f, want string }{{"a.out", "AAA\n"}, {"b.out", "BBB\n"}} {
+		b, err := os.ReadFile(filepath.Join(dir, c.f))
+		if err != nil || string(b) != c.want {
+			t.Errorf("%s = %q err=%v; want %q", c.f, string(b), err, c.want)
+		}
+	}
+}
+
+// cgp sub --files-from: the fan-out list can come from a file (no -- needed).
+func TestSubFilesFrom(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("a.in", []byte("AAA\n"), 0o644)
+	os.WriteFile("b.in", []byte("BBB\n"), 0o644)
+	os.WriteFile("list.txt", []byte("a.in\n\nb.in\n"), 0o644) // blank line ignored
+	if code := run([]string{"sub", "--files-from", "list.txt", "-o", "{@.in}.out", "cp {} {@.in}.out"}); code != 0 {
+		t.Fatalf("cgp sub --files-from = %d, want 0", code)
+	}
+	for _, c := range []struct{ f, want string }{{"a.out", "AAA\n"}, {"b.out", "BBB\n"}} {
+		b, err := os.ReadFile(filepath.Join(dir, c.f))
+		if err != nil || string(b) != c.want {
+			t.Errorf("%s = %q err=%v; want %q", c.f, string(b), err, c.want)
+		}
 	}
 }
 
@@ -131,7 +167,7 @@ func TestConfigFileLoaded(t *testing.T) {
 }
 
 func TestSubNoCommand(t *testing.T) {
-	if code := run([]string{"sub", "-mem", "8G"}); code != 2 {
+	if code := run([]string{"sub", "-m", "8G"}); code != 2 {
 		t.Fatalf("cgp sub with no command = %d, want 2", code)
 	}
 }
@@ -451,7 +487,7 @@ func TestExplicitGoalOverridesDefault(t *testing.T) {
 func TestSubDryRun(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	if code := run([]string{"sub", "-dr", "-o", "out.txt", "--", "echo hi > ${output}"}); code != 0 {
+	if code := run([]string{"sub", "-dr", "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
 		t.Fatalf("cgp sub -dr = %d", code)
 	}
 	if fileThere(dir, "out.txt") {
@@ -465,7 +501,7 @@ func TestLedgerVacuumCLI(t *testing.T) {
 	db := filepath.Join(dir, "l.db")
 	// create the ledger by submitting a one-off job that records an output.
 	t.Chdir(dir)
-	if code := run([]string{"sub", "-ledger", db, "-o", "out.txt", "--", "echo hi > ${output}"}); code != 0 {
+	if code := run([]string{"sub", "-l", db, "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
 		t.Fatalf("seed ledger = %d", code)
 	}
 	if code := run([]string{"ledger", "vacuum", db}); code != 0 {

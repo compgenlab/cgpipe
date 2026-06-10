@@ -179,32 +179,73 @@ cgp -dr -r slurm pipeline.cgp
 ## One-off jobs: `cgp sub`
 
 Sometimes you just want to submit a single command with resources and
-dependencies, no pipeline file. `cgp sub` does that — everything after `--` is the
-command, treated as a cgp body (so `${input}`/`${output}` substitute):
+dependencies, no pipeline file. `cgp sub` does that. The first token that is not a
+recognized option begins the command; everything from there until a bare `--` is
+the command, treated as a cgp body (so `${input}`/`${output}` substitute):
 
 ```sh
-cgp sub -r slurm -name sort -mem 8G -procs 4 \
+cgp sub -r slurm -n sort -m 8G -p 4 \
     -o sorted.bam -i in.bam \
-    -- samtools sort -o ${output} ${input}
+    samtools sort -o ${output} ${input}
 ```
 
 Options:
 
 | Option | Meaning |
 |--------|---------|
-| `-name S` | Job name |
-| `-mem S` / `-procs N` / `-walltime S` | Resources |
+| `-n, --name S` | Job name |
+| `-m, --mem S` / `-p, --procs N` / `-t, --walltime S` | Resources |
 | `-o PATH` | Declared output (repeatable; recorded in the ledger) |
 | `-i PATH` | Declared input (repeatable) |
-| `-d JOBID` | Depend on an existing job id (repeatable) |
-| `-after PATH` | Depend on the active job that owns `PATH` in the ledger (repeatable) |
-| `-r NAME` | Runner (`shell` default, or a scheduler) |
-| `-ledger PATH` | Ledger database |
+| `-d, --deps IDS` | Depend on existing job ids (comma-separated; repeatable) |
+| `-a, --after PATH` | Depend on the active job that owns `PATH` in the ledger (repeatable) |
+| `-f, --files-from F` | Read fan-out files from `F`, one per line (`-` = stdin; repeatable) |
+| `-r, --runner NAME` | Runner (`shell` default, or a scheduler) |
+| `-l, --ledger PATH` | Ledger database |
 | `-dr` | Dry run |
+| `-h, --help` | Show help |
 
-`-after` is the interesting one: it looks up which still-running job last produced
-a file (via the ledger) and depends on it — letting you attach a one-off job to a
-pipeline that's already in flight.
+`-a`/`--after` is the interesting one: it looks up which still-running job last
+produced a file (via the ledger) and depends on it — letting you attach a one-off
+job to a pipeline that's already in flight.
+
+> **Quote your redirects.** Pipes and redirects in the command run *before* `--`,
+> so an unquoted `>` or `|` would be applied to `cgp` itself by your shell. Quote
+> the affected part — `'sort {} > {@.txt}.sorted'` — so it reaches the job.
+
+### Fan-out: one job per file
+
+List files *after* `--` and `cgp sub` submits one independent job per file. Inside
+the command (and in `-o`/`-i`/`-a` and the job name) `{}` placeholders expand to the
+current file:
+
+```sh
+cgp sub -r slurm -m 4G -o '{@.fastq.gz}.bam' \
+    'bwa mem ref.fa {} > {@.fastq.gz}.bam' \
+    -- sampleA.fastq.gz sampleB.fastq.gz
+```
+
+| Placeholder | Expands to |
+|-------------|------------|
+| `{}` `{^}` | the full input path |
+| `{@}` | the basename (directory stripped) |
+| `{^SUF}` | the full path with a trailing `SUF` removed (if it ends with `SUF`) |
+| `{@SUF}` | the basename with a trailing `SUF` removed (if it ends with `SUF`) |
+| `{#}` | the 1-based fan-out index |
+| `{{}}` | a literal `{}` |
+
+For long file lists that would overflow the command line, read them from a file (or
+stdin) with `--files-from` instead of globbing on the command line — no `--` needed:
+
+```sh
+find data -name '*.fastq.gz' > inputs.txt
+cgp sub -m 4G --files-from inputs.txt -o '{@.fastq.gz}.bam' \
+    'bwa mem ref.fa {} > {@.fastq.gz}.bam'
+```
+
+Fan-out jobs are independent siblings: each fan-out file is its job's primary input,
+`-d`/`--deps` applies to every job, and `-a`/`--after` is resolved per file (after
+`{}` expansion). Use `-dr` to preview every rendered job before submitting.
 
 ## Next
 

@@ -82,7 +82,7 @@ const usage = `cgp — run a .cgp pipeline
 
 usage:
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
-    cgp sub [options] -- <command ...>     (submit a one-off job; see cgp sub -h)
+    cgp sub [options] <command ...> [-- file ...]   (one-off job / fan-out; see cgp sub -h)
     cgp ledger {dump|search|vacuum|unlock} <db>   (see cgp ledger)
     cgp convert <old.cgp> [-o out.cgp]     (migrate a legacy cgpipe script)
     cgp show-template -r <runner>          (print a scheduler's built-in submission template)
@@ -128,7 +128,7 @@ func run(args []string) int {
 	}
 
 	switch args[0] {
-	case "-h", "help":
+	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return 0
 	case "version":
