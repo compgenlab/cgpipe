@@ -663,7 +663,7 @@ Submits a single command as a job, using the same runners, settings, and ledger 
 
     cgp sub -m 8G -o out.bam -i in.bam samtools sort -o ${output} ${input}
 
-Options: `-n, --name`, `-m, --mem`, `-p, --procs`, `-t, --walltime`, `-o PATH` (declared output, repeatable), `-i PATH` (declared input, repeatable), `-d, --deps IDS` (depend on existing job ids, comma-separated; repeatable), `-a, --after PATH` (depend on the active ledger owner of `PATH`; repeatable), `-f, --files-from F` (read fan-out files from `F`, one per line; `-` = stdin; repeatable), `-r, --runner`, `-l, --ledger`, `-dr`, `-h, --help`.
+Options: `-n, --name`, `-m, --mem`, `-p, --procs`, `-t, --walltime`, `-o, --output PATH` (declared output, repeatable), `-i, --input PATH` (declared input, repeatable), `-d, --deps IDS` (depend on existing job ids, comma-separated; repeatable), `-a, --after PATH` (depend on the active ledger owner of `PATH`; repeatable), `-f, --files-from F` (read fan-out files from `F`, one per line; `-` = stdin; only once), `-r, --runner`, `-l, --ledger`, `-dr`, `-h, --help`.
 
 **Fan-out.** Files listed after `--` (or supplied via `--files-from`) each submit one independent job, with `{}` placeholders expanded against the file in the command, the job name, and the `-o`/`-i`/`-a` values:
 

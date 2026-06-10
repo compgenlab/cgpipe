@@ -195,11 +195,11 @@ Options:
 |--------|---------|
 | `-n, --name S` | Job name |
 | `-m, --mem S` / `-p, --procs N` / `-t, --walltime S` | Resources |
-| `-o PATH` | Declared output (repeatable; recorded in the ledger) |
-| `-i PATH` | Declared input (repeatable) |
+| `-o, --output PATH` | Declared output (repeatable; recorded in the ledger) |
+| `-i, --input PATH` | Declared input (repeatable) |
 | `-d, --deps IDS` | Depend on existing job ids (comma-separated; repeatable) |
 | `-a, --after PATH` | Depend on the active job that owns `PATH` in the ledger (repeatable) |
-| `-f, --files-from F` | Read fan-out files from `F`, one per line (`-` = stdin; repeatable) |
+| `-f, --files-from F` | Read fan-out files from `F`, one per line (`-` = stdin; only once) |
 | `-r, --runner NAME` | Runner (`shell` default, or a scheduler) |
 | `-l, --ledger PATH` | Ledger database |
 | `-dr` | Dry run |

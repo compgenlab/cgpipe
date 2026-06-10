@@ -146,6 +146,27 @@ func TestSubFilesFrom(t *testing.T) {
 	}
 }
 
+// cgp sub -d/--deps is both comma-separated AND repeatable: the two accumulate.
+func TestSubDepsCSVAndRepeatable(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// batchq renders `#BATCHQ -afterok <deps joined by ",">`, so the dry run
+	// shows the accumulated dependency list.
+	out := captureStdout(t, func() int {
+		return run([]string{"sub", "-dr", "-r", "batchq", "-d", "a,b", "-d", "c", "echo hi"})
+	})
+	if !strings.Contains(out, "#BATCHQ -afterok a,b,c") {
+		t.Errorf("deps not accumulated (csv + repeatable); got:\n%s", out)
+	}
+}
+
+// cgp sub --files-from may be given only once (unlike the repeatable list flags).
+func TestSubFilesFromOnlyOnce(t *testing.T) {
+	if code := run([]string{"sub", "-f", "a.txt", "-f", "b.txt", "echo hi"}); code != 2 {
+		t.Errorf("repeated --files-from = %d, want 2", code)
+	}
+}
+
 func TestConfigFileLoaded(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".cgp"), 0o755); err != nil {

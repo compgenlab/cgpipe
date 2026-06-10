@@ -39,11 +39,11 @@ options:
     -p, --procs N        cpus
     -m, --mem S          memory (e.g. 8G)
     -t, --walltime S     wall-time limit
-    -o PATH              declared output (repeatable; recorded in the ledger)
-    -i PATH              declared input (repeatable)
+    -o, --output PATH    declared output (repeatable; recorded in the ledger)
+    -i, --input PATH     declared input (repeatable)
     -d, --deps IDS       depend on existing job ids (comma-separated; repeatable)
     -a, --after PATH     depend on the active job that owns PATH in the ledger (repeatable)
-    -f, --files-from F   read fan-out files from F, one per line (- = stdin; repeatable)
+    -f, --files-from F   read fan-out files from F, one per line (- = stdin; only once)
     -r, --runner NAME    runner: shell (default), slurm, sge, pbs, batchq
     -l, --ledger PATH    ledger database
     -dr                  dry run: render the job(s) instead of submitting
@@ -62,8 +62,9 @@ shell applies them to the job, not to cgp.
 // placeholders; with none, it submits a single job.
 func runSub(args []string) int {
 	var name string
-	var outs, ins, deps, after, filesFrom []string
-	var runnerName, ledgerPath string
+	var outs, ins, deps, after []string
+	var runnerName, ledgerPath, filesFrom string
+	filesFromSet := false
 	dryRun := false
 	settings := map[string]eval.Value{}
 	var cmdParts, files []string
@@ -131,13 +132,13 @@ flags:
 				return 2
 			}
 			settings["job.walltime"] = eval.StrVal(v)
-		case "-o":
+		case "-o", "--output":
 			v, ok := val()
 			if !ok {
 				return 2
 			}
 			outs = append(outs, v)
-		case "-i":
+		case "-i", "--input":
 			v, ok := val()
 			if !ok {
 				return 2
@@ -166,7 +167,11 @@ flags:
 			if !ok {
 				return 2
 			}
-			filesFrom = append(filesFrom, v)
+			if filesFromSet {
+				fmt.Fprintln(os.Stderr, "cgp sub: --files-from may be given only once")
+				return 2
+			}
+			filesFrom, filesFromSet = v, true
 		case "-d", "--deps":
 			v, ok := val()
 			if !ok {
@@ -198,11 +203,11 @@ flags:
 		return 2
 	}
 
-	// Assemble the fan-out file list: --files-from lists (in order) then the
+	// Assemble the fan-out file list: the --files-from list (if any) then the
 	// positional files after `--`.
 	var fanFiles []string
-	for _, fl := range filesFrom {
-		list, err := readFilesFrom(fl)
+	if filesFromSet {
+		list, err := readFilesFrom(filesFrom)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "cgp sub: %v\n", err)
 			return 1
