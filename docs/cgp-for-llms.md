@@ -109,6 +109,12 @@ out1 out2 : in1 in2 {{
   job setting, so `--name foo` (`name`) and `job.name` never collide. `job.procs`
   defaults to 1; a setting is the default for targets defined after it.
   **No `--` ⇒ no directive block; the whole body is shell.**
+- **Array jobs**: set `job.array = <int>` (the element's task index, e.g. `with i`)
+  on a fan-out rule and cgp submits all its elements as ONE scheduler array
+  (slurm/batchq; sge/pbs → one job per element). Elements must be
+  submission-compatible (same `job.*` but the index) with unique indices, else error.
+  A gather depends on the exact tasks (`afterok:<id>_<i>`); restarts submit only the
+  stale indices. Element-wise array→array (needs aftercorr) isn't supported yet.
 - Body is raw shell: only `\$`/`\@` are special. `\$(cmd)` and `\${VAR}` defer to
   the job's shell (vs `$(cmd)`/`${var}` which cgp evaluates at render time).
 - **Inline conditional** for optional flags: `bwa ${if rg; "-R " + rg} ...`.

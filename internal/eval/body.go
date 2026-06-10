@@ -38,6 +38,29 @@ func (p *Program) JobContext(t *Target) (map[string]Value, string, error) {
 	return vars, body, nil
 }
 
+// ArrayIndex renders t's job context and reports its job.array task index when set
+// to a positive integer (ok=true). It returns (0, false, nil) when job.array is
+// unset, and an error when job.array is set to anything other than an integer ≥ 1.
+// Used by the runner to group a fan-out into one scheduler array submission.
+func (p *Program) ArrayIndex(t *Target) (int, bool, error) {
+	vars, _, err := p.JobContext(t)
+	if err != nil {
+		return 0, false, err
+	}
+	v, ok := vars["job.array"]
+	if !ok {
+		return 0, false, nil
+	}
+	n, isInt := v.(IntVal)
+	if !isInt {
+		return 0, false, fmt.Errorf("job.array must be a positive integer (the task index), got %s (%s)", stringify(v), v.typeName())
+	}
+	if int(n) < 1 {
+		return 0, false, fmt.Errorf("job.array must be >= 1 (the task index), got %d", int(n))
+	}
+	return int(n), true, nil
+}
+
 // RenderPostsubmit renders the @postsubmit body in the context of one submitted
 // job: the job's ${input} / ${output} / ${stem} are exposed, plus ${jobid} (the
 // scheduler id, empty for the shell runner). Returns "" when no @postsubmit is

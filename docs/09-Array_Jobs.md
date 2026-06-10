@@ -8,14 +8,13 @@ a task-id variable. That means far fewer submission round-trips at scale, one jo
 id to track, and one entry in the queue — which is exactly what clusters with
 per-user job-count or submission-rate limits want.
 
-This chapter covers the two pieces that are available today:
+This chapter covers:
 
 - **`for … with i`** — a loop counter, handy for indexing array tasks (and useful
   on its own).
 - **`cgp sub --array`** — submit a `cgp sub` fan-out as one array job.
-
-Pipeline-level array jobs (marking a target rule with `job.array`) are
-[planned](#pipeline-array-jobs-planned) — see the end of the chapter.
+- **Pipeline array jobs** — mark a fan-out rule with `job.array` and cgp coalesces
+  it into one array submission, wiring downstream dependencies per task.
 
 ## `for … with i` — a loop counter
 
@@ -100,47 +99,78 @@ cgp sub -r slurm --array -a '{@}.bam' 'index {}' -- *.bam
 #        use a fixed --after, or drop --array
 ```
 
-If you need per-element dependencies, drop `--array` (submit one job per file) or
-wait for pipeline array jobs below.
+If you need per-element dependencies, drop `--array` (submit one job per file).
 
-## Pipeline array jobs (planned)
+## Pipeline array jobs
 
-> **Status: planned — not yet implemented.** The design is settled; this section
-> describes where it is headed so the surface is predictable.
-
-Inside a pipeline, a fan-out is a `for` loop that emits one target per unit of
-work (see [Tutorial 4](tutorials/04-map-reduce.md)). The plan is to coalesce such
-a fan-out into one array submission by marking the rule with `job.array` set to
-the element's **task index**:
+Inside a pipeline, a fan-out is a `for` loop that emits one target per unit of work
+(see [Tutorial 4](tutorials/04-map-reduce.md)). Mark the rule with `job.array` set
+to the element's **task index** and cgp coalesces the whole fan-out into one array
+submission:
 
 ```
+chroms = ["chr1", "chr2", "chr3"]
+calls  = []
 for c in chroms with i {
+    calls += "calls.${c}.vcf"
     ^calls.${c}.vcf: aligned.bam {{
         job.array = i          # this element's array task index
+        job.name  = "call"
         job.mem   = "8G"
         --
         call_variants --region ${c} ${input} > ${output}
     }}
 }
-merged.vcf: @{calls.*.vcf} {{ bcftools concat ${input} > ${output} }}
+merged.vcf: @{calls} {{ bcftools concat ${input} > ${output} }}
+@default: merged.vcf
 ```
 
-The intent, in brief:
+cgp submits the three `calls.*.vcf` targets as one `--array=1-3` (the same Form-1
+`case` dispatch shown above), and `merged.vcf` waits on the array.
 
-- `job.array` is the **task index**, not a flag — the integer you supply (e.g.
-  `with i`) becomes the scheduler task id, so the mapping from element to task is
-  explicit and stable. Indices must be unique within a rule and all elements must
-  be submission-compatible (same resources/shape), else cgp errors rather than
-  guessing.
-- On a restart, only the stale elements are submitted — `--array=2,4` — and a
-  downstream **gather** that consumes the whole array depends on it with a normal
-  whole-array `afterok`.
-- A dependent that is *itself* an element-wise array needs per-task dependencies
-  (`aftercorr`); that, and submitting a divergent fan-out as plain per-job
-  submissions via a `-no-array` switch, are part of the same upcoming work.
+**`job.array` is the task index, not a flag.** The integer you supply — typically
+the `with i` counter — *is* the scheduler task id and the `case` branch key, so the
+element→task mapping is explicit and stable across runs. Two rules:
 
-Until then, use `cgp sub --array` for embarrassingly-parallel fan-outs, or submit
-one job per target as today.
+- **Unique within the rule.** Two elements resolving to the same index is an error.
+- **Submission-compatible.** All elements must share their `job.*` settings (mem,
+  procs, name, …); only the command differs. A divergent element (e.g. one asking
+  for more memory) is an error — cgp won't silently submit it under the wrong
+  resources. Split it out into its own rule, or drop `job.array`.
+
+### Restarts are sparse
+
+On a restart only the stale elements are submitted. If `calls.chr2.vcf` is already
+up to date, cgp submits `--array=1,3` and the gather depends only on those two
+tasks (`afterok:<id>_1:<id>_3`); chr2 is read from disk. The task indices never
+shift, so a dependency recorded for one run still lines up on the next.
+
+### Dependencies
+
+A downstream **gather** that consumes the array depends on exactly the tasks it
+needs, by per-task id (`afterok:<arrayid>_<i>`, comma-joined on BatchQ). This is
+wired from the `output: input` edges as usual — you don't write it.
+
+A dependent that is *itself an element-wise array* (task *i* depends on the matching
+upstream task *i*) needs the scheduler's `aftercorr`, which cgp does **not** wire
+yet — that case is a clear error today, with the fix being to drop `job.array` on
+one of the two rules (submitting it per-element). Whole-array→array and
+array→gather edges work now.
+
+### Scheduler support
+
+| Runner | Pipeline `job.array` |
+|--------|----------------------|
+| `slurm`, `batchq` | one array submission, per-task dependency ids |
+| `sge`, `pbs` | submitted as one job **per element** (correct, just not packed into an array — their per-task id formats differ) |
+| `shell` | one function per element, as normal |
+
+### Not yet wired
+
+`aftercorr` for element-wise array→array edges, auto-deconstructing a mismatched
+dependent array on restart, and coalescing a [manifest](13-Manifests_and_Fanout.md)
+fan-out across rows are planned follow-ups. For embarrassingly-parallel work today,
+`job.array` (with a gather) and `cgp sub --array` cover the common cases.
 
 ## Next
 
