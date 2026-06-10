@@ -207,3 +207,6 @@ ${out}.vcf.gz: @{parts} {{
 - Use `@{list}` in declarations (separate items); `${list}`/`${input}` in bodies
   (space-joined).
 - Reserved/`@`-names never name files; `%` wildcards only in the declaration line.
+- Write atomically: a killed job can leave a half-written `${output}` that looks
+  fresh and won't rebuild. Prefer `cmd > ${output}.tmp && mv ${output}.tmp ${output}`
+  (cgp tracks mtime, not exit status).

@@ -30,6 +30,15 @@ in your reference and reads and they're ready to run.
 The resource directives (`job.mem`, `job.procs`, `job.walltime`) are starting points
 — tune them for your data and cluster.
 
+## A note on atomic writes
+
+To keep these recipes readable, they write straight to `${output}`. In production
+you should **not** — a job killed mid-write can leave a half-written file that looks
+fresh and won't rebuild. The recommended idiom is to write to a temp path and `mv`
+it into place only on success (`cmd > ${output}.tmp && mv ${output}.tmp ${output}`).
+Apply it as you adapt these templates; see
+[Write atomically](../05-Build_Targets.md#write-atomically-temp-file-then-rename).
+
 ## See also
 
 - The [tutorials](../07-Pipeline_Tutorials.md) teach each cgp pattern in isolation.

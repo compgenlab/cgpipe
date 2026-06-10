@@ -264,6 +264,40 @@ A temp is special **only in how its absence is handled**:
 **cgp never auto-deletes temp files.** `^` documents *why* a file was made, not
 permission to remove it — deletion is always explicit (next section).
 
+## Write atomically: temp file, then rename
+
+cgp decides staleness from the filesystem — an output is current when it exists
+and is newer than its inputs. It does **not** know whether the job that wrote it
+*succeeded*; only the scheduler knows that. So if a job is killed, runs out of
+disk, or crashes halfway, it can leave a **half-written output** that is newer
+than its inputs. On the next run cgp sees a present, fresh-looking file and skips
+the rebuild — silently propagating a truncated, corrupt result downstream.
+
+The fix is a one-line discipline that costs nothing: **never write the final
+output directly.** Write to a temp path, and only `mv` it into place once the
+command has succeeded. Because a rename on the same filesystem is atomic, the
+real output filename never exists in a partial state — it appears, complete, or
+not at all:
+
+```
+%.md5: % {{
+    md5sum ${input} > ${output}.tmp && mv ${output}.tmp ${output}
+}}
+```
+
+The `&&` is load-bearing: if `md5sum` fails, the `mv` never runs, so `${output}`
+stays absent and the target is correctly seen as still needing to be built.
+
+This is a recommended idiom, **not** a built-in: cgp doesn't wrap your command in
+an implicit temp-and-rename because correctness depends on details only you know —
+that the tmp and final paths share a filesystem (a cross-device `mv` is a
+non-atomic copy), and that a partial write is even meaningful for the format. Apply
+it wherever a tool writes a single output by redirection; tools that already write
+atomically, or that produce a directory of parts, may need a different guard.
+
+Pair it with `^` for intermediates and with [opportunistic cleanup](#opportunistic-jobs)
+to remove the temps once the final result lands.
+
 ## Opportunistic jobs
 
 A target with **no outputs** — a leading `:` and a list of inputs — is
