@@ -78,7 +78,7 @@ Set with `=`. No declarations; the only scopes are global and the per-target bod
     method  ?= "fast"
 
 ### 3.1 Command-line variables
-A double-hyphen `--name value` on the command line sets the script variable `name` before the script runs. (Single-hyphen arguments like `-dr` are cgp's own options; double-hyphen arguments are always script variables.)
+A double-hyphen `--name value` on the command line sets the script variable `name` before the script runs. (Single-hyphen arguments like `-dr` are cgp's own options; double-hyphen arguments are script variables — the one exception is a bare `--help`, which is cgp's help request, equivalent to `-h`; `--help=value` is still a variable.)
 
     $ cgp pipeline.cgp --sample patient_42 --threads 16
 
@@ -648,7 +648,7 @@ The default runner is `shell`, which **assembles the stale targets into one runn
 
 | Option | Meaning |
 |--------|---------|
-| `-h` | Help. After a pipeline file, prints that script's help text ([§1.3](#13-comments-and-help-text)). |
+| `-h`, `--help` | Help. With a pipeline file (in any position), prints that script's help text ([§1.3](#13-comments-and-help-text)); with no file, prints cgp's own help. (`--help=value` is still an ordinary script variable.) |
 | `-dr` | Dry run — render the scripts instead of executing/submitting. |
 | `-force` | Rebuild every target in the goal graph, ignoring staleness ([§10.4](#104-restart)). |
 | `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` (also `cgp.runner`). |
