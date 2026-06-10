@@ -42,15 +42,12 @@ func TestLedgerOwnershipAndVacuum(t *testing.T) {
 }
 
 // §10 The JSONL ledger takes no cross-process lock, so multiple writers can open
-// the same directory and Unlock is a deprecated no-op.
-func TestLedgerUnlock(t *testing.T) {
+// the same directory at once.
+func TestLedgerNoLock(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ledger")
 	lg, err := ledger.Open(dir)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if err := ledger.Unlock(dir); err != nil {
-		t.Fatalf("unlock: %v", err)
 	}
 	lg2, err := ledger.Open(dir) // no lock to contend with
 	if err != nil {

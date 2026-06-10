@@ -78,7 +78,6 @@ rather than resubmitting:
 cgp ledger dump <dir>                   dump all jobs as key/value TSV
 cgp ledger search [filters] <dir>       dump jobs matching the filters
 cgp ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
-cgp ledger unlock <dir>                 deprecated no-op (the ledger takes no lock)
 ```
 
 `dump` prints every job as key/value TSV — provenance you can grep:
@@ -126,8 +125,8 @@ survives, even if it failed. Per-process logs still being appended by a live run
 are left in place and reclaimed by a later vacuum once idle. Run it when nothing
 else is writing the ledger.
 
-`unlock` is retained only for compatibility and does nothing: the ledger takes no
-cross-process lock, so there is never a stale lock to clear.
+The ledger takes no cross-process lock — each run appends only to its own file —
+so there is no `unlock` subcommand and never a stale lock to clear.
 
 ## Next
 

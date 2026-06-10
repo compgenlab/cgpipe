@@ -109,11 +109,11 @@ To force a rebuild now, delete the bad file (or run with `-force`).
 
 ## Inspecting state
 
-- **`cgp ledger dump <db>`** — the full provenance of every recorded job; grep it
+- **`cgp ledger dump <dir>`** — the full provenance of every recorded job; grep it
   for an output to see who produced it and with what command.
   [The Ledger](11-The_Ledger.md#inspecting-the-ledger-cgp-ledger).
-- **`cgp ledger unlock <db>`** — if a run died and left a lock, and you're sure
-  nothing is active, clear it.
+- **`cgp ledger vacuum <dir>`** — compact the ledger to a single `snapshot.jsonl`,
+  dropping jobs that no longer own a current output.
 - **`-r graphviz` / `-r html`** — visualize the dependency graph and (with a ledger)
   each output's live state. [Tutorial 14](tutorials/14-status-report.md).
 - **`dumpvars`** — drop this statement into a script to print all in-scope variables

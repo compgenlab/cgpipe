@@ -470,7 +470,7 @@ Because staleness is mtime-based and cgp tracks ownership, **not** job success (
 When a ledger is configured and a scheduler runner is in use, an input that has **no in-run producer** and **isn't on disk yet** is looked up in the ledger: if its owning job is still active (per `squeue`/`qstat`), the new work is wired as a scheduler dependency (`afterok:<id>`) of that in-flight job instead of being treated as a "no rule to make" error or duplicated. This is what makes re-running a pipeline before it has finished safe, and it is also how a later workflow [stage](#13-workflows-stage-and-export) waits on a file an earlier stage's jobs are still queued to produce. With the shell runner each job has already completed (the file exists), so the lookup is unnecessary.
 
 ### 10.6 Concurrency
-The ledger takes **no lock**. Each process appends only to its own file, so concurrent runs sharing one ledger directory simply each write a separate file; reads fold them together (§10.2). A reader loads the directory once at open time, so a peer's records written during a run are seen on the next open, not mid-run — at worst this resubmits an already-queued job (a performance hiccup), never corruption. `cgp ledger unlock <dir>` is retained for compatibility and is a no-op (there is no lock to clear).
+The ledger takes **no lock**. Each process appends only to its own file, so concurrent runs sharing one ledger directory simply each write a separate file; reads fold them together (§10.2). A reader loads the directory once at open time, so a peer's records written during a run are seen on the next open, not mid-run — at worst this resubmits an already-queued job (a performance hiccup), never corruption. There is no `unlock` subcommand: with no lock there is never anything to clear.
 
 ---
 
@@ -626,7 +626,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
 
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] <command ...> [-- <file ...>]
-    cgp ledger {dump|search|vacuum|unlock} <dir>
+    cgp ledger {dump|search|vacuum} <dir>
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
     cgp lsp
@@ -675,7 +675,7 @@ Each fan-out file becomes its job's primary declared input; fan-out jobs are ind
 ### 15.2 `cgp ledger`
 - `cgp ledger dump <dir>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).
 - `cgp ledger search [filters] <dir>` writes the same TSV for the jobs matching the filters (combined with AND; substring match except `-id`): `-i PATH` (an input contains), `-o PATH` (an output contains), `-g PATTERN` (a job-script line contains — grep), `-name NAME` (job name contains), `-id JOBID` (exact). A non-matching search prints nothing.
-- `cgp ledger vacuum <dir>` compacts the ledger to a single `snapshot.jsonl`, keeping only the last owner of each path and dropping the rest ([§10.3](#103-ownership-and-vacuum)); `cgp ledger unlock <dir>` is a deprecated no-op ([§10.6](#106-concurrency)).
+- `cgp ledger vacuum <dir>` compacts the ledger to a single `snapshot.jsonl`, keeping only the last owner of each path and dropping the rest ([§10.3](#103-ownership-and-vacuum)). There is no `unlock` subcommand — the ledger takes no lock ([§10.6](#106-concurrency)).
 
 `dump` and `search` open the ledger read-only, so they are safe to run while a pipeline is in flight.
 
