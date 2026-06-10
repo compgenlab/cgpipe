@@ -197,6 +197,11 @@ flags:
 		}
 	}
 
+	// CGP_DRYRUN forces dry run, matching the pipeline path in main.go.
+	if os.Getenv("CGP_DRYRUN") != "" {
+		dryRun = true
+	}
+
 	// --- command phase: verbatim until a bare `--` ---
 	for ; i < len(args); i++ {
 		if args[i] == "--" {

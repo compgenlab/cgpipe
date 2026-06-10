@@ -143,6 +143,20 @@ func TestSubShellCreatesFile(t *testing.T) {
 	}
 }
 
+// CGP_DRYRUN=1 makes `cgp sub` render the job instead of running it, matching
+// the pipeline path. Regression: sub previously honored only the -dr flag.
+func TestSubDryRunEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("CGP_DRYRUN", "1")
+	if code := run([]string{"sub", "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
+		t.Fatalf("cgp sub = %d, want 0", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out.txt")); !os.IsNotExist(err) {
+		t.Fatalf("CGP_DRYRUN=1 should not run the job; out.txt err=%v", err)
+	}
+}
+
 // cgp sub fan-out: files after -- submit one job each, with `{}` substitution.
 func TestSubFanout(t *testing.T) {
 	dir := t.TempDir()
