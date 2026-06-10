@@ -141,7 +141,8 @@ out1 out2 : in1 in2 {{
 `graphviz` (DOT) | `html` (status page). Set via `-r` or `cgp.runner`. Directives
 map per scheduler (`mem="8G"` → SLURM `--mem=8000`, `procs=4` → `-c 4`).
 Dependencies are derived from `output: input` edges (SLURM `afterok:<id>`).
-One-off: `cgp sub -r slurm -mem 8G -o out.bam -i in.bam -- 'samtools sort -o ${output} ${input}'`.
+One-off: `cgp sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
+Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgp sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
 
 ## Ledger (optional), workflows, manifests
 - **Ledger** (`cgp.ledger = "jobs.db"`): records which job owns which output;

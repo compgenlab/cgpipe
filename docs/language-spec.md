@@ -635,7 +635,7 @@ Each row runs the whole pipeline (or, for a workflow, all of its stages). Explic
 ## 15. Command-line interface
 
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
-    cgp sub [options] -- <command ...>
+    cgp sub [options] <command ...> [-- <file ...>]
     cgp ledger {dump|search|vacuum|unlock} <db>
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
@@ -659,11 +659,26 @@ The default runner is `shell`, which **assembles the stale targets into one runn
 Both build the graph reachable from the goals (instantiating any wildcard rules along the way), not every declared target. Combined with a manifest ([§14](#14-manifests-and-fan-out)), they produce **one** document covering all rows — graphviz a single `digraph` with a `subgraph cluster` per row, html a single page with a section per row (labeled by the row's `sample`/`id`/`name` column, else `row N`).
 
 ### 15.1 `cgp sub` — one-off submission
-Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The command after `--` is treated as a body (`${input}`/`${output}` substitute):
+Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The first token that is not a recognized option begins the command; everything from there until a bare `--` is the command, treated as a body (`${input}`/`${output}` substitute):
 
-    cgp sub -mem 8G -o out.bam -i in.bam -- 'samtools sort -o ${output} ${input}'
+    cgp sub -m 8G -o out.bam -i in.bam samtools sort -o ${output} ${input}
 
-Options: `-name`, `-mem`, `-procs`, `-walltime`, `-o PATH` (declared output, repeatable), `-i PATH` (declared input), `-d JOBID` (depend on a job id), `-after PATH` (depend on the active ledger owner of `PATH`), `-r`, `-ledger`, `-dr`.
+Options: `-n, --name`, `-m, --mem`, `-p, --procs`, `-t, --walltime`, `-o, --output PATH` (declared output, repeatable), `-i, --input PATH` (declared input, repeatable), `-d, --deps IDS` (depend on existing job ids, comma-separated; repeatable), `-a, --after PATH` (depend on the active ledger owner of `PATH`; repeatable), `-f, --files-from F` (read fan-out files from `F`, one per line; `-` = stdin; only once), `-r, --runner`, `-l, --ledger`, `-dr`, `-h, --help`.
+
+**Fan-out.** Files listed after `--` (or supplied via `--files-from`) each submit one independent job, with `{}` placeholders expanded against the file in the command, the job name, and the `-o`/`-i`/`-a` values:
+
+| Placeholder | Expands to |
+|-------------|------------|
+| `{}` `{^}` | the full input path |
+| `{@}` | the basename (directory stripped) |
+| `{^SUF}` | the full path with a trailing `SUF` removed (if it ends with `SUF`) |
+| `{@SUF}` | the basename with a trailing `SUF` removed (if it ends with `SUF`) |
+| `{#}` | the 1-based fan-out index |
+| `{{}}` | a literal `{}` |
+
+Each fan-out file becomes its job's primary declared input; fan-out jobs are independent siblings (`-d` applies to every job, `-a` is resolved per file after `{}` expansion). With no files, a single job is submitted and `{}` is not substituted.
+
+    cgp sub -r slurm -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz
 
 ### 15.2 `cgp ledger`
 - `cgp ledger dump <db>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`/`START`/`END`, `RETCODE`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).
