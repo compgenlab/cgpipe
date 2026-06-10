@@ -90,7 +90,7 @@ usage:
     cgp version
 
 options (single hyphen):
-    -h           show this help
+    -h, --help   show this help (after a pipeline file, shows that script's help)
     -dr          dry run: render scripts instead of executing/submitting
                  (note: cgp's own $(…) command substitution is evaluated while
                  rendering, so it still runs under -dr; use \$(…) to defer to
@@ -128,7 +128,7 @@ func run(args []string) int {
 	}
 
 	switch args[0] {
-	case "-h", "--help", "help":
+	case "help":
 		printUsage(os.Stdout)
 		return 0
 	case "version":
@@ -168,6 +168,13 @@ func run(args []string) int {
 			// boolean flag. Hyphens in the name become underscores; a repeated flag
 			// builds a list.
 			nv := a[2:]
+			// A bare `--help` is cgp's help request (the universal spelling),
+			// equivalent to `-h` — not a script variable. `--help=value` is still a
+			// variable, so a script that really wants a `help` var can set it.
+			if nv == "help" {
+				showHelp = true
+				continue
+			}
 			if eq := strings.IndexByte(nv, '='); eq >= 0 {
 				addCLIVar(vars, cliVarName(nv[:eq]), eval.ParseScalar(nv[eq+1:]))
 				continue
@@ -222,6 +229,13 @@ func run(args []string) int {
 				goals = append(goals, a)
 			}
 		}
+	}
+
+	// -h/--help with no pipeline file: cgp's own help. (With a file, help resolves
+	// to that script's help text after it is parsed, below.)
+	if showHelp && file == "" {
+		printUsage(os.Stdout)
+		return 0
 	}
 
 	if file == "" {

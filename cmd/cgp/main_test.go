@@ -98,6 +98,39 @@ func TestRunPipelineHelp(t *testing.T) {
 	}
 }
 
+// -h and --help are equivalent and context-aware: with a pipeline file (in any
+// position) they print that script's help; with no file they print cgp's own help.
+func TestHelpFlagIsScriptAware(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("#!/usr/bin/env cgp\n# Does a thing.\n# --ref FILE\nx: {{\n  true\n}}"), 0o644)
+
+	scriptHelp := "Does a thing." // first line of the script's help text
+	cgpHelp := "cgp — run a .cgp pipeline"
+
+	// --help after the file → the script's help (the bug this fixes: it used to
+	// be swallowed as a `help` variable and the pipeline ran instead).
+	if out := captureStdout(t, func() int { return run([]string{"p.cgp", "--help"}) }); !strings.Contains(out, scriptHelp) {
+		t.Errorf("p.cgp --help did not show script help; got:\n%s", out)
+	}
+	// --help before the file → still the script's help (position-independent).
+	if out := captureStdout(t, func() int { return run([]string{"--help", "p.cgp"}) }); !strings.Contains(out, scriptHelp) {
+		t.Errorf("--help p.cgp did not show script help; got:\n%s", out)
+	}
+	// -h after the file → the script's help.
+	if out := captureStdout(t, func() int { return run([]string{"p.cgp", "-h"}) }); !strings.Contains(out, scriptHelp) {
+		t.Errorf("p.cgp -h did not show script help; got:\n%s", out)
+	}
+	// --help with no file → cgp's own help.
+	if out := captureStdout(t, func() int { return run([]string{"--help"}) }); !strings.Contains(out, cgpHelp) {
+		t.Errorf("--help (no file) did not show cgp help; got:\n%s", out)
+	}
+	// --help=value remains an ordinary script variable, not a help request.
+	if out := captureStdout(t, func() int { return run([]string{"p.cgp", "--help=x", "-dr"}) }); strings.Contains(out, scriptHelp) {
+		t.Errorf("--help=x should set a variable, not trigger help; got:\n%s", out)
+	}
+}
+
 func TestSubShellCreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
