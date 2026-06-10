@@ -97,6 +97,16 @@ out.bam: in.bam {{
 Put the pipeline file first (`cgp pipeline.cgp --adaptive`), or write
 `--adaptive=true`.
 
+### A failed job left a corrupt output that won't rebuild
+
+cgp judges staleness by mtime, not by exit status — only the scheduler knows if a
+job succeeded. A job killed mid-write can leave a **half-written output** that
+looks newer than its inputs, so the next run skips it. Write atomically to avoid
+this: send output to `${output}.tmp` and `mv` it into place only on success
+(`cmd > ${output}.tmp && mv ${output}.tmp ${output}`). See
+[Write atomically](05-Build_Targets.md#write-atomically-temp-file-then-rename).
+To force a rebuild now, delete the bad file (or run with `-force`).
+
 ## Inspecting state
 
 - **`cgp ledger dump <db>`** — the full provenance of every recorded job; grep it
