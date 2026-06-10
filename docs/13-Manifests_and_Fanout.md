@@ -97,6 +97,6 @@ status page covering the whole cohort.
 
 - **[Tutorial 11: Manifest fan-out](tutorials/11-manifest-fanout.md)** — a worked
   per-sample run.
-- **[Workflows](11-Workflows.md)** — fan a whole multi-stage workflow over a cohort.
+- **[Workflows](12-Workflows.md)** — fan a whole multi-stage workflow over a cohort.
 
 Reference → [language-spec.md §14](language-spec.md#14-manifests-and-fan-out).

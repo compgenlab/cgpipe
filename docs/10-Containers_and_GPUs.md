@@ -138,7 +138,7 @@ container — no separate flags to keep in sync.
 
 - **[Tutorial 9: Containerized jobs](tutorials/09-containers.md)** — a worked
   container pipeline.
-- **[Configuration Reference](13-Configuration_Reference.md)** — set the engine
+- **[Configuration Reference](14-Configuration_Reference.md)** — set the engine
   site-wide.
 
 Reference → [language-spec.md §12](language-spec.md#12-containers-and-gpus).

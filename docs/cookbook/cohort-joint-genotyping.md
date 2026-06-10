@@ -92,7 +92,7 @@ export gvcf = "${sample}.g.vcf.gz"
   workflow without changing standalone behavior.
 - **Cross-stage dependencies.** On a scheduler, configure `cgp.ledger` so the joint
   stage's `afterok` is wired onto the still-queued calling jobs (see
-  [The Ledger](../10-The_Ledger.md)).
+  [The Ledger](../11-The_Ledger.md)).
 
 ## Adapt it
 
@@ -101,5 +101,5 @@ export gvcf = "${sample}.g.vcf.gz"
 - Add `VariantRecalibrator`/`ApplyVQSR` (VQSR) or hard-filtering as a downstream
   target on `cohort.vcf.gz`.
 
-See [Workflows](../11-Workflows.md) and
+See [Workflows](../12-Workflows.md) and
 [Tutorial 12: Stage workflows](../tutorials/12-stage-workflow.md).

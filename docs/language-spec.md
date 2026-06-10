@@ -149,9 +149,13 @@ Escaping: inside a `"…"` string literal a backslash escapes the next character
 
     for i in 1..10      { print i }       # range
     for sample in samples { print sample } # list
+    for s in xs with i  { ... }            # `with i` binds a 1-based counter
     for cond            { ... }            # while-style: runs while cond is true
 
-Loop variables remain set after the loop (no separate scope).
+Loop variables remain set after the loop (no separate scope). The optional
+`with <name>` clause (on the `for…in` form only) binds `<name>` to the **1-based**
+loop index, advancing each iteration; it is set alongside the element variable and
+likewise persists after the loop.
 
 ### 5.2 Statement keywords
 
@@ -679,6 +683,8 @@ Options: `-n, --name`, `-m, --mem`, `-p, --procs`, `-t, --walltime`, `-o, --outp
 Each fan-out file becomes its job's primary declared input; fan-out jobs are independent siblings (`-d` applies to every job, `-a` is resolved per file after `{}` expansion). With no files, a single job is submitted and `{}` is not substituted.
 
     cgp sub -r slurm -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz
+
+**Array fan-out (`--array`).** With `--array`, the fan-out is submitted as a single scheduler **job array** (`--array=1-N`) instead of N independent jobs. Each file becomes one array task: the rendered body is a `case` over the scheduler's task-id variable (`$SLURM_ARRAY_TASK_ID`, `$BATCHQ_ARRAY_TASK_ID`, `$PBS_ARRAY_INDEX`) with one branch per file, each the file's fully `{}`-expanded command. Supported on `slurm`/`batchq`/`pbs`; `sge` and `shell` fall back to one job per file. A fixed `-d`/`-a` applies to the whole array; a `{}`-expanded `-a/--after` is rejected, because a single array submission carries one dependency directive and so cannot express a per-element dependency. See the [Array Jobs chapter](README.md).
 
 ### 15.2 `cgp ledger`
 - `cgp ledger dump <db>` writes every recorded job as a **key/value TSV** — one `<jobid>\t<KEY>\t<value>` line per fact (`PIPELINE`, `WORKINGDIR`, `RUNID`, `NAME`, `USER`, `SUBMIT`/`START`/`END`, `RETCODE`, `DEP`, `OUTPUT`, `TEMP`, `INPUT`, `SRC` for each job-script line, and `SETTING\t<key>\t<value>`).

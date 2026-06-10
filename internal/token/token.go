@@ -21,6 +21,7 @@ const (
 	ELSE
 	FOR
 	IN
+	WITH
 	TRUE
 	FALSE
 
@@ -84,6 +85,7 @@ var names = [...]string{
 	ELSE:       "else",
 	FOR:        "for",
 	IN:         "in",
+	WITH:       "with",
 	TRUE:       "true",
 	FALSE:      "false",
 	ASSIGN:     "=",
@@ -167,6 +169,7 @@ var keywords = map[string]Kind{
 	"else":  ELSE,
 	"for":   FOR,
 	"in":    IN,
+	"with":  WITH,
 	"true":  TRUE,
 	"false": FALSE,
 }

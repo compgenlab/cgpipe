@@ -48,7 +48,7 @@ or submitting a duplicate.
 
 So re-running a pipeline before it has finished is safe: already-submitted outputs
 are reused, and new downstream work attaches to them. The same mechanism lets a
-later workflow [stage](11-Workflows.md) wait on a file an earlier stage's jobs are
+later workflow [stage](12-Workflows.md) wait on a file an earlier stage's jobs are
 still queued to produce. (Under the shell runner every job has already completed
 and the file exists, so the lookup is unnecessary.)
 
@@ -118,7 +118,7 @@ removes a lock by hand if you're sure no run is active.
 ## Next
 
 - **[Tutorial 13: Restartable pipelines and the ledger](tutorials/13-ledger-restart.md)**
-- **[Workflows](11-Workflows.md)** — where cross-stage reuse comes in.
+- **[Workflows](12-Workflows.md)** — where cross-stage reuse comes in.
 
 Reference → [language-spec.md §10](language-spec.md#10-the-ledger-job-tracking),
 [§15.2](language-spec.md#152-cgp-ledger).

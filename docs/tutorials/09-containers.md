@@ -24,7 +24,7 @@ out.bam: in.bam {{
 ```
 
 The engine is usually set once in `~/.cgp/config`
-([Configuration Reference](../13-Configuration_Reference.md)) so individual
+([Configuration Reference](../14-Configuration_Reference.md)) so individual
 pipelines only name images.
 
 ## Render it
@@ -90,7 +90,7 @@ out.bam: in.bam {{
 
 `bind` adds `-v` mounts, `env` passes `-e SAMPLE` through, and `opts` are handed to
 the engine verbatim. See
-[Containers & GPUs](../09-Containers_and_GPUs.md#tuning-the-invocation) for the full
+[Containers & GPUs](../10-Containers_and_GPUs.md#tuning-the-invocation) for the full
 list.
 
 ## Running on GPUs
@@ -115,5 +115,5 @@ drives both.
 - **[Tutorial 10: Custom job submission](10-custom-templates.md)** — tailor
   submissions to your cluster.
 
-Reference → [Containers and GPUs](../09-Containers_and_GPUs.md),
+Reference → [Containers and GPUs](../10-Containers_and_GPUs.md),
 [language-spec.md §12](../language-spec.md#12-containers-and-gpus).

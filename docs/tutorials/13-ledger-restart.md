@@ -86,5 +86,5 @@ cgp ledger unlock jobs.db                # clear a stale lock (no run active)
 - **[Tutorial 14: A status report](14-status-report.md)** — see the whole graph's
   state at a glance.
 
-Reference → [The Ledger](../10-The_Ledger.md),
+Reference → [The Ledger](../11-The_Ledger.md),
 [language-spec.md §10](../language-spec.md#10-the-ledger-job-tracking).

@@ -24,6 +24,6 @@ to a technique.
 ## Where next
 
 After the tutorials, the reference chapters fill in the details:
-[Running Jobs](08-Running_Jobs.md), [Containers & GPUs](09-Containers_and_GPUs.md),
-[The Ledger](10-The_Ledger.md), and the
-[Configuration Reference](13-Configuration_Reference.md).
+[Running Jobs](08-Running_Jobs.md), [Containers & GPUs](10-Containers_and_GPUs.md),
+[The Ledger](11-The_Ledger.md), and the
+[Configuration Reference](14-Configuration_Reference.md).

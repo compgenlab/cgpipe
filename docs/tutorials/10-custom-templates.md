@@ -143,4 +143,4 @@ cgp.runner.slurm.template = "/etc/cgp/slurm.template.cgp"
   per sample.
 
 Reference → [Running Jobs](../08-Running_Jobs.md),
-[Configuration Reference](../13-Configuration_Reference.md).
+[Configuration Reference](../14-Configuration_Reference.md).

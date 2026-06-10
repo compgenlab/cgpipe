@@ -12,7 +12,7 @@ import (
 func completions(src, file string) []completionItem {
 	items := make([]completionItem, 0, 32)
 
-	for _, k := range []string{"if", "elif", "else", "for", "in", "true", "false"} {
+	for _, k := range []string{"if", "elif", "else", "for", "in", "with", "true", "false"} {
 		items = append(items, completionItem{Label: k, Kind: ciKeyword, Documentation: keywordDocs[k]})
 	}
 	for _, b := range ast.BuiltinStmts {

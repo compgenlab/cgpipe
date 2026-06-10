@@ -181,7 +181,7 @@ cgp -dr copy.cgp
 
 > **One sharp edge:** cgp's own `$(...)` command substitution is evaluated *while
 > rendering* — so it runs even under `-dr`. Use `\$(...)` to defer a command to
-> the job's shell. See [Troubleshooting](16-Troubleshooting.md).
+> the job's shell. See [Troubleshooting](17-Troubleshooting.md).
 
 ### Pass variables
 
@@ -236,7 +236,7 @@ cgp reads layered config before your pipeline: a `.cgprc` next to the binary,
 each one itself a cgp script, later layers winning. This is where you set
 site-wide defaults like `cgp.runner = "slurm"` or a scheduler account, so your
 pipelines stay portable and your cluster details stay out of them. The full list
-of settings is in the [Configuration Reference](13-Configuration_Reference.md).
+of settings is in the [Configuration Reference](14-Configuration_Reference.md).
 
 ---
 

@@ -18,6 +18,9 @@
 % if job.depids {
 #BATCHQ -afterok ${job.depids}
 % }
+% if job.array {
+#BATCHQ -array ${job.array}
+% }
 % if job.mail {
 #BATCHQ -mail ${job.mail}
 % }

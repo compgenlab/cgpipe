@@ -407,8 +407,11 @@ func (ip *interp) execFor(n *ast.For) error {
 		if !ok {
 			return fmt.Errorf("%s: for…in requires a list or range, got %s", n.Pos(), v.typeName())
 		}
-		for _, e := range items {
+		for i, e := range items {
 			ip.sc.set(n.Var, e)
+			if n.IndexVar != "" { // `with i`: 1-based loop counter
+				ip.sc.set(n.IndexVar, IntVal(i+1))
+			}
 			if err := ip.execStmts(n.Body); err != nil {
 				return err
 			}

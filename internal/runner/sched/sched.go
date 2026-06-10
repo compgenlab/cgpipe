@@ -561,7 +561,7 @@ func jobSettings(vars map[string]eval.Value) map[string]string {
 	skip := map[string]bool{
 		"name":   true, // recorded as NAME
 		"depids": true, "custom": true, "setup": true, "shell": true,
-		"run_id": true, "parallelenv": true, "mailtype": true,
+		"run_id": true, "parallelenv": true, "mailtype": true, "array": true,
 	}
 	out := map[string]string{}
 	for k, v := range vars {

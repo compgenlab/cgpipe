@@ -69,7 +69,7 @@ How a later stage waits for an earlier one depends on the runner:
   simply reads the earlier stage's files. No coordination needed.
 - **Scheduler runner:** an earlier stage's jobs may still be *queued* when a later
   stage submits. The cross-stage `afterok` wiring is resolved through the
-  [ledger](10-The_Ledger.md#cross-run-and-cross-stage-reuse) — so a scheduler
+  [ledger](11-The_Ledger.md#cross-run-and-cross-stage-reuse) — so a scheduler
   workflow wants `cgp.ledger` configured.
 
 ## Export validation catches typos
@@ -88,7 +88,7 @@ References to stage exports are checked two ways:
 
 - **[Tutorial 12: Stage workflows](tutorials/12-stage-workflow.md)** — a worked
   multi-stage example.
-- **[Manifests and Fan-out](12-Manifests_and_Fanout.md)** — run a whole workflow
+- **[Manifests and Fan-out](13-Manifests_and_Fanout.md)** — run a whole workflow
   once per sample.
 
 Reference → [language-spec.md §13](language-spec.md#13-workflows-stage-and-export).

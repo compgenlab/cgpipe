@@ -25,6 +25,9 @@
 % if job.depids {
 #PBS -W depend=afterok:${job.depids}
 % }
+% if job.array {
+#PBS -J ${job.array}
+% }
 % if job.queue {
 #PBS -q ${job.queue}
 % }

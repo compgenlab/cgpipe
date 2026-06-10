@@ -47,7 +47,7 @@ out.txt: {{
 
 A target needs input `X`, but `X` doesn't exist on disk and no rule produces it.
 Either the file is genuinely missing, or you have a typo in an output/input name so
-two rules don't connect. Under a scheduler with a [ledger](10-The_Ledger.md), `X`
+two rules don't connect. Under a scheduler with a [ledger](11-The_Ledger.md), `X`
 is also looked up there — if its owning job is still active, the dependency wires
 up instead of erroring.
 
@@ -101,7 +101,7 @@ Put the pipeline file first (`cgp pipeline.cgp --adaptive`), or write
 
 - **`cgp ledger dump <db>`** — the full provenance of every recorded job; grep it
   for an output to see who produced it and with what command.
-  [The Ledger](10-The_Ledger.md#inspecting-the-ledger-cgp-ledger).
+  [The Ledger](11-The_Ledger.md#inspecting-the-ledger-cgp-ledger).
 - **`cgp ledger unlock <db>`** — if a run died and left a lock, and you're sure
   nothing is active, clear it.
 - **`-r graphviz` / `-r html`** — visualize the dependency graph and (with a ledger)
@@ -119,10 +119,10 @@ the others explicitly:
 job.container.bind = ["/data", "/refs"]
 ```
 
-[Containers and GPUs](09-Containers_and_GPUs.md#tuning-the-invocation).
+[Containers and GPUs](10-Containers_and_GPUs.md#tuning-the-invocation).
 
 ## Next
 
-- **[Glossary](15-Glossary.md)** — look up a term.
+- **[Glossary](16-Glossary.md)** — look up a term.
 - **[language-spec.md](language-spec.md)** — the precise behavior when a doc is
   ambiguous.

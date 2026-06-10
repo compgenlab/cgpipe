@@ -79,7 +79,7 @@ shell fragment inside bodies.
 
 - **[Tutorial 9: Containerized jobs](09-containers.md)** — run bodies inside Docker
   or Singularity.
-- **[Configuration Reference](../13-Configuration_Reference.md)** — what to put in a
+- **[Configuration Reference](../14-Configuration_Reference.md)** — what to put in a
   shared `defaults.cgp` vs. `~/.cgp/config`.
 
 Reference → [language-spec.md §5.2](../language-spec.md#52-statement-keywords).

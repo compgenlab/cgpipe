@@ -23,8 +23,9 @@ var keywordDocs = map[string]string{
 	"if":    "`if <cond> { ... } [elif <cond> { ... }] [else { ... }]` — conditional execution.",
 	"elif":  "`elif <cond> { ... }` — an additional condition on an `if` chain.",
 	"else":  "`else { ... }` — the fallback branch of an `if` chain.",
-	"for":   "`for <var> in <iterable> { ... }` — iterate over a list or a range. Ranges are inclusive and may descend (`5..1`).",
+	"for":   "`for <var> in <iterable> [with <i>] { ... }` — iterate over a list or a range. Ranges are inclusive and may descend (`5..1`).",
 	"in":    "Separates the loop variable from its iterable in a `for` loop.",
+	"with":  "`for <var> in <iterable> with <i> { ... }` — bind `<i>` to the 1-based loop index alongside `<var>`.",
 	"true":  "Boolean literal `true`.",
 	"false": "Boolean literal `false`.",
 }
