@@ -401,12 +401,6 @@ func (l *Ledger) Vacuum() error {
 	return nil
 }
 
-// Unlock is retained for the `cgp ledger unlock` subcommand but is now a no-op:
-// the JSONL backend takes no cross-process lock, so there is nothing to clear.
-func Unlock(path string) error {
-	return nil
-}
-
 // Filter selects jobs in Search. Empty fields are ignored; set fields are ANDed.
 // Name/Input/Output/Grep are substring (contains) matches; ID is exact.
 type Filter struct {

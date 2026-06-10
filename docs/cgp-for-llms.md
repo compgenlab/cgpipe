@@ -155,7 +155,7 @@ Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; on
 ## Ledger (optional), workflows, manifests
 - **Ledger** (`cgp.ledger = "jobs.ledger"`, a directory): records which job owns which output;
   enables cross-run reuse of still-queued jobs (scheduler runners). Restart is
-  mtime-based regardless; `-force` rebuilds all. Inspect: `cgp ledger dump/search/vacuum/unlock`.
+  mtime-based regardless; `-force` rebuilds all. Inspect: `cgp ledger dump/search/vacuum`.
 - **Workflow** (chain pipelines): `stage NAME FILE --arg ...`; a stage exposes a
   value with top-level `export name = expr`, used as `${NAME.name}` in later stages.
 - **Manifest fan-out**: `cgp p.cgp -manifest-tsv samples.tsv` runs the pipeline once

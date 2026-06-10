@@ -83,7 +83,7 @@ const usage = `cgp — run a .cgp pipeline
 usage:
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] <command ...> [-- file ...]   (one-off job / fan-out; see cgp sub -h)
-    cgp ledger {dump|search|vacuum|unlock} <db>   (see cgp ledger)
+    cgp ledger {dump|search|vacuum} <dir>   (see cgp ledger)
     cgp convert <old.cgp> [-o out.cgp]     (migrate a legacy cgpipe script)
     cgp show-template -r <runner>          (print a scheduler's built-in submission template)
     cgp lsp                                (run the language server over stdio; for editors)

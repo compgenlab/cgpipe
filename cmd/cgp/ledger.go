@@ -12,7 +12,6 @@ const ledgerUsage = `usage:
     cgp ledger dump <dir>                      dump all jobs as key/value TSV
     cgp ledger search [filters] <dir>          dump jobs matching the filters
     cgp ledger vacuum <dir>                     compact the ledger, dropping jobs that own no current output
-    cgp ledger unlock <dir>                     deprecated no-op (the ledger takes no lock)
 
 search filters (substring match; combined with AND):
     -i PATH      an input path contains PATH
@@ -45,16 +44,6 @@ func runLedger(args []string) int {
 		}
 		defer lg.Close()
 		if err := lg.Vacuum(); err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		return 0
-	case "unlock":
-		if len(args) < 2 {
-			fmt.Fprint(os.Stderr, ledgerUsage)
-			return 2
-		}
-		if err := ledger.Unlock(args[1]); err != nil {
 			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
