@@ -26,9 +26,9 @@ The pitch, in five points:
 - **One script, any backend.** The *same* pipeline runs locally or submits to a
   scheduler by changing a single setting. You don't rewrite anything to move from
   your laptop to a cluster.
-- **Fan out without a DSL.** Run a pipeline once per sample/row with `-manifest`,
-  or generate per-chromosome jobs with an ordinary `for` loop. No channels, no
-  operators.
+- **Fan out without a DSL.** Read a sample sheet in-language with
+  `open("samples.tsv").read_tsv()` and loop over its rows, or generate
+  per-chromosome jobs with an ordinary `for` loop. No channels, no operators.
 - **A single static binary.** `cgp` is one file with no runtime to install. Fast
   startup, and an optional *ledger* that makes restarts cheap at scale.
 

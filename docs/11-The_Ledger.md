@@ -48,7 +48,7 @@ regardless. There are no "restart modes."
 
 The performance win at scale is a **run-scoped stat cache**: within one invocation
 each path is `stat`-ed once. A shared `ref.fa` referenced by a thousand
-manifest-fan-out runs is checked once, not a thousand times.
+sample-sheet rows is checked once, not a thousand times.
 
 ## Cross-run and cross-stage reuse
 

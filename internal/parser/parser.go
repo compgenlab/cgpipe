@@ -366,6 +366,23 @@ func (p *parser) lineIsAssignment() bool {
 
 func (p *parser) parseAssign() ast.Stmt {
 	start := p.cur().Pos
+	// Index target: `recv[idx] OP value`. A top-level '[' before the assignment
+	// operator marks an index lvalue; parse it as an expression rather than a name.
+	if p.lhsHasIndex() {
+		target := p.parsePostfix()
+		idx, ok := target.(*ast.Index)
+		if !ok {
+			p.fail(start, "invalid assignment target")
+		}
+		op := p.cur().Kind
+		switch op {
+		case token.ASSIGN, token.QASSIGN, token.PLUSASSIGN:
+		default:
+			p.fail(p.cur().Pos, "expected assignment operator")
+		}
+		p.advance()
+		return &ast.Assign{PosV: start, Target: idx, Op: op, Value: p.parseExpr(0)}
+	}
 	startOff := start.Off
 	for {
 		switch p.cur().Kind {
@@ -379,6 +396,35 @@ func (p *parser) parseAssign() ast.Stmt {
 		}
 		p.advance()
 	}
+}
+
+// lhsHasIndex reports whether the assignment LHS on the current line is an index
+// target (a top-level '[' appears before the assignment operator at bracket
+// depth 0).
+func (p *parser) lhsHasIndex() bool {
+	depth := 0
+	for j := p.i; j < len(p.toks); j++ {
+		switch p.toks[j].Kind {
+		case token.LPAREN:
+			depth++
+		case token.RPAREN:
+			depth--
+		case token.LBRACK:
+			if depth == 0 {
+				return true
+			}
+			depth++
+		case token.RBRACK:
+			depth--
+		case token.ASSIGN, token.QASSIGN, token.PLUSASSIGN:
+			if depth == 0 {
+				return false
+			}
+		case token.NEWLINE, token.SEMI, token.EOF:
+			return false
+		}
+	}
+	return false
 }
 
 // dottedName reads a (possibly dotted) name from the raw source up to the next
@@ -567,6 +613,15 @@ func (p *parser) parsePostfix() ast.Expr {
 	x := p.parsePrimary()
 	for {
 		switch p.cur().Kind {
+		case token.LPAREN:
+			// free builtin call: an identifier directly followed by '(', e.g. open("f").
+			id, ok := x.(*ast.Ident)
+			if !ok {
+				return x
+			}
+			pos := p.advance().Pos // (
+			args, kwargs := p.parseCallArgs()
+			x = &ast.Call{PosV: pos, Recv: nil, Method: id.Name, Args: args, Kwargs: kwargs}
 		case token.DOT:
 			pos := p.advance().Pos
 			name := p.expect(token.IDENT).Lit
@@ -580,15 +635,8 @@ func (p *parser) parsePostfix() ast.Expr {
 				p.fail(pos, "expected '(' for method call after '.%s'", name)
 			}
 			p.advance() // (
-			var args []ast.Expr
-			if p.cur().Kind != token.RPAREN {
-				args = append(args, p.parseExpr(0))
-				for p.accept(token.COMMA) {
-					args = append(args, p.parseExpr(0))
-				}
-			}
-			p.expect(token.RPAREN)
-			x = &ast.Call{PosV: pos, Recv: x, Method: name, Args: args}
+			args, kwargs := p.parseCallArgs()
+			x = &ast.Call{PosV: pos, Recv: x, Method: name, Args: args, Kwargs: kwargs}
 		case token.LBRACK:
 			pos := p.advance().Pos
 			x = p.parseIndexOrSlice(pos, x)
@@ -659,10 +707,70 @@ func (p *parser) parsePrimary() ast.Expr {
 		return e
 	case token.LBRACK:
 		return p.parseListLit()
+	case token.LBRACE:
+		return p.parseMapLit()
 	default:
 		p.fail(t.Pos, "unexpected %s in expression", t)
 		return nil
 	}
+}
+
+// parseCallArgs parses a call's argument list, assuming the opening '(' has been
+// consumed, up to and including the closing ')'. Positional args come first;
+// a keyword argument is `IDENT = expr` (ASSIGN, distinct from the EQ of `==`).
+// A positional arg after a keyword arg is an error.
+func (p *parser) parseCallArgs() ([]ast.Expr, []ast.KwArg) {
+	var args []ast.Expr
+	var kwargs []ast.KwArg
+	if p.cur().Kind != token.RPAREN {
+		for {
+			if p.cur().Kind == token.IDENT && p.peek().Kind == token.ASSIGN {
+				name := p.cur().Lit
+				p.advance() // IDENT
+				p.advance() // =
+				kwargs = append(kwargs, ast.KwArg{Name: name, Value: p.parseExpr(0)})
+			} else {
+				if len(kwargs) > 0 {
+					p.fail(p.cur().Pos, "positional argument after keyword argument")
+				}
+				args = append(args, p.parseExpr(0))
+			}
+			if !p.accept(token.COMMA) {
+				break
+			}
+			if p.cur().Kind == token.RPAREN { // trailing comma
+				break
+			}
+		}
+	}
+	p.expect(token.RPAREN)
+	return args, kwargs
+}
+
+// parseMapLit parses an ordered, string-keyed map literal `{ k: v, … }` (and the
+// empty map `{}`). A single '{' lexes as LBRACE (a shell body is '{{'), and map
+// literals only appear in expression position, so this never collides with an
+// if/for block (those consume their '{' directly via parseBlock).
+func (p *parser) parseMapLit() ast.Expr {
+	pos := p.cur().Pos
+	p.expect(token.LBRACE)
+	node := &ast.MapLit{PosV: pos}
+	if p.cur().Kind != token.RBRACE {
+		for {
+			key := p.parseExpr(0)
+			p.expect(token.COLON)
+			val := p.parseExpr(0)
+			node.Entries = append(node.Entries, ast.MapEntry{Key: key, Value: val})
+			if !p.accept(token.COMMA) {
+				break
+			}
+			if p.cur().Kind == token.RBRACE { // trailing comma
+				break
+			}
+		}
+	}
+	p.expect(token.RBRACE)
+	return node
 }
 
 func (p *parser) parseListLit() ast.Expr {

@@ -1,0 +1,33 @@
+#!/usr/bin/env cgp
+#
+# Read a sample sheet, scatter a per-sample job for each row, then gather every
+# sample's result into one cohort summary — all in a single pipeline.
+#
+#     cgp pipeline.cgp | bash
+#     cat cohort.txt
+#
+# open("samples.tsv").read_tsv() returns one ordered map per row; read a column
+# by name with row["..."]. (A field used inside a "…" string is bound to a plain
+# variable first, since a nested " would close the string; in a target line or a
+# {{ }} body, ${row["col"]} is fine as-is.)
+
+samples = open("samples.tsv").read_tsv(header=true)
+sums = []
+
+for row in samples {
+    name = row["sample"]
+    out = name + ".sum"
+    sums += out
+    ${out}: ${row["input"]} {{
+        job.name = "sum-${name}"
+        --
+        tr ' ' '\n' < ${input} | awk '{s += $1} END {print "${name}:", s}' > ${output}
+    }}
+}
+
+# gather: this target depends on every per-sample output, so it runs once they
+# are all built.
+cohort.txt: @{sums} {{
+    cat ${input} > ${output}
+}}
+@default: cohort.txt

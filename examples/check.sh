@@ -38,7 +38,7 @@ run() {
 run 01-hello            "pipeline.cgp"                       hello.txt
 run 02-batch-compress   "pipeline.cgp"                       data/a.txt.gz
 run 03-scatter-gather   "pipeline.cgp"                       total.txt
-run 04-manifest-cohort  "pipeline.cgp -manifest-tsv samples.tsv" s2.sum
+run 04-sample-sheet     "pipeline.cgp"                       cohort.txt
 run 05-stage-workflow   "workflow.cgp --raw data/raw.txt"    summary.txt
 run 06-cluster-resources "pipeline.cgp"                      result.txt
 

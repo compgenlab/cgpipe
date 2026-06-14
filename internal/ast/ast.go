@@ -68,12 +68,31 @@ type (
 		Recv   Expr
 		Lo, Hi Expr
 	}
-	// Call is recv.method(args...).
+	// Call is recv.method(args...). Recv is nil for a builtin free call like
+	// open("f") — Method then names the builtin. Kwargs holds keyword arguments
+	// (name=value), which always follow the positional Args.
 	Call struct {
 		PosV   token.Pos
 		Recv   Expr
 		Method string
 		Args   []Expr
+		Kwargs []KwArg
+	}
+	// MapLit is {"k": v, …} — an ordered, string-keyed map literal. Each Key must
+	// evaluate to a string at eval time. Empty Entries is the empty map {}.
+	MapLit struct {
+		PosV    token.Pos
+		Entries []MapEntry
+	}
+	// KwArg is a single keyword argument `Name=Value` in a call.
+	KwArg struct {
+		Name  string
+		Value Expr
+	}
+	// MapEntry is one `Key: Value` pair in a MapLit.
+	MapEntry struct {
+		Key   Expr
+		Value Expr
 	}
 	// Unary is op X (op is NOT or MINUS).
 	Unary struct {
@@ -99,6 +118,7 @@ func (e *RangeLit) Pos() token.Pos  { return e.PosV }
 func (e *Index) Pos() token.Pos     { return e.PosV }
 func (e *Slice) Pos() token.Pos     { return e.PosV }
 func (e *Call) Pos() token.Pos      { return e.PosV }
+func (e *MapLit) Pos() token.Pos    { return e.PosV }
 func (e *Unary) Pos() token.Pos     { return e.PosV }
 func (e *Binary) Pos() token.Pos    { return e.PosV }
 
@@ -112,6 +132,7 @@ func (*RangeLit) exprNode()  {}
 func (*Index) exprNode()     {}
 func (*Slice) exprNode()     {}
 func (*Call) exprNode()      {}
+func (*MapLit) exprNode()    {}
 func (*Unary) exprNode()     {}
 func (*Binary) exprNode()    {}
 
@@ -123,12 +144,15 @@ type Stmt interface {
 }
 
 type (
-	// Assign is `name OP value` where OP is = / ?= / +=.
+	// Assign is `name OP value` where OP is = / ?= / +=. For a plain or dotted
+	// variable target, Name holds the name and Target is nil. For an index target
+	// (`m["k"] OP value`), Target holds the Index expression and Name is "".
 	Assign struct {
-		PosV  token.Pos
-		Name  string
-		Op    token.Kind
-		Value Expr
+		PosV   token.Pos
+		Name   string
+		Target Expr
+		Op     token.Kind
+		Value  Expr
 	}
 	// Print writes its args to stdout (or, inside a body, appends to the script).
 	Print struct {

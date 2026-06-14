@@ -1,0 +1,4 @@
+sample	input	category
+s1	data/s1.txt	control
+s2	data/s2.txt	treated
+s3	data/s3.txt	control

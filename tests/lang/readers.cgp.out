@@ -1,0 +1,10 @@
+rows: 3
+by-name: s1 data/s1.bam 3
+by-pos: s1 data/s1.bam 3
+keys: sample input n category
+basename: s1.bam
+n-plus-1: 4
+missing:[  ]
+ids: a b
+group control = s1 s3
+group treated = s2

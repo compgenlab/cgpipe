@@ -240,43 +240,6 @@ func TestSubNoCommand(t *testing.T) {
 	}
 }
 
-func TestManifestTSVFanout(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.WriteFile("samples.tsv", []byte("sample\tgreeting\nP001\thello\nP002\thej\n"), 0o644)
-	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
-
-	if code := run([]string{"p.cgp", "-manifest-tsv", "samples.tsv"}); code != 0 {
-		t.Fatalf("run = %d", code)
-	}
-	for _, c := range []struct{ f, want string }{{"out.P001.txt", "hello\n"}, {"out.P002.txt", "hej\n"}} {
-		b, err := os.ReadFile(filepath.Join(dir, c.f))
-		if err != nil || string(b) != c.want {
-			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
-		}
-	}
-}
-
-func TestManifestCGPFanout(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.MkdirAll("P001", 0o755)
-	os.MkdirAll("P002", 0o755)
-	os.WriteFile("P001/m.cgp", []byte("sample = \"P001\"\ngreeting = \"one\""), 0o644)
-	os.WriteFile("P002/m.cgp", []byte("sample = \"P002\"\ngreeting = \"two\""), 0o644)
-	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
-
-	if code := run([]string{"p.cgp", "-manifest", "P*/m.cgp"}); code != 0 {
-		t.Fatalf("run = %d", code)
-	}
-	for _, c := range []struct{ f, want string }{{"out.P001.txt", "one\n"}, {"out.P002.txt", "two\n"}} {
-		b, err := os.ReadFile(filepath.Join(dir, c.f))
-		if err != nil || string(b) != c.want {
-			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
-		}
-	}
-}
-
 func writeWorkflowFixtures(t *testing.T) {
 	t.Helper()
 	os.WriteFile("a.cgp", []byte("a.txt: {{\n    echo from-a > ${output}\n}}\n@default: a.txt\nexport f = \"a.txt\""), 0o644)
@@ -345,52 +308,6 @@ func TestConvertToFile(t *testing.T) {
 func TestConvertNoInput(t *testing.T) {
 	if code := run([]string{"convert"}); code != 2 {
 		t.Fatalf("cgp convert with no input = %d, want 2", code)
-	}
-}
-
-// §14 Manifest fan-out: CSV format, one run per row.
-func TestManifestCSVFanout(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.WriteFile("samples.csv", []byte("sample,greeting\nP001,hi\nP002,yo\n"), 0o644)
-	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
-	if code := run([]string{"p.cgp", "-manifest-csv", "samples.csv"}); code != 0 {
-		t.Fatalf("run = %d", code)
-	}
-	for _, c := range []struct{ f, want string }{{"out.P001.txt", "hi\n"}, {"out.P002.txt", "yo\n"}} {
-		if b, err := os.ReadFile(filepath.Join(dir, c.f)); err != nil || string(b) != c.want {
-			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
-		}
-	}
-}
-
-// §14 Manifest fan-out: JSON array of objects, one run per object.
-func TestManifestJSONFanout(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.WriteFile("samples.json", []byte(`[{"sample":"P001","greeting":"hi"},{"sample":"P002","greeting":"yo"}]`), 0o644)
-	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
-	if code := run([]string{"p.cgp", "-manifest-json", "samples.json"}); code != 0 {
-		t.Fatalf("run = %d", code)
-	}
-	for _, c := range []struct{ f, want string }{{"out.P001.txt", "hi\n"}, {"out.P002.txt", "yo\n"}} {
-		if b, err := os.ReadFile(filepath.Join(dir, c.f)); err != nil || string(b) != c.want {
-			t.Errorf("%s = %q, err=%v; want %q", c.f, string(b), err, c.want)
-		}
-	}
-}
-
-// §14 An explicit --name value on the command line overrides a manifest column.
-func TestManifestCLIOverridesColumn(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.WriteFile("samples.tsv", []byte("sample\tgreeting\nP001\tfrom-file\n"), 0o644)
-	os.WriteFile("p.cgp", []byte("out.${sample}.txt: {{\n    echo ${greeting} > ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
-	if code := run([]string{"p.cgp", "-manifest-tsv", "samples.tsv", "--greeting", "from-cli"}); code != 0 {
-		t.Fatalf("run = %d", code)
-	}
-	if b, _ := os.ReadFile(filepath.Join(dir, "out.P001.txt")); string(b) != "from-cli\n" {
-		t.Errorf("out.P001.txt = %q, want CLI value to override the column", string(b))
 	}
 }
 
@@ -636,34 +553,6 @@ func TestForceFlagRebuilds(t *testing.T) {
 	second, _ := os.ReadFile(filepath.Join(dir, "out.txt"))
 	if len(second) <= len(first) {
 		t.Errorf("-force did not re-run the recipe (out.txt unchanged: %q)", string(second))
-	}
-}
-
-// §14/§11.3 A manifest run with -r graphviz/html emits ONE combined document
-// (a cluster/section per row), not one per row concatenated.
-func TestManifestCombinedGraphviz(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.WriteFile("samples.tsv", []byte("sample\nP001\nP002\n"), 0o644)
-	os.WriteFile("p.cgp", []byte("out.${sample}.txt: in.${sample}.txt {{\n    cp ${input} ${output}\n}}\n@default: out.${sample}.txt"), 0o644)
-
-	var buf bytes.Buffer
-	stdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	code := run([]string{"p.cgp", "-manifest-tsv", "samples.tsv", "-r", "graphviz"})
-	w.Close()
-	os.Stdout = stdout
-	buf.ReadFrom(r)
-	if code != 0 {
-		t.Fatalf("run = %d", code)
-	}
-	out := buf.String()
-	if strings.Count(out, "digraph") != 1 {
-		t.Errorf("want a single combined digraph, got:\n%s", out)
-	}
-	if !strings.Contains(out, `label="P001"`) || !strings.Contains(out, `label="P002"`) {
-		t.Errorf("missing per-sample clusters:\n%s", out)
 	}
 }
 

@@ -4,7 +4,8 @@
 02-batch-compress/data/*.gz
 03-scatter-gather/*.count
 03-scatter-gather/total.txt
-04-manifest-cohort/*.sum
+04-sample-sheet/*.sum
+04-sample-sheet/cohort.txt
 05-stage-workflow/clean.txt
 05-stage-workflow/summary.txt
 06-cluster-resources/result.txt

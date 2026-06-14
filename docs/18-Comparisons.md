@@ -34,8 +34,8 @@ to run. That keeps deployment and "works on my login node" problems small.
 
 **Structure follows the data, in the language you already have.** Because the whole
 file is evaluated as code, a `for` loop over chromosomes *is* how you generate
-per-chromosome jobs, and a manifest *is* how you fan out over a cohort — no special
-operators. The same expression language guards required arguments and computes
+per-chromosome jobs, and reading a sample sheet with `open(...).read_tsv()` and
+looping over its rows *is* how you fan out over a cohort — no special operators. The same expression language guards required arguments and computes
 output names.
 
 **A focused ledger, not a global cache.** cgp's [ledger](11-The_Ledger.md) records

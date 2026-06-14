@@ -167,10 +167,24 @@ array→gather edges work now.
 
 ### Not yet wired
 
-`aftercorr` for element-wise array→array edges, auto-deconstructing a mismatched
-dependent array on restart, and coalescing a [manifest](13-Manifests_and_Fanout.md)
-fan-out across rows are planned follow-ups. For embarrassingly-parallel work today,
-`job.array` (with a gather) and `cgp sub --array` cover the common cases.
+`aftercorr` for element-wise array→array edges and auto-deconstructing a mismatched
+dependent array on restart are planned follow-ups. For embarrassingly-parallel work
+today, `job.array` (with a gather) and `cgp sub --array` cover the common cases.
+
+To scatter a [sample sheet](13-Sample_Sheets.md) as an array, loop its rows with a
+counter and set `job.array` to the index:
+
+```
+for row in open("samples.tsv").read_tsv(header=true) with i {
+    name = row["sample"]
+    bams += "${name}.bam"
+    ^${name}.bam: ${row["fastq"]} {{
+        job.array = i
+        --
+        align ${input} > ${output}
+    }}
+}
+```
 
 ## Next
 

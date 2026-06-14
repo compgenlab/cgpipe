@@ -57,11 +57,12 @@ are configured, from the owning job's live scheduler state. So an output present
 disk shows **done**, one whose job is still queued shows **queued**, and one not
 yet started shows **pending**.
 
-Over a manifest, `-r html` emits one page with a section per row
-([Tutorial 11](11-manifest-fanout.md)), giving you a single cohort-wide status view:
+A sample-sheet pipeline that scatters over rows and gathers
+([Tutorial 11](11-sample-sheets.md)) is already a single graph, so `-r html` renders
+the whole cohort as one page — a single cohort-wide status view:
 
 ```sh
-cgp -r html align.cgp -manifest-tsv samples.tsv > cohort.html
+cgp -r html align.cgp > cohort.html
 ```
 
 ## When to use which

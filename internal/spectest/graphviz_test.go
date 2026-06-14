@@ -91,23 +91,6 @@ unrelated.txt: b.txt {{
 	mustNotContain(t, got, "unrelated.txt", "b.txt")
 }
 
-// A manifest run combines into ONE digraph with a labeled cluster per row.
-func TestGraphvizCombinedClusters(t *testing.T) {
-	pa, _ := build(t, "out.A.txt: in.A.txt {{\n    cp ${input} ${output}\n}}\n@default: out.A.txt", nil)
-	pb, _ := build(t, "out.B.txt: in.B.txt {{\n    cp ${input} ${output}\n}}\n@default: out.B.txt", nil)
-	dotg := graphviz.DOTCombined([]graphviz.Labeled{
-		{Label: "P001", Graph: graphviz.Build(pa, nil)},
-		{Label: "P002", Graph: graphviz.Build(pb, nil)},
-	})
-	if strings.Count(dotg, "digraph") != 1 {
-		t.Errorf("want one digraph, got:\n%s", dotg)
-	}
-	mustContain(t, dotg,
-		"subgraph cluster_0", `label="P001"`, `"in.A.txt" -> "out.A.txt"`,
-		"subgraph cluster_1", `label="P002"`, `"in.B.txt" -> "out.B.txt"`,
-	)
-}
-
 // §11.3 Reserved (@pre/@post) and unreached wildcard-template targets are not
 // nodes in the concrete file DAG.
 func TestGraphvizSkipsReservedAndWildcards(t *testing.T) {

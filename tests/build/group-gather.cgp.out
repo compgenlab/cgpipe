@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- s1.cnt ----
+
+wc -w < data/s1.txt > s1.cnt
+
+
+# ---- s3.cnt ----
+
+wc -w < data/s3.txt > s3.cnt
+
+
+# ---- control.report ----
+
+cat s1.cnt s3.cnt > control.report
+
+
+# ---- s2.cnt ----
+
+wc -w < data/s2.txt > s2.cnt
+
+
+# ---- treated.report ----
+
+cat s2.cnt > treated.report
+
+

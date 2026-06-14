@@ -88,7 +88,7 @@ References to stage exports are checked two ways:
 
 - **[Tutorial 12: Stage workflows](tutorials/12-stage-workflow.md)** — a worked
   multi-stage example.
-- **[Manifests and Fan-out](13-Manifests_and_Fanout.md)** — run a whole workflow
-  once per sample.
+- **[Sample Sheets](13-Sample_Sheets.md)** — scatter and gather a cohort from one
+  sheet; a sample-sheet loop can live inside any stage.
 
 Reference → [language-spec.md §13](language-spec.md#13-workflows-stage-and-export).

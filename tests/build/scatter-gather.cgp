@@ -1,0 +1,18 @@
+# Scatter a per-sample target for each row of a sample sheet, accumulating the
+# outputs; then gather them all into one cohort target — in a single script.
+# (Field values used inside a "…" string are bound to a plain var first, since a
+# nested " would otherwise close the string; in a target/body ${row["x"]} is fine.)
+samples = open("samples.tsv").read_tsv(header=true)
+sums = []
+for row in samples {
+    name = row["sample"]
+    out = name + ".sum"
+    sums += out
+    ${out}: ${row["input"]} {{
+        wc -w < ${input} > ${output}
+    }}
+}
+cohort.txt: @{sums} {{
+    cat ${input} > ${output}
+}}
+@default: cohort.txt

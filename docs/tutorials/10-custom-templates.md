@@ -139,8 +139,8 @@ cgp.runner.slurm.template = "/etc/cgp/slurm.template.cgp"
 
 ## Next
 
-- **[Tutorial 11: Manifest fan-out](11-manifest-fanout.md)** — run a pipeline once
-  per sample.
+- **[Tutorial 11: Sample sheets](11-sample-sheets.md)** — read a sample sheet and
+  scatter/gather over its rows in one pipeline.
 
 Reference → [Running Jobs](../08-Running_Jobs.md),
 [Configuration Reference](../14-Configuration_Reference.md).

@@ -60,9 +60,9 @@ Each calling stage **exports** its gVCF path, which the joint stage gathers:
 # Cohort workflow: call each sample, then joint-genotype.
 #     cgp cohort.cgp --ref genome.fa
 #
-# For a large cohort, generate the call stages from a manifest rather than listing
-# them by hand. On a scheduler, set cgp.ledger so the joint stage waits on the
-# still-queued call jobs.
+# For a large cohort, generate the call stages from a sample sheet rather than
+# listing them by hand. On a scheduler, set cgp.ledger so the joint stage waits on
+# the still-queued call jobs.
 
 if !ref { print "ERROR: --ref required"; exit 1 }
 
@@ -97,7 +97,9 @@ export gvcf = "${sample}.g.vcf.gz"
 ## Adapt it
 
 - For large cohorts, generate the `stage` lines (or the `--gvcf` flags) from your
-  sample sheet rather than hand-listing them.
+  sample sheet rather than hand-listing them — loop over
+  `open(sheet).read_tsv(header=true)` and emit one `stage` per row, accumulating each
+  exported gVCF into a list to gather (see the [Sample Sheets chapter](../13-Sample_Sheets.md)).
 - Add `VariantRecalibrator`/`ApplyVQSR` (VQSR) or hard-filtering as a downstream
   target on `cohort.vcf.gz`.
 

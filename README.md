@@ -13,8 +13,9 @@ scale.
 > (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
 > the optional job ledger (cross-run reuse of still-queued jobs) are
 > implemented, plus `cgp sub` for one-off job submission, config-file loading,
-> container/GPU wrapping, `-manifest*` fan-out (run a pipeline once per manifest
-> row/file), and multi-pipeline `stage` composition (chain standalone pipelines
+> container/GPU wrapping, reading sample sheets in-language (`open(...).read_tsv()`
+> to scatter and gather over a TSV/CSV/JSON in one pipeline), and multi-pipeline
+> `stage` composition (chain standalone pipelines
 > via `export` / `${stage.x}`). `cgp convert` migrates a legacy cgpipe script to
 > the cgp language. The JVM version remains available and supported at
 > `compgen-io/cgpipe-jvm`.
@@ -66,11 +67,10 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 | `internal/lexer/` | source → tokens (incl. the `{{ }}` shell-body capture mode) |
 | `internal/ast/`   | AST node types |
 | `internal/parser/`| hand-rolled recursive-descent parser |
-| `internal/eval/`  | evaluator: scope, control flow, target collection → dependency graph; renders shell bodies (`${…}`, `%`-control lines) |
+| `internal/eval/`  | evaluator: scope, control flow, file readers (`open().read_tsv/csv/json/lines`), target collection → dependency graph; renders shell bodies (`${…}`, `%`-control lines) |
 | `internal/runner/` | drive a graph to a backend; `runner/shell` (default), `runner/sched` (slurm/sge/pbs/batchq), `runner/graphviz`, `runner/report` (html) |
 | `internal/ledger/` | optional append-only (JSONL) job ledger (output → owning job) |
 | `internal/container/` | container/GPU command wrapping (docker/singularity) |
-| `internal/manifest/` | manifest loaders (tsv/csv/json/cgp) for fan-out |
 | `internal/convert/` | best-effort migrator from legacy cgpipe scripts |
 | `internal/lsp/`   | zero-dependency language server (`cgp lsp`) for editors |
 | `docs/`           | the user guide and the language specification |
@@ -78,7 +78,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgp
 ## Examples
 
 Runnable, self-contained pipelines live in [`examples/`](examples/) — from a
-one-line hello to scatter-gather, manifest fan-out, and stage workflows. They use
+one-line hello to scatter-gather, sample sheets, and stage workflows. They use
 only coreutils, so they run anywhere; `examples/check.sh` runs them all.
 
 ## License

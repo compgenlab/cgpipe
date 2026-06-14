@@ -66,7 +66,7 @@ emits the body when the target needs to run.
 | [Pipeline Tutorials](07-Pipeline_Tutorials.md) | learn by worked example |
 | [Running Jobs](08-Running_Jobs.md) · [Containers & GPUs](10-Containers_and_GPUs.md) | submit to a scheduler, request resources, run in containers |
 | [The Ledger](11-The_Ledger.md) | understand restarts and cross-run reuse |
-| [Workflows](12-Workflows.md) · [Manifests & Fan-out](13-Manifests_and_Fanout.md) | chain pipelines and run them across many samples |
+| [Workflows](12-Workflows.md) · [Sample Sheets](13-Sample_Sheets.md) | chain pipelines and run them across many samples |
 | [Configuration Reference](14-Configuration_Reference.md) | every `cgp.*` and `job.*` setting |
 | [Troubleshooting](17-Troubleshooting.md) · [Glossary](16-Glossary.md) | debug a problem, look up a term |
 | [language-spec.md](language-spec.md) | the precise, normative language reference |

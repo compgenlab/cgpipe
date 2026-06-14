@@ -35,7 +35,9 @@ Run: `cgp hello.cgp` prints the assembled bash to stdout (pipe to `bash` to run)
 ## Types
 `bool` (`true`/`false`), `int`, `float`, `string` (always `"..."`),
 `list` (`["a","b"]`, may mix types), `range` (`1..100`, inclusive, stores only
-bounds). `.type()` returns the type name.
+bounds), `map` (`{}` or `{"k": v}`; `m["k"]` indexes, `m["k"] += v` accumulates a
+list, `for k in m` iterates keys), `file` (a handle from `open(path)`; see Reading
+files). `.type()` returns the type name.
 
 ## Variables
 ```
@@ -50,7 +52,7 @@ unset x          # remove
 `--flag` (bare) → `flag = true`; `--hp-dist` → `hp_dist` (hyphens→underscores);
 repeat → list (`--x a --x b` → `["a","b"]`). Put the file before a trailing bare
 flag. Guard required vars: `if !sample { print "ERROR: --sample required"; exit 1 }`.
-(Single-hyphen args like `-dr`, `-r`, `-force`, `-manifest*` are cgp's own options.)
+(Single-hyphen args like `-dr`, `-r`, `-force` are cgp's own options.)
 
 ## Operators & expressions
 Arithmetic `+ - * / % **` (`**` power, right-assoc; `/` is int division unless a
@@ -90,6 +92,8 @@ exit 1                # stop; code becomes cgp's exit status
   .abspath() .exists() .isfile() .isdir()`.
 - list: `.length() .contains(v) .join(sep)` (+ index/slice/`+=`).
 - range: `.length() .contains(v)`; iterates/indexes like a list.
+- map: `.keys() .values() .items() .has(k) .get(k, default) .length()`.
+- file (from `open`): `.read_tsv(...) .read_csv(...) .read_json() .read_lines(...) .read()`.
 
 ## Targets
 ```
@@ -152,16 +156,48 @@ One-off: `cgp sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output
 Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgp sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
 Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
 
-## Ledger (optional), workflows, manifests
+## Reading files (sample sheets, scatter + gather)
+Read a data file at **eval time** and build targets from its rows — scatter and
+gather live in ONE pipeline (no per-row CLI fan-out). `open(path)` returns a `file`
+handle; the reader you call decides the shape:
+```
+samples = open("samples.tsv").read_tsv(header=true)   # LIST of MAPS, one per row
+data    = open("config.json").read_json()             # parsed JSON (map/list/...)
+lines   = open("ids.txt").read_lines()                # list of strings
+text    = open("note.txt").read()                     # whole file as one string
+```
+Reader keyword args (defaults shown): `read_tsv(header=false, sep="\t", comment="#",
+skip=0, raw=false)`; `read_csv(...)` same with `sep=","`. With `header=true` each row
+is a **map** keyed by column name; otherwise a **list** of fields. Fields keep their
+type and chain: `row["sample"]`, `row[0]`, `row["bam"].basename()`, `row["n"] + 1`.
+```
+samples = open("samples.tsv").read_tsv(header=true)
+outs = []
+for row in samples {
+    name = row["sample"]          # bind a column to a plain var before using in "..."
+    out  = name + ".sum"
+    outs += out
+    ${out}: ${row["input"]} {{ wc -w < ${input} > ${output} }}
+}
+cohort.txt: @{outs} {{ cat ${input} > ${output} }}   # gather over every scattered out
+@default: cohort.txt
+```
+Quoting gotcha: inside a `"..."` string a column **must** be bound to a plain var
+first (`name = row["sample"]`); on a target line or in a `{{ }}` body, `${row["col"]}`
+is fine directly.
+
+## Keyword arguments
+Calls accept named args: `read_tsv(header=true, sep="|")`. Positional and keyword may
+mix (positional first). Used by the file readers above (and any method that documents
+named parameters).
+
+## Ledger (optional), workflows
 - **Ledger** (`cgp.ledger = "jobs.ledger"`, a directory): records which job owns which output;
   enables cross-run reuse of still-queued jobs (scheduler runners). Restart is
   mtime-based regardless; `-force` rebuilds all. Inspect: `cgp ledger dump/search/status/vacuum`
   (`status [-r RUNNER] [-output]` shows live scheduler status per job/output).
 - **Workflow** (chain pipelines): `stage NAME FILE --arg ...`; a stage exposes a
   value with top-level `export name = expr`, used as `${NAME.name}` in later stages.
-- **Manifest fan-out**: `cgp p.cgp -manifest-tsv samples.tsv` runs the pipeline once
-  per row, columns → variables. Also `-manifest-csv/-json`, and `-manifest` (glob of
-  `.cgp` files). CLI `--name` overrides a column.
 
 ## Worked example (per-chromosome calling + merge + cleanup)
 ```

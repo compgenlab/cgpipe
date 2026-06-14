@@ -17,7 +17,6 @@ import (
 	"github.com/compgen-io/cgp/internal/buildinfo"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
-	"github.com/compgen-io/cgp/internal/manifest"
 	"github.com/compgen-io/cgp/internal/parser"
 	"github.com/compgen-io/cgp/internal/runner"
 	"github.com/compgen-io/cgp/internal/runner/graphviz"
@@ -99,9 +98,6 @@ options (single hyphen):
     -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz, html
                  (graphviz=DOT to stdout; html=status report reading the ledger)
                  (also set via cgp.runner in the script/config)
-    -manifest FILE        run once per CGP manifest file (glob ok); also
-    -manifest-tsv FILE    -manifest-csv / -manifest-json: run once per row,
-                          columns/keys become variables
 
 Script variables use a double hyphen: --name value (or --name=value). A bare
 --name (no value) sets name=true; hyphens in a name become underscores
@@ -156,7 +152,6 @@ func run(args []string) int {
 	force := false
 	showHelp := false
 	runnerName := ""
-	manifestPath, manifestFmt := "", ""
 
 	rest := args
 	for i := 0; i < len(rest); i++ {
@@ -201,23 +196,6 @@ func run(args []string) int {
 				}
 				i++
 				runnerName = rest[i]
-			case "-manifest", "-manifest-cgp", "-manifest-tsv", "-manifest-csv", "-manifest-json":
-				if i+1 >= len(rest) {
-					fmt.Fprintf(os.Stderr, "cgp: option %s needs a value\n", a)
-					return 2
-				}
-				i++
-				manifestPath = rest[i]
-				switch a {
-				case "-manifest-tsv":
-					manifestFmt = "tsv"
-				case "-manifest-csv":
-					manifestFmt = "csv"
-				case "-manifest-json":
-					manifestFmt = "json"
-				default:
-					manifestFmt = "cgp"
-				}
 			default:
 				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
 				return 2
@@ -275,38 +253,7 @@ func run(args []string) int {
 		return 1
 	}
 
-	// No manifest: a single run.
-	if manifestPath == "" {
-		return runPipeline(f, file, cfgs, vars, goals, runnerName, dryRun, force, runner.NewCache())
-	}
-
-	// Manifest fan-out: run the pipeline once per row/file. A shared stat cache
-	// means common inputs (e.g. a reference) are stat'd once across all runs.
-	rows, err := loadManifest(manifestPath, manifestFmt)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	// The graphviz/html runners produce a single document; for a manifest run
-	// emit one combined document (a cluster/section per row) rather than one per
-	// row concatenated to stdout.
-	if runnerName == "graphviz" || runnerName == "html" {
-		return runManifestGraph(f, file, cfgs, vars, goals, runnerName, rows)
-	}
-	cache := runner.NewCache()
-	for _, row := range rows {
-		rv := map[string]eval.Value{}
-		for k, v := range row {
-			rv[k] = v
-		}
-		for k, v := range vars { // explicit CLI variables override the manifest
-			rv[k] = v
-		}
-		if code := runPipeline(f, file, cfgs, rv, goals, runnerName, dryRun, force, cache); code != 0 {
-			return code
-		}
-	}
-	return 0
+	return runPipeline(f, file, cfgs, vars, goals, runnerName, dryRun, force, runner.NewCache())
 }
 
 // runPipeline evaluates the (already-parsed) pipeline with the given variables
@@ -436,58 +383,6 @@ func precomputeStatus(prog *eval.Program, g graphviz.Graph) func(string) report.
 		snap[n.Name] = one(n.Name)
 	}
 	return func(name string) report.State { return snap[name] }
-}
-
-// runManifestGraph emits a single combined graphviz/html document for a manifest
-// run — one cluster (graphviz) / section (html) per row, labeled by the row.
-func runManifestGraph(f *ast.File, file string, cfgs []eval.ConfigFile, baseVars map[string]eval.Value, goals []string, runnerName string, rows []map[string]eval.Value) int {
-	var dotSecs []graphviz.Labeled
-	var htmlSecs []report.Section
-	for i, row := range rows {
-		rv := map[string]eval.Value{}
-		for k, v := range row {
-			rv[k] = v
-		}
-		for k, v := range baseVars { // explicit CLI vars override columns
-			rv[k] = v
-		}
-		prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: rv})
-		if err != nil {
-			var ex *eval.ExitError
-			if errors.As(err, &ex) {
-				return ex.Code
-			}
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		label := rowLabel(row, i)
-		g := graphviz.Build(prog, goals)
-		if runnerName == "graphviz" {
-			dotSecs = append(dotSecs, graphviz.Labeled{Label: label, Graph: g})
-		} else {
-			htmlSecs = append(htmlSecs, report.Section{Label: label, Graph: g, StatusOf: precomputeStatus(prog, g)})
-		}
-	}
-	if runnerName == "graphviz" {
-		io.WriteString(os.Stdout, graphviz.DOTCombined(dotSecs))
-		return 0
-	}
-	if err := report.RunCombined(file, htmlSecs, os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-		return 1
-	}
-	return 0
-}
-
-// rowLabel names a manifest row for a report cluster/section: a sample/id/name
-// column if present, else "row N".
-func rowLabel(row map[string]eval.Value, i int) string {
-	for _, key := range []string{"sample", "id", "name"} {
-		if v, ok := row[key]; ok {
-			return eval.Stringify(v)
-		}
-	}
-	return fmt.Sprintf("row %d", i+1)
 }
 
 var stageRefRe = regexp.MustCompile(`\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)`)
@@ -632,50 +527,6 @@ func (pc parseCache) load(path string) (*ast.File, error) {
 	return f, nil
 }
 
-// loadManifest loads a manifest into rows of variables, one run per row.
-func loadManifest(path, format string) ([]map[string]eval.Value, error) {
-	switch format {
-	case "tsv":
-		return manifest.LoadDelimited(path, '\t')
-	case "csv":
-		return manifest.LoadDelimited(path, ',')
-	case "json":
-		return manifest.LoadJSON(path)
-	case "cgp":
-		return loadCGPManifest(path)
-	}
-	return nil, fmt.Errorf("unknown manifest format %q", format)
-}
-
-// loadCGPManifest globs pattern and evaluates each matched .cgp file (which sets
-// variables); each file becomes one run's variable set.
-func loadCGPManifest(pattern string) ([]map[string]eval.Value, error) {
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, err
-	}
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("no manifest files match %q", pattern)
-	}
-	var rows []map[string]eval.Value
-	for _, m := range matches {
-		b, err := os.ReadFile(m)
-		if err != nil {
-			return nil, err
-		}
-		mf, err := parser.Parse(string(b), m)
-		if err != nil {
-			return nil, err
-		}
-		mp, err := eval.Run(mf, eval.Options{File: m})
-		if err != nil {
-			return nil, fmt.Errorf("manifest %s: %w", m, err)
-		}
-		rows = append(rows, mp.Vars())
-	}
-	return rows, nil
-}
-
 // cliVarName normalizes a command-line variable name: hyphens become underscores
 // so `--hp-dist` sets the cgp identifier `hp_dist` (identifiers can't contain
 // hyphens). `--hp_dist` is therefore equivalent.
@@ -691,8 +542,8 @@ func addCLIVar(vars map[string]eval.Value, name string, v eval.Value) {
 	if prev, ok := vars[name]; ok {
 		if lst, isList := prev.(eval.ListVal); isList {
 			// Copy rather than append in place: the same backing array can be
-			// shared across manifest rows / repeated runs, so a mutating append
-			// could alias another row's list.
+			// shared across repeated runs, so a mutating append could alias
+			// another run's list.
 			vars[name] = append(append(eval.ListVal{}, lst...), v)
 		} else {
 			vars[name] = eval.ListVal{prev, v}

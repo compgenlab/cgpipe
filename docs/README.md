@@ -22,7 +22,7 @@ New here? Start with **[Getting Started](02-Getting_Started.md)**.
 | 10 | [Containers and GPUs](10-Containers_and_GPUs.md) | Docker/Singularity wrapping, `job.gpu` requests |
 | 11 | [The Ledger](11-The_Ledger.md) | Restarts, cross-run reuse, `cgp ledger` |
 | 12 | [Workflows](12-Workflows.md) | Chaining pipelines with `stage` and `export` |
-| 13 | [Manifests and Fan-out](13-Manifests_and_Fanout.md) | Run a pipeline once per sample/row |
+| 13 | [Sample Sheets](13-Sample_Sheets.md) | Read a TSV/CSV/JSON sheet, scatter per sample, gather a cohort |
 | 14 | [Configuration Reference](14-Configuration_Reference.md) | Every `cgp.*` / `job.*` setting; precedence; env vars |
 | 15 | [The `convert` Tool](15-The_convert_Tool.md) | Bring an older script forward |
 | 16 | [Glossary](16-Glossary.md) | Terminology used throughout |
@@ -39,7 +39,7 @@ New here? Start with **[Getting Started](02-Getting_Started.md)**.
 - **…write my first pipeline.** → [Getting Started](02-Getting_Started.md) → [Tutorial 1: Hello, target](tutorials/01-hello.md).
 - **…start from a real-workflow template.** → the [Cookbook](cookbook/) (DNA-seq, RNA-seq, ChIP/ATAC, joint genotyping, …).
 - **…look up a syntax detail.** → [Language Syntax](03-Language_Syntax.md), [Build Targets](05-Build_Targets.md), [Methods Reference](04-Methods_Reference.md).
-- **…fan out work over chromosomes / samples / lanes.** → [Tutorial 4: Map-reduce](tutorials/04-map-reduce.md) (in-file) and [Tutorial 11: Manifest fan-out](tutorials/11-manifest-fanout.md) (one run per sample).
+- **…fan out work over chromosomes / samples / lanes.** → [Tutorial 4: Map-reduce](tutorials/04-map-reduce.md) (in-file) and [Tutorial 11: Sample sheets](tutorials/11-sample-sheets.md) (scatter + gather from a TSV).
 - **…submit a fan-out as one scheduler array job.** → [Array Jobs](09-Array_Jobs.md) (`cgp sub --array`, `for … with i`).
 - **…clean up intermediates without breaking restarts.** → [Tutorial 5: Opportunistic cleanup](tutorials/05-opportunistic-cleanup.md).
 - **…run jobs in Docker or Singularity, or request GPUs.** → [Containers and GPUs](10-Containers_and_GPUs.md), [Tutorial 9](tutorials/09-containers.md).

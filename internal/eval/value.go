@@ -33,6 +33,21 @@ type (
 	// UnsetVal is the value of an unset variable. It is falsy and stringifies to ""
 	// in optional contexts; using it where a value is required is an error.
 	UnsetVal struct{}
+	// FileVal is a file handle returned by open(). It carries the path and an
+	// access mode ("r" for now); reader methods (read_tsv, read_lines, …) hang
+	// off it. Reads happen lazily, when a reader method is called.
+	FileVal struct {
+		path string
+		mode string
+	}
+	// MapVal is an ordered, string-keyed map (the type readers return per row and
+	// the value of a {…} literal). keys preserves insertion/column order; m holds
+	// the values. The map is a reference type: copying a MapVal shares m, so a
+	// mutation via index assignment is written back to the owning variable.
+	MapVal struct {
+		keys []string
+		m    map[string]Value
+	}
 )
 
 func (IntVal) typeName() string   { return "int" }
@@ -42,6 +57,19 @@ func (BoolVal) typeName() string  { return "bool" }
 func (ListVal) typeName() string  { return "list" }
 func (RangeVal) typeName() string { return "range" }
 func (UnsetVal) typeName() string { return "unset" }
+func (FileVal) typeName() string  { return "file" }
+func (MapVal) typeName() string   { return "map" }
+
+// newMap returns an empty MapVal ready for set().
+func newMap() MapVal { return MapVal{m: map[string]Value{}} }
+
+// set stores v under key k, appending k to the key order if new.
+func (mv *MapVal) set(k string, v Value) {
+	if _, ok := mv.m[k]; !ok {
+		mv.keys = append(mv.keys, k)
+	}
+	mv.m[k] = v
+}
 
 func (r RangeVal) slice() []Value {
 	var out []Value
@@ -80,6 +108,14 @@ func stringify(v Value) string {
 		return strings.Join(parts, " ")
 	case RangeVal:
 		return stringify(ListVal(x.slice()))
+	case FileVal:
+		return x.path
+	case MapVal:
+		parts := make([]string, len(x.keys))
+		for i, k := range x.keys {
+			parts[i] = k + "=" + stringify(x.m[k])
+		}
+		return strings.Join(parts, " ")
 	case UnsetVal:
 		return ""
 	}
@@ -101,6 +137,8 @@ func truthy(v Value) bool {
 		return len(x) > 0
 	case RangeVal:
 		return x.count() > 0 // a range always yields ≥1 value; avoids materializing it
+	case MapVal:
+		return len(x.keys) > 0
 	case UnsetVal:
 		return false
 	}
@@ -135,13 +173,20 @@ func StrList(ss []string) ListVal {
 	return out
 }
 
-// asList coerces lists and ranges to a slice of values for iteration.
+// asList coerces lists, ranges, and maps to a slice of values for iteration. A
+// map yields its keys (as strings) in order, so `for k in m` iterates keys.
 func asList(v Value) ([]Value, bool) {
 	switch x := v.(type) {
 	case ListVal:
 		return []Value(x), true
 	case RangeVal:
 		return x.slice(), true
+	case MapVal:
+		out := make([]Value, len(x.keys))
+		for i, k := range x.keys {
+			out[i] = StrVal(k)
+		}
+		return out, true
 	}
 	return nil, false
 }
@@ -168,19 +213,93 @@ func (s *Scope) clone() *Scope {
 
 // ---- methods ----
 
-func callMethod(recv Value, name string, args []Value) (Value, error) {
+func callMethod(recv Value, name string, args []Value, kwargs map[string]Value) (Value, error) {
 	switch r := recv.(type) {
+	case FileVal:
+		return fileMethod(r, name, args, kwargs)
+	case MapVal:
+		if err := noKwargs("map", name, kwargs); err != nil {
+			return nil, err
+		}
+		return mapMethod(r, name, args)
 	case StrVal:
+		if err := noKwargs("string", name, kwargs); err != nil {
+			return nil, err
+		}
 		return stringMethod(string(r), name, args)
 	case ListVal:
+		if err := noKwargs("list", name, kwargs); err != nil {
+			return nil, err
+		}
 		return listMethod([]Value(r), name, args)
 	case RangeVal:
+		if err := noKwargs("range", name, kwargs); err != nil {
+			return nil, err
+		}
 		return rangeMethod(r, name, args)
 	}
 	if name == "type" && len(args) == 0 {
 		return StrVal(recv.typeName()), nil
 	}
 	return nil, fmt.Errorf("method not found: %s.%s()", recv.typeName(), name)
+}
+
+// noKwargs reports an error if kwargs were passed to a method that takes none.
+func noKwargs(typ, name string, kwargs map[string]Value) error {
+	if len(kwargs) > 0 {
+		return fmt.Errorf("%s.%s() does not take keyword arguments", typ, name)
+	}
+	return nil
+}
+
+// mapMethod implements methods on a map. Field access is via indexing
+// (m["k"] / m[0]); these methods cover inspection and conversion.
+func mapMethod(mv MapVal, name string, args []Value) (Value, error) {
+	switch name {
+	case "type":
+		return StrVal("map"), nil
+	case "length":
+		return IntVal(len(mv.keys)), nil
+	case "keys":
+		return StrList(mv.keys), nil
+	case "values":
+		out := make(ListVal, len(mv.keys))
+		for i, k := range mv.keys {
+			out[i] = mv.m[k]
+		}
+		return out, nil
+	case "items":
+		out := make(ListVal, len(mv.keys))
+		for i, k := range mv.keys {
+			out[i] = ListVal{StrVal(k), mv.m[k]}
+		}
+		return out, nil
+	case "has":
+		if len(args) != 1 {
+			return nil, fmt.Errorf("map.has() takes 1 argument")
+		}
+		_, ok := mv.m[stringify(args[0])]
+		return BoolVal(ok), nil
+	case "get":
+		if len(args) != 1 {
+			return nil, fmt.Errorf("map.get() takes 1 argument")
+		}
+		if iv, ok := args[0].(IntVal); ok {
+			i := int(iv)
+			if i < 0 {
+				i += len(mv.keys)
+			}
+			if i < 0 || i >= len(mv.keys) {
+				return UnsetVal{}, nil
+			}
+			return mv.m[mv.keys[i]], nil
+		}
+		if v, ok := mv.m[stringify(args[0])]; ok {
+			return v, nil
+		}
+		return UnsetVal{}, nil
+	}
+	return nil, fmt.Errorf("method not found: map.%s()", name)
 }
 
 // count returns the number of values a range yields without materializing them.

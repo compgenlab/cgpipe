@@ -47,7 +47,7 @@ See [§6 Target bodies](#6-target-bodies) for what happens inside `{{ }}`.
 
 ## 2. Data types
 
-Six types: `bool`, `int`, `float`, `string`, `list`, `range`.
+Eight types: `bool`, `int`, `float`, `string`, `list`, `range`, `map`, `file`.
 
     flag    = true            # bool (case-sensitive: true / false)
     count   = 10              # int
@@ -56,8 +56,12 @@ Six types: `bool`, `int`, `float`, `string`, `list`, `range`.
     samples = []              # list
     samples = [1, 2, "x"]     # lists may mix types
     chunks  = 1..100          # range (1, 2, …, 100 when iterated)
+    row     = {"a": 1, "b": 2} # map: ordered, string-keyed
+    f       = open("s.tsv")   # file: a handle for reading (see §14)
 
 Typing is dynamic; a value's type is mostly invisible. `.type()` returns the type name as a string. CLI argument values arrive as strings and are parsed to `int`/`float`/`bool` when they look like one.
+
+A **map** is an ordered, string-keyed collection — the literal `{}` / `{"k": v, …}`, and the value `read_tsv()`/`read_json()` produce per row (§14). Read a value by key with `m["k"]` (a missing key is unset, i.e. empty), or by position with `m[0]` (an `int` index selects the i-th key in insertion order). Keys are always strings; a string index is a key lookup, an int index is positional. Assign with `m["k"] = v`; `m["k"] += v` accumulates a list (and auto-creates the map if it is unset). Iterating a map (`for k in m`) yields its keys in order. Map methods are in §9.
 
 ---
 
@@ -422,6 +426,38 @@ Also indexed, sliced, and appended with `+=`. `",".join(list)` (receiver-flipped
 ### 9.5 int / float / bool
 Only `type()`. No implicit coercion; an unknown method throws `Method not found`.
 
+### 9.6 map
+
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `get(key)` | string or int | any | Value for `key` (or i-th by position); missing ⇒ unset |
+| `has(key)` | string | bool | Is `key` present |
+| `keys()` | — | list | Keys, in insertion/column order |
+| `values()` | — | list | Values, in key order |
+| `items()` | — | list | One `[key, value]` pair per entry |
+| `length()` | — | int | Number of entries |
+
+Also read/written by index: `m["k"]`, `m[0]`, `m["k"] = v`, `m["k"] += v` (§2). A field read keeps its type, so it chains: `row["bam"].basename()`, `row["n"] + 1`.
+
+### 9.7 file
+
+A file handle from `open(path)` (§14). Reads happen when a reader method is called.
+
+| Method | Keyword args (defaults) | Returns | Description |
+|--------|-------------------------|---------|-------------|
+| `read_tsv(...)` | `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows as maps keyed by header |
+| `read_csv(...)` | same, `sep=","` | list of map | Comma-delimited rows |
+| `read_json()` | — | list of map | A JSON array of objects |
+| `read_lines(...)` | `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
+| `read()` | — | string | The whole file |
+| `exists()` / `path()` | — | bool / string | Handle introspection |
+
+With `header=false`, delimited columns are keyed positionally as `c0`, `c1`, …. Cells are auto-typed (`"3"`→int) unless `raw=true`. See §14.
+
+### 9.8 Keyword arguments
+
+A call may take keyword arguments after its positional ones: `f.read_tsv(header=false, sep="|")`. Used by the reader methods (above) to configure parsing; an unknown keyword is an error. A positional argument may not follow a keyword one.
+
 ---
 
 ## 10. The ledger (job tracking)
@@ -462,7 +498,7 @@ The `submit_time` field (whole seconds) is the job's recorded submission time, u
 - **Vacuum** (`cgp ledger vacuum`): re-fold the directory, write the jobs that still own at least one output to a fresh `snapshot.jsonl` (temp file + atomic rename), then remove the per-process logs that were folded. The last owner of each path survives even if it failed. Logs still being appended by a live local process are left in place and reclaimed by a later vacuum once idle, so run it when the ledger is otherwise quiet.
 
 ### 10.4 Restart
-Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. The `-force` option rebuilds every target in the goal graph regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
+Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. The `-force` option rebuilds every target in the goal graph regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` referenced by every sample's target is stat-ed once, not per target).
 
 Because staleness is mtime-based and cgp tracks ownership, **not** job success (only the scheduler knows that), a job killed mid-write can leave a half-written output that looks current and is skipped on restart. The recommended user-level guard is to write atomically — emit to a temp path and `mv` into place only on success (`cmd > ${output}.tmp && mv ${output}.tmp ${output}`) — so the final filename never exists in a partial state. This is an idiom, not a built-in: correctness depends on the temp and final paths sharing a filesystem and on a partial write being meaningful for the format, neither of which cgp can assume generically.
 
@@ -604,21 +640,45 @@ References to stage exports are checked two ways:
 
 ---
 
-## 14. Manifests and fan-out
+## 14. Reading files: sample sheets, scatter and gather
 
-A single pipeline (or workflow) can be run once per row of a **manifest**, with the row's columns supplied as variables. The format is always explicit — cgp never guesses from the extension:
+`open(path)` returns a **file** handle; its reader methods turn a sample sheet into data the pipeline can loop over. Reading happens at evaluation time, so the whole cohort lives in **one** dependency graph — you can scatter a per-sample target and then **gather** every sample's output into a downstream target, all in one pipeline.
 
-| Flag | Manifest format |
-|------|-----------------|
-| `-manifest FILE` (alias `-manifest-cgp`) | A shell glob of `.cgp` manifest files; each matched file's variables become one run |
-| `-manifest-tsv FILE` | Tab-separated; the header row names the columns |
-| `-manifest-csv FILE` | Comma-separated; the header row names the columns |
-| `-manifest-json FILE` | A JSON array of objects; each object's keys become variables |
+    samples = open("samples.tsv").read_tsv(header=true)   # list of maps, one per row
 
-    $ cgp align.cgp -manifest-tsv samples.tsv          # one run per data row
-    $ cgp wgs.cgp   -manifest /data/P*/manifest.cgp    # one workflow run per patient file
+| Reader | Returns | Notes |
+|--------|---------|-------|
+| `read_tsv(...)` / `read_csv(...)` | list of map | Header row names the columns; cells auto-typed (§9.7) |
+| `read_json()` | list of map | A JSON array of objects |
+| `read_lines(...)` | list of string | Raw lines (comment- and blank-aware) |
+| `read()` | string | The whole file |
 
-Each row runs the whole pipeline (or, for a workflow, all of its stages). Explicit command-line `--name value` variables override columns of the same name. A single **stat cache is shared across all runs**, so an invariant input like a shared `ref.fa` is `stat`-ed once rather than once per row. (Each row's pipeline graph is re-evaluated per row — per-row variables legitimately change which targets and branches exist — but the *parse* of the file happens once.)
+Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0]`). A field keeps its type, so it chains — `row["bam"].basename()`, `row["n"] + 1`.
+
+**Scatter and gather** — accumulate per-sample outputs into a list, then depend on `@{…}`:
+
+    samples = open("samples.tsv").read_tsv(header=true)
+    sums = []
+    for row in samples {
+        name = row["sample"]
+        out  = name + ".sum"
+        sums += out
+        ${out}: ${row["input"]} {{
+            wc -w < ${input} > ${output}
+        }}
+    }
+    cohort.txt: @{sums} {{ cat ${input} > ${output} }}   # the gather
+    @default: cohort.txt
+
+**Group by a column** — a map of lists buckets rows, then one gather per group:
+
+    groups = {}
+    for row in samples { groups[row["category"]] += row["sample"] + ".sum" }
+    for cat in groups {
+        ${cat}.report: @{groups[cat]} {{ cat ${input} > ${output} }}
+    }
+
+> A column used inside a `"…"` string must be bound to a plain variable first (e.g. `name = row["sample"]`), because a nested `"` would close the string. In a target declaration or a `{{ }}` body, `${row["col"]}` is written as-is.
 
 ---
 
@@ -642,11 +702,10 @@ The default runner is `shell`, which **assembles the stale targets into one runn
 | `-dr` | Dry run — render the scripts instead of executing/submitting. |
 | `-force` | Rebuild every target in the goal graph, ignoring staleness ([§10.4](#104-restart)). |
 | `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` (also `cgp.runner`). |
-| `-manifest*` | Manifest fan-out ([§14](#14-manifests-and-fan-out)). |
 
 `-r graphviz` writes the dependency graph as Graphviz DOT to stdout (pipe to `dot -Tsvg`). `-r html` writes a **self-contained HTML status report** of the DAG to stdout: each output is colored by status — *done* (on disk), *running*/*queued* (its owning job is active in the scheduler, per the ledger), *failed* (owning job ended without producing it), or *pending* (not built). The report reads the ledger read-only, so it is safe to run while the pipeline is in flight.
 
-Both build the graph reachable from the goals (instantiating any wildcard rules along the way), not every declared target. Combined with a manifest ([§14](#14-manifests-and-fan-out)), they produce **one** document covering all rows — graphviz a single `digraph` with a `subgraph cluster` per row, html a single page with a section per row (labeled by the row's `sample`/`id`/`name` column, else `row N`).
+Both build the graph reachable from the goals (instantiating any wildcard rules along the way), not every declared target. Because a sample-sheet cohort ([§14](#14-reading-files-sample-sheets-scatter-and-gather)) is one graph, `-r graphviz`/`-r html` already render the whole cohort — scatter and gather — in a single document.
 
 ### 15.1 `cgp sub` — one-off submission
 Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The first token that is not a recognized option begins the command; everything from there until a bare `--` is the command, treated as a body (`${input}`/`${output}` substitute):

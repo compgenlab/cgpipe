@@ -235,6 +235,9 @@ func (ip *interp) execStmts(stmts []ast.Stmt) error {
 func (ip *interp) execStmt(s ast.Stmt) error {
 	switch n := s.(type) {
 	case *ast.Assign:
+		if n.Target != nil {
+			return ip.execAssignIndex(n)
+		}
 		return ip.execAssign(n)
 	case *ast.Print:
 		return ip.execPrint(n)
@@ -365,6 +368,68 @@ func (ip *interp) execAssign(n *ast.Assign) error {
 			}
 		}
 	}
+	return nil
+}
+
+// execAssignIndex handles an index-target assignment `m[key] OP value`. The map
+// variable is auto-vivified (created empty) if unset, so the grouping idiom
+// `groups[cat] += out` needs no prior `groups = {}`. Keys are strings only.
+func (ip *interp) execAssignIndex(n *ast.Assign) error {
+	idxExpr := n.Target.(*ast.Index)
+	recvIdent, ok := idxExpr.Recv.(*ast.Ident)
+	if !ok {
+		return fmt.Errorf("%s: index assignment target must be a named variable", n.Pos())
+	}
+	keyVal, err := ip.eval(idxExpr.Idx)
+	if err != nil {
+		return err
+	}
+	ks, ok := keyVal.(StrVal)
+	if !ok {
+		return fmt.Errorf("%s: map assignment key must be a string, got %s", n.Pos(), keyVal.typeName())
+	}
+	key := string(ks)
+
+	base, exists := ip.sc.get(recvIdent.Name)
+	var mv MapVal
+	switch {
+	case !exists:
+		mv = newMap()
+	default:
+		if m, isMap := base.(MapVal); isMap {
+			mv = m
+		} else if _, unset := base.(UnsetVal); unset {
+			mv = newMap()
+		} else {
+			return fmt.Errorf("%s: cannot index-assign into %s", n.Pos(), base.typeName())
+		}
+	}
+
+	v, err := ip.eval(n.Value)
+	if err != nil {
+		return err
+	}
+	switch n.Op {
+	case token.ASSIGN:
+		mv.set(key, v)
+	case token.QASSIGN:
+		if _, ok := mv.m[key]; !ok {
+			mv.set(key, v)
+		}
+	case token.PLUSASSIGN:
+		cur, ok := mv.m[key]
+		switch {
+		case !ok:
+			mv.set(key, ListVal{v})
+		default:
+			if lst, isList := cur.(ListVal); isList {
+				mv.set(key, append(append(ListVal{}, lst...), v))
+			} else {
+				mv.set(key, ListVal{cur, v})
+			}
+		}
+	}
+	ip.sc.set(recvIdent.Name, mv)
 	return nil
 }
 
@@ -554,11 +619,25 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 		return ip.evalIndex(n)
 	case *ast.Slice:
 		return ip.evalSlice(n)
-	case *ast.Call:
-		recv, err := ip.eval(n.Recv)
-		if err != nil {
-			return nil, err
+	case *ast.MapLit:
+		mv := newMap()
+		for _, ent := range n.Entries {
+			kv, err := ip.eval(ent.Key)
+			if err != nil {
+				return nil, err
+			}
+			ks, ok := kv.(StrVal)
+			if !ok {
+				return nil, fmt.Errorf("%s: map key must be a string, got %s", n.Pos(), kv.typeName())
+			}
+			vv, err := ip.eval(ent.Value)
+			if err != nil {
+				return nil, err
+			}
+			mv.set(string(ks), vv)
 		}
+		return mv, nil
+	case *ast.Call:
 		args := make([]Value, len(n.Args))
 		for i, a := range n.Args {
 			v, err := ip.eval(a)
@@ -567,13 +646,51 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 			}
 			args[i] = v
 		}
-		r, err := callMethod(recv, n.Method, args)
+		var kwargs map[string]Value
+		if len(n.Kwargs) > 0 {
+			kwargs = make(map[string]Value, len(n.Kwargs))
+			for _, kw := range n.Kwargs {
+				v, err := ip.eval(kw.Value)
+				if err != nil {
+					return nil, err
+				}
+				kwargs[kw.Name] = v
+			}
+		}
+		if n.Recv == nil { // builtin free call, e.g. open("f")
+			r, err := callBuiltin(n.Method, args, kwargs)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", n.Pos(), err)
+			}
+			return r, nil
+		}
+		recv, err := ip.eval(n.Recv)
+		if err != nil {
+			return nil, err
+		}
+		r, err := callMethod(recv, n.Method, args, kwargs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", n.Pos(), err)
 		}
 		return r, nil
 	}
 	return nil, fmt.Errorf("%s: cannot evaluate %T", e.Pos(), e)
+}
+
+// callBuiltin dispatches a free-function call (one whose AST Call has no receiver).
+// open(path) is the only builtin today; it returns a lazy file handle.
+func callBuiltin(name string, args []Value, kwargs map[string]Value) (Value, error) {
+	switch name {
+	case "open":
+		if err := validateKwargs("open", kwargs); err != nil {
+			return nil, err
+		}
+		if len(args) != 1 {
+			return nil, fmt.Errorf("open() takes 1 argument (a path)")
+		}
+		return FileVal{path: stringify(args[0]), mode: "r"}, nil
+	}
+	return nil, fmt.Errorf("unknown function %s()", name)
 }
 
 func (ip *interp) evalUnary(n *ast.Unary) (Value, error) {
@@ -638,6 +755,29 @@ func (ip *interp) evalIndex(n *ast.Index) (Value, error) {
 	idx, err := ip.eval(n.Idx)
 	if err != nil {
 		return nil, err
+	}
+	// A map is indexed by string key (lookup; miss → unset) or int (positional
+	// lookup into the ordered keys). Keys are always strings, so the two never
+	// collide.
+	if mv, isMap := recv.(MapVal); isMap {
+		switch k := idx.(type) {
+		case StrVal:
+			if v, ok := mv.m[string(k)]; ok {
+				return v, nil
+			}
+			return UnsetVal{}, nil
+		case IntVal:
+			i := int(k)
+			if i < 0 {
+				i += len(mv.keys)
+			}
+			if i < 0 || i >= len(mv.keys) {
+				return nil, fmt.Errorf("%s: index %d out of range (len %d)", n.Pos(), int(k), len(mv.keys))
+			}
+			return mv.m[mv.keys[i]], nil
+		default:
+			return nil, fmt.Errorf("%s: map index must be a string key or int position, got %s", n.Pos(), idx.typeName())
+		}
 	}
 	// A range yields its i-th value arithmetically — no need to materialize the
 	// whole sequence to read one element.

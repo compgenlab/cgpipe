@@ -42,32 +42,13 @@ const (
 	margin = 24
 )
 
-// Section is one labeled graph + its status resolver — one per manifest row in a
-// combined report (Label "" for a single-pipeline report).
-type Section struct {
-	Label    string
-	Graph    graphviz.Graph
-	StatusOf func(name string) State
-}
-
-// Run renders an HTML status report of a single graph to out.
+// Run renders a self-contained HTML status report of a single graph to out.
 func Run(g graphviz.Graph, statusOf func(name string) State, title string, out io.Writer) error {
-	return RunCombined(title, []Section{{Graph: g, StatusOf: statusOf}}, out)
-}
-
-// RunCombined renders one self-contained HTML page with a section per Section —
-// used for a manifest run, where each row (sample) is its own labeled DAG.
-func RunCombined(title string, sections []Section, out io.Writer) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, htmlHead, html.EscapeString(title))
 	fmt.Fprintf(&b, "<h1>%s</h1>\n", html.EscapeString(title))
 	b.WriteString(legend())
-	for _, s := range sections {
-		if s.Label != "" {
-			fmt.Fprintf(&b, "<h2>%s</h2>\n", html.EscapeString(s.Label))
-		}
-		writeSection(&b, s.Graph, s.StatusOf)
-	}
+	writeSection(&b, g, statusOf)
 	b.WriteString("</body>\n</html>\n")
 	_, err := io.WriteString(out, b.String())
 	return err

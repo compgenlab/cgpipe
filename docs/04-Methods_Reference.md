@@ -105,6 +105,48 @@ print big.type()      # range
 print big.length()    # 1000000   (no million-element list is materialized)
 ```
 
+## map
+
+An ordered, string-keyed collection — the `{}` literal and the value
+`read_tsv()`/`read_json()` produce per row ([Sample Sheets](13-Sample_Sheets.md)).
+
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `get(key)` | string or int | any | Value for `key` (or i-th by position); missing ⇒ unset |
+| `has(key)` | string | bool | Is `key` present |
+| `keys()` | — | list | Keys, in insertion/column order |
+| `values()` | — | list | Values, in key order |
+| `items()` | — | list | One `[key, value]` pair per entry |
+| `length()` | — | int | Number of entries |
+
+Also read/written by index — `m["k"]`, `m[0]` (positional), `m["k"] = v`,
+`m["k"] += v`. A field read keeps its type, so it chains:
+
+```
+row = open("samples.tsv").read_tsv()[0]
+print row["sample"]              # by name
+print row[0]                     # by position
+print row["bam"].basename()      # chains a string method
+```
+
+## file
+
+A handle from `open(path)`; reads happen when a reader method is called.
+
+| Method | Keyword args (defaults) | Returns | Description |
+|--------|-------------------------|---------|-------------|
+| `read_tsv(...)` | `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows |
+| `read_csv(...)` | same, `sep=","` | list of map | Comma-delimited rows |
+| `read_json()` | — | list of map | A JSON array of objects |
+| `read_lines(...)` | `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
+| `read()` | — | string | The whole file |
+| `exists()` / `path()` | — | bool / string | Introspection |
+
+```
+samples = open("samples.tsv").read_tsv(header=true)   # list of maps
+ids     = open("ids.txt").read_lines(comment="#")     # list of strings
+```
+
 ## int / float / bool
 
 Only `type()`. Arithmetic and comparison are done with operators (see

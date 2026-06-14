@@ -1,0 +1,4 @@
+sample	input	n	category
+s1	data/s1.bam	3	control
+s2	data/s2.bam	5	treated
+s3	data/s3.bam	7	control

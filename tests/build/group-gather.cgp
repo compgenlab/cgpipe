@@ -1,0 +1,18 @@
+# Bucket rows by a column into a map of lists, then emit one gather target per
+# group over just that group's outputs.
+samples = open("samples.tsv").read_tsv(header=true)
+groups = {}
+for row in samples {
+    name = row["sample"]
+    out = name + ".cnt"
+    groups[row["category"]] += out
+    ${out}: ${row["input"]} {{
+        wc -w < ${input} > ${output}
+    }}
+}
+for cat in groups {
+    ${cat}.report: @{groups[cat]} {{
+        cat ${input} > ${output}
+    }}
+}
+@default: control.report treated.report

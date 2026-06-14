@@ -35,8 +35,8 @@ The first blank or non-comment line ends the help block.
 
 ## Types
 
-Six types. Typing is dynamic — you rarely name a type, and `.type()` returns it as
-a string.
+Eight types. Typing is dynamic — you rarely name a type, and `.type()` returns it
+as a string.
 
 ```
 flag    = true            # bool   (lowercase true / false)
@@ -45,6 +45,8 @@ rate    = 0.5             # float
 name    = "sample-1"      # string (always double-quoted)
 samples = ["s1", "s2"]    # list   (may mix types)
 chunks  = 1..100          # range  (1, 2, … 100 when iterated)
+row     = {"sample": "s1", "n": 3}   # map  (ordered, string-keyed)
+f       = open("samples.tsv")        # file (a handle to read from)
 ```
 
 A **range** stores only its bounds — never a materialized list — so `1..1000000`
@@ -55,6 +57,19 @@ costs nothing until you iterate it, yet it has `.length()`, indexes, and
 for x in 5..1 { print x }    # 5 4 3 2 1
 print (1..10).contains(10)   # true
 ```
+
+A **map** is an ordered, string-keyed collection — the literal `{}` /
+`{"k": v, …}`. Read by key, `m["sample"]`, or by position, `m[0]` (an int index
+selects the i-th key). Assign with `m["k"] = v`; `m["k"] += v` accumulates a list
+(creating the map if unset). `for k in m` iterates keys in order; methods include
+`keys`, `has`, `get`, `values`, `items`, `length`. A `read_tsv()`/`read_json()`
+row is a map (see below).
+
+A **file** is a handle returned by `open(path)`; its reader methods turn a file on
+disk into cgp values: `read_tsv(...)`/`read_csv(...)` and `read_json()` return a
+list of maps, `read_lines(...)` a list of strings, and `read()` the whole file as
+one string. This is how a pipeline reads a sample sheet at evaluation time — see
+[Sample Sheets](13-Sample_Sheets.md).
 
 ## Variables
 
@@ -141,6 +156,13 @@ f[-2:]    # c d
 f[:-1]    # a b c
 f[10:]    # (empty)
 ```
+
+A **map** indexes by key, `m["sample"]`, or by position, `m[0]` (an int index
+selects the i-th key in insertion order); a missing key is unset (empty).
+
+Some calls take **keyword arguments** after their positional ones —
+`open("s.tsv").read_tsv(header=false, sep="|")` — used by the reader methods to
+configure parsing. A positional argument may not follow a keyword one.
 
 ## String substitution
 

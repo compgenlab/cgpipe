@@ -11,7 +11,7 @@ shape is identical.
 | [01-hello](01-hello/) | the smallest pipeline: one target, a variable, `@default` | `cgp pipeline.cgp \| bash` |
 | [02-batch-compress](02-batch-compress/) | a `%` wildcard rule over many files; an `all` aggregator | `cgp pipeline.cgp \| bash` |
 | [03-scatter-gather](03-scatter-gather/) | a `for` loop emitting one job per unit, temp outputs, a merge (map-reduce) | `cgp pipeline.cgp \| bash` |
-| [04-manifest-cohort](04-manifest-cohort/) | run one pipeline once per sample from a TSV manifest | `cgp pipeline.cgp -manifest-tsv samples.tsv \| bash` |
+| [04-sample-sheet](04-sample-sheet/) | read a TSV sample sheet, scatter per sample, then gather a cohort summary — in one script | `cgp pipeline.cgp \| bash` |
 | [05-stage-workflow](05-stage-workflow/) | chaining two standalone pipelines with `stage` / `export` | `cgp workflow.cgp --raw data/raw.txt` |
 | [06-cluster-resources](06-cluster-resources/) | the same pipeline rendered for local bash *or* a scheduler | `cgp -dr -r slurm pipeline.cgp` |
 

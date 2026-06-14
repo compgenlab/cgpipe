@@ -59,29 +59,6 @@ final.txt: b.txt {{
 	mustContain(t, out, "class=\"legend\"")
 }
 
-// A manifest run combines into ONE HTML page with a labeled section per row.
-func TestHTMLReportCombined(t *testing.T) {
-	pa, _ := build(t, "out.A.txt: in.A.txt {{\n    cp ${input} ${output}\n}}\n@default: out.A.txt", nil)
-	pb, _ := build(t, "out.B.txt: in.B.txt {{\n    cp ${input} ${output}\n}}\n@default: out.B.txt", nil)
-	pending := func(string) report.State { return report.Pending }
-	var b strings.Builder
-	err := report.RunCombined("samples", []report.Section{
-		{Label: "P001", Graph: graphviz.Build(pa, nil), StatusOf: pending},
-		{Label: "P002", Graph: graphviz.Build(pb, nil), StatusOf: pending},
-	}, &b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := b.String()
-	if strings.Count(out, "<!doctype html>") != 1 {
-		t.Error("want a single HTML document")
-	}
-	if strings.Count(out, "<svg ") != 2 {
-		t.Error("want one SVG per row")
-	}
-	mustContain(t, out, "<h2>P001</h2>", "<h2>P002</h2>", "out.A.txt", "out.B.txt")
-}
-
 // A node's status defaults to Pending when statusOf says so, and a long name is
 // elided in the SVG label (but kept whole in the table).
 func TestHTMLReportPendingAndElide(t *testing.T) {
