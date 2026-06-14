@@ -93,11 +93,17 @@ func TestStringEscapes(t *testing.T) {
 		`"a\.b"`:        "a.b", // unlisted escape: \X -> X (backward compatible)
 		`"cost \$5"`:    "cost $5",
 		`"\@{x} stays"`: "@{x} stays",
+		`"it\'s"`:       "it's",  // \' is literal
+		`"end\\"`:       "end\\", // trailing escaped backslash (lexer + interp)
 	}
 	for src, want := range cases {
 		if got := stringify(evalExprStr(t, src, nil)); got != want {
 			t.Errorf("%s = %q, want %q", src, got, want)
 		}
+	}
+	// an escape adjacent to a real ${…} substitution
+	if got := stringify(evalExprStr(t, `"${nm}\tdone"`, map[string]Value{"nm": StrVal("S1")})); got != "S1\tdone" {
+		t.Errorf(`"${nm}\tdone" = %q, want "S1\tdone"`, got)
 	}
 }
 

@@ -7,5 +7,6 @@ echo "x\"y"
 echo back \\ slash
 echo "node1 ${HOME} $HOME"
 echo deferred $(date)
+printf "tab=\t newline=\n"
 
 

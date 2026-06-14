@@ -6,5 +6,6 @@ out.txt: {{
     echo back \\ slash
     echo "${host} \${HOME} $HOME"
     echo deferred \$(date)
+    printf "tab=\t newline=\n"
 }}
 @default: out.txt
