@@ -17,7 +17,7 @@ type Options struct {
 	AutoExec bool          // execute the assembled script instead of emitting it
 	Force    bool          // rebuild regardless of staleness
 	Dir      string        // working directory for jobs (default: current)
-	Cache    *runner.Cache // shared stat cache (for manifest fan-out)
+	Cache    *runner.Cache // run-scoped stat cache (a path is stat'd once per run)
 	Out      io.Writer     // emitted script / dry-run output (default os.Stdout)
 	Stdout   io.Writer     // job stdout when executing (default os.Stdout)
 	Stderr   io.Writer     // job stderr when executing (default os.Stderr)

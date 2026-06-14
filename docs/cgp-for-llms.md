@@ -127,8 +127,9 @@ out1 out2 : in1 in2 {{
   `out: {{ \n% for p in parts {\n echo ${p}\n% }\n}}`.
 
 ## Declaration features
-- **Wildcard** `%`: `%.gz: % {{ gzip -c ${input} > ${output} }}` — `%` matches the
-  stem, reused on the input side, available as `${stem}`.
+- **Wildcard** `%`: `%.gz: % {{ \n gzip -c ${input} > ${output} \n }}` (`\n` = newline;
+  a body must end with `}}` on its own line) — `%` matches the stem, reused on the
+  input side, available as `${stem}`.
 - **List expansion** `@{list}` in a declaration makes ONE rule over all items:
   `@{samples}.bam: @{samples}.fq {{ ... }}`. (Contrast `${input}` which joins in a body.)
 - **Multiple defs**: same output defined twice → first whose inputs are satisfiable wins.
@@ -178,9 +179,13 @@ for row in samples {
     name = row["sample"]          # bind a column to a plain var before using in "..."
     out  = name + ".sum"
     outs += out
-    ${out}: ${row["input"]} {{ wc -w < ${input} > ${output} }}
+    ${out}: ${row["input"]} {{
+        wc -w < ${input} > ${output}
+    }}
 }
-cohort.txt: @{outs} {{ cat ${input} > ${output} }}   # gather over every scattered out
+cohort.txt: @{outs} {{          # gather over every scattered out
+    cat ${input} > ${output}
+}}
 @default: cohort.txt
 ```
 Quoting gotcha: inside a `"..."` string a column **must** be bound to a plain var

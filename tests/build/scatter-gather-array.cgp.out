@@ -1,0 +1,41 @@
+# [dryrun.1] s1.sum[]
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J sum
+#SBATCH --array=1,2,3
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+case "$SLURM_ARRAY_TASK_ID" in
+1)
+wc -w < data/s1.txt > s1.sum
+
+;;
+2)
+wc -w < data/s2.txt > s2.sum
+
+;;
+3)
+wc -w < data/s3.txt > s3.sum
+
+;;
+*) echo "cgp: no array task $SLURM_ARRAY_TASK_ID" >&2; exit 1 ;;
+esac
+
+
+# [dryrun.2] cohort.txt
+#!/bin/bash
+#SBATCH -Q
+#SBATCH -J cohort.txt
+#SBATCH -d afterok:dryrun.1_1:dryrun.1_2:dryrun.1_3
+
+set -eo pipefail
+JOB_ID=$SLURM_JOB_ID
+
+
+
+cat s1.sum s2.sum s3.sum > cohort.txt
+
+

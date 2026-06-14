@@ -402,6 +402,19 @@ func TestNoPipelineFile(t *testing.T) {
 	}
 }
 
+// The removed -manifest* fan-out flags are no longer recognized options (sample
+// sheets are read in-language via open().read_tsv() now).
+func TestManifestFlagsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
+	for _, flag := range []string{"-manifest", "-manifest-tsv", "-manifest-csv", "-manifest-json", "-manifest-cgp"} {
+		if code := run([]string{"p.cgp", flag, "samples.tsv"}); code != 2 {
+			t.Errorf("run(p.cgp %s …) = %d, want 2 (unknown option)", flag, code)
+		}
+	}
+}
+
 // §15 The shell runner emits a runnable script to stdout by default and does
 // NOT execute (no autoexec).
 func TestShellEmitsScriptByDefault(t *testing.T) {

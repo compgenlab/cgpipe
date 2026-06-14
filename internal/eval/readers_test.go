@@ -71,6 +71,59 @@ func TestMapMethods(t *testing.T) {
 	}
 }
 
+func TestMapGetItemsAndStringify(t *testing.T) {
+	// items() -> list of [key, value] pairs
+	if got := stringify(evalExprStr(t, `{"a": 1, "b": 2}.items()`, nil)); got != "a 1 b 2" {
+		t.Errorf("items() = %q, want 'a 1 b 2'", got)
+	}
+	// get with a default for a missing key / out-of-range position
+	if got := stringify(evalExprStr(t, `{"a": 1}.get("z", "fallback")`, nil)); got != "fallback" {
+		t.Errorf("get default = %q", got)
+	}
+	if got := stringify(evalExprStr(t, `{"a": 1}.get(9, "x")`, nil)); got != "x" {
+		t.Errorf("get out-of-range default = %q", got)
+	}
+	if _, ok := evalExprStr(t, `{"a": 1}.get("z")`, nil).(UnsetVal); !ok {
+		t.Error("get missing without default should be unset")
+	}
+	// stringify of a whole map is k=v pairs in order
+	if got := stringify(evalExprStr(t, `{"a": 1, "b": 2}`, nil)); got != "a=1 b=2" {
+		t.Errorf("map stringify = %q", got)
+	}
+	// empty map is falsy, non-empty is truthy
+	if truthy(newMap()) {
+		t.Error("empty map should be falsy")
+	}
+	if got := evalExprStr(t, `{"a": 1}`, nil); !truthy(got) {
+		t.Error("non-empty map should be truthy")
+	}
+}
+
+func TestMapIndexAssignOpsAndErrors(t *testing.T) {
+	// ?= only sets a missing key
+	_, out := runSrc(t, `m = {"a": 1}
+m["a"] ?= 99
+m["b"] ?= 2
+print m["a"], m["b"]`, nil)
+	if out != "1 2\n" {
+		t.Errorf("?= index assign = %q, want '1 2'", out)
+	}
+	// int (positional) read out of range errors
+	if err := evalErr(t, `{"a": 1}[5]`); err == nil || !strings.Contains(err.Error(), "out of range") {
+		t.Errorf("map int OOB: got %v", err)
+	}
+	// index-assign with a non-string key errors
+	if _, _, err := runSrcErr(t, `m = {}
+m[1] = "x"`); err == nil || !strings.Contains(err.Error(), "key must be a string") {
+		t.Errorf("non-string assign key: got %v", err)
+	}
+	// index-assign into a non-map scalar errors
+	if _, _, err := runSrcErr(t, `s = "x"
+s["k"] = 1`); err == nil || !strings.Contains(err.Error(), "cannot index-assign") {
+		t.Errorf("index-assign into string: got %v", err)
+	}
+}
+
 func TestMapKeyMustBeString(t *testing.T) {
 	if err := evalErr(t, `{1: "a"}`); err == nil || !strings.Contains(err.Error(), "map key must be a string") {
 		t.Errorf("non-string literal key: got %v", err)
@@ -157,6 +210,23 @@ func TestReadTSVExplicitTabSep(t *testing.T) {
 	p := tmpFile(t, "s.tsv", "a\tb\n1\t2\n")
 	if got := stringify(evalExprStr(t, `open("`+p+`").read_tsv(sep="\t")[0]["b"]`, nil)); got != "2" {
 		t.Errorf(`sep="\t" = %q, want 2`, got)
+	}
+}
+
+func TestReadTSVEdgeCases(t *testing.T) {
+	// ragged row: a short row pads missing trailing columns with ""
+	p := tmpFile(t, "r.tsv", "a\tb\tc\n1\t2\n")
+	if got := evalExprStr(t, `open("`+p+`").read_tsv()[0]["c"]`, nil); got != StrVal("") {
+		t.Errorf("ragged short row [c] = %q, want empty", stringify(got))
+	}
+	// skip drops leading lines before the header
+	p2 := tmpFile(t, "s.tsv", "junk line\na\tb\n1\t2\n")
+	if got := stringify(evalExprStr(t, `open("`+p2+`").read_tsv(skip=1)[0]["a"]`, nil)); got != "1" {
+		t.Errorf("skip=1 [a] = %q, want 1", got)
+	}
+	// missing file is an error (open is lazy; the read surfaces it)
+	if err := evalErr(t, `open("/no/such/file.tsv").read_tsv()`); err == nil {
+		t.Error("read_tsv on a missing file should error")
 	}
 }
 

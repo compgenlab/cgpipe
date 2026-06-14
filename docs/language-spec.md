@@ -434,7 +434,7 @@ Only `type()`. No implicit coercion; an unknown method throws `Method not found`
 
 | Method | Args | Returns | Description |
 |--------|------|---------|-------------|
-| `get(key)` | string or int | any | Value for `key` (or i-th by position); missing ⇒ unset |
+| `get(key[, default])` | string or int | any | Value for `key` (or i-th by position); missing ⇒ `default` (or unset) |
 | `has(key)` | string | bool | Is `key` present |
 | `keys()` | — | list | Keys, in insertion/column order |
 | `values()` | — | list | Values, in key order |
@@ -677,7 +677,9 @@ Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0
             wc -w < ${input} > ${output}
         }}
     }
-    cohort.txt: @{sums} {{ cat ${input} > ${output} }}   # the gather
+    cohort.txt: @{sums} {{          # the gather
+        cat ${input} > ${output}
+    }}
     @default: cohort.txt
 
 **Group by a column** — a map of lists buckets rows, then one gather per group:
@@ -685,7 +687,9 @@ Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0
     groups = {}
     for row in samples { groups[row["category"]] += row["sample"] + ".sum" }
     for cat in groups {
-        ${cat}.report: @{groups[cat]} {{ cat ${input} > ${output} }}
+        ${cat}.report: @{groups[cat]} {{
+            cat ${input} > ${output}
+        }}
     }
 
 > A column used inside a `"…"` string must be bound to a plain variable first (e.g. `name = row["sample"]`), because a nested `"` would close the string. In a target declaration or a `{{ }}` body, `${row["col"]}` is written as-is.

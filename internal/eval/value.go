@@ -149,8 +149,8 @@ func truthy(v Value) bool {
 }
 
 // ParseScalar parses an external scalar string (a command-line value or a
-// manifest cell) into a typed value: true/false become bools, integer and float
-// literals become numbers, and anything else stays a string.
+// sample-sheet cell) into a typed value: true/false become bools, integer and
+// float literals become numbers, and anything else stays a string.
 func ParseScalar(s string) Value {
 	switch s {
 	case "true":
@@ -284,23 +284,27 @@ func mapMethod(mv MapVal, name string, args []Value) (Value, error) {
 		_, ok := mv.m[stringify(args[0])]
 		return BoolVal(ok), nil
 	case "get":
-		if len(args) != 1 {
-			return nil, fmt.Errorf("map.get() takes 1 argument")
+		if len(args) < 1 || len(args) > 2 {
+			return nil, fmt.Errorf("map.get() takes a key and an optional default")
 		}
-		if iv, ok := args[0].(IntVal); ok {
+		var def Value = UnsetVal{}
+		if len(args) == 2 {
+			def = args[1]
+		}
+		if iv, ok := args[0].(IntVal); ok { // positional lookup
 			i := int(iv)
 			if i < 0 {
 				i += len(mv.keys)
 			}
 			if i < 0 || i >= len(mv.keys) {
-				return UnsetVal{}, nil
+				return def, nil
 			}
 			return mv.m[mv.keys[i]], nil
 		}
 		if v, ok := mv.m[stringify(args[0])]; ok {
 			return v, nil
 		}
-		return UnsetVal{}, nil
+		return def, nil
 	}
 	return nil, fmt.Errorf("method not found: map.%s()", name)
 }

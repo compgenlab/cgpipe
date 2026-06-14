@@ -34,7 +34,9 @@ for row in samples {
     }}
 }
 
-cohort.txt: @{sums} {{ cat ${input} > ${output} }}
+cohort.txt: @{sums} {{
+    cat ${input} > ${output}
+}}
 @default: cohort.txt
 ```
 
@@ -72,7 +74,9 @@ Bucket rows into a map of lists, then emit one gather per group:
 groups = {}
 for row in samples { groups[row["category"]] += row["sample"] + ".sum" }
 for cat in groups {
-    ${cat}.report: @{groups[cat]} {{ cat ${input} > ${output} }}
+    ${cat}.report: @{groups[cat]} {{
+        cat ${input} > ${output}
+    }}
 }
 ```
 

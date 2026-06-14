@@ -49,7 +49,9 @@ for row in samples {
 }
 
 # gather: depends on every per-sample output, so it runs once they're all built
-cohort.txt: @{sums} {{ cat ${input} > ${output} }}
+cohort.txt: @{sums} {{
+    cat ${input} > ${output}
+}}
 @default: cohort.txt
 ```
 
@@ -90,7 +92,9 @@ for row in samples {
     groups[row["category"]] += out      # bucket outputs by category
 }
 for cat in groups {                     # iterate the keys
-    ${cat}.report: @{groups[cat]} {{ cat ${input} > ${output} }}
+    ${cat}.report: @{groups[cat]} {{
+        cat ${input} > ${output}
+    }}
 }
 ```
 
@@ -101,7 +105,9 @@ and `read_lines()` when you just need a list of identifiers:
 
 ```
 for s in open("samples.txt").read_lines(comment="#") {
-    ${s}.done: ${s}.in {{ process ${input} > ${output} }}
+    ${s}.done: ${s}.in {{
+        process ${input} > ${output}
+    }}
 }
 ```
 

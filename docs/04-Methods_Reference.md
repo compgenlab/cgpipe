@@ -112,7 +112,7 @@ An ordered, string-keyed collection — the `{}` literal and the value
 
 | Method | Args | Returns | Description |
 |--------|------|---------|-------------|
-| `get(key)` | string or int | any | Value for `key` (or i-th by position); missing ⇒ unset |
+| `get(key[, default])` | string or int | any | Value for `key` (or i-th by position); missing ⇒ `default` (or unset) |
 | `has(key)` | string | bool | Is `key` present |
 | `keys()` | — | list | Keys, in insertion/column order |
 | `values()` | — | list | Values, in key order |

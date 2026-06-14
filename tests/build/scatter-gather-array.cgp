@@ -1,0 +1,20 @@
+# Sheet-driven scatter as a scheduler array: `with i` binds a 1-based index and
+# job.array = i coalesces the per-sample jobs into one --array submission; the
+# cohort gather then depends on every per-sample output.
+samples = open("samples.tsv").read_tsv(header=true)
+sums = []
+for row in samples with i {
+    name = row["sample"]
+    out  = name + ".sum"
+    sums += out
+    ${out}: ${row["input"]} {{
+        job.name  = "sum"
+        job.array = i
+        --
+        wc -w < ${input} > ${output}
+    }}
+}
+cohort.txt: @{sums} {{
+    cat ${input} > ${output}
+}}
+@default: cohort.txt

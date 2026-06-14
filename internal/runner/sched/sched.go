@@ -345,7 +345,7 @@ type Options struct {
 	Force    bool // resubmit regardless of staleness
 	Dir      string
 	Pipeline string        // pipeline filename, recorded in the ledger
-	Cache    *runner.Cache // shared stat cache (for manifest fan-out)
+	Cache    *runner.Cache // run-scoped stat cache (a path is stat'd once per run)
 	Out      io.Writer     // submission scripts (dry-run) and job-id output
 }
 
