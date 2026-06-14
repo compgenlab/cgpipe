@@ -205,14 +205,18 @@ print "$(echo ${name})"     # sample-1
 
 ### Escaping
 
-Inside a string literal a backslash escapes the next character: `\$` and `\@`
-produce a literal `$`/`@` (suppressing substitution), and `\"` a literal quote.
+Inside a string literal a backslash introduces an escape. The C-style escapes
+`\n \r \t \b \f \v \a \0` resolve to their control character; `\"`, `\\`, and `\'`
+are the literal character; `\$` and `\@` produce a literal `$`/`@` (suppressing
+substitution); any other `\X` resolves to `X` (the backslash is dropped).
 
 ```
 name = "bob"
 print "${name} vs \${name}"   # bob vs ${name}
 print "cost is \$5"           # cost is $5
 print "Hello \"world\"!"      # Hello "world"!
+print "col1\tcol2"            # a real tab between col1 and col2
+print "line1\nline2"          # two lines
 ```
 
 A string is one escape domain, resolved before the `${…}` interior is parsed, so a

@@ -151,6 +151,15 @@ func TestReadTSVOptions(t *testing.T) {
 	}
 }
 
+func TestReadTSVExplicitTabSep(t *testing.T) {
+	// `sep="\t"` now resolves to a real tab (C-style escape), so an explicit
+	// tab separator parses correctly (previously "\t" was the letters \t).
+	p := tmpFile(t, "s.tsv", "a\tb\n1\t2\n")
+	if got := stringify(evalExprStr(t, `open("`+p+`").read_tsv(sep="\t")[0]["b"]`, nil)); got != "2" {
+		t.Errorf(`sep="\t" = %q, want 2`, got)
+	}
+}
+
 func TestReadCSVAndJSON(t *testing.T) {
 	pc := tmpFile(t, "s.csv", "sample,greeting\nP001,\"hi, there\"\n")
 	if got := stringify(evalExprStr(t, `open("`+pc+`").read_csv()[0]["greeting"]`, nil)); got != "hi, there" {

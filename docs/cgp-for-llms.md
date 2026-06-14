@@ -70,8 +70,9 @@ ${if c; a; b}   # inline conditional; else optional (empty when false)
 ${{var}}   # double-eval: substitute, then evaluate result as cgp source
 $(cmd)     # run cmd in shell AT PARSE/RENDER TIME; substitute stdout
 ```
-Escaping in a string literal: `\$` `\@` literal sigils, `\"` literal quote.
-Nested string arg escapes its quotes: `"${name.sub(\".bam\",\"\")}"`.
+Escaping in a string literal: C-style `\n \r \t \b \f \v \a \0`; `\" \\ \'` literal;
+`\$` `\@` literal sigils; any other `\X`→`X`. Nested string arg escapes its quotes:
+`"${name.sub(\".bam\",\"\")}"`.
 
 ## Control flow & statements
 ```
@@ -188,8 +189,8 @@ is fine directly.
 
 ## Writing files
 `open(path, "w")` (truncate) / `open(path, "a")` (append) → a write handle. `write(s)`
-is verbatim, `writeln(s)` adds a newline (cgp escapes are `\X`→`X`, so a newline comes
-from `writeln`, not `"\n"`), `close()` flushes. A bare call is a statement.
+is verbatim (a `"\n"` in the string is a real newline), `writeln(s)` also appends a
+newline, `close()` flushes. A bare call is a statement.
 ```
 f = open("params.txt", "w")
 f.writeln("ref=hg38")

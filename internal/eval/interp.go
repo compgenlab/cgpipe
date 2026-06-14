@@ -17,9 +17,10 @@ var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
 // tmplMode selects the escape policy for a template. The two template sources
 // have opposite expectations for the backslash:
 //
-//   - modeString — a cgp "…" string literal. It is one escape domain: every
-//     `\X` resolves to `X` (the lexer kept escapes verbatim), including inside a
-//     ${…}/@{…}, so a nested string written `\"…\"` parses as `"…"`.
+//   - modeString — a cgp "…" string literal. C-style escapes apply: `\n \r \t \b
+//     \f \v \a \0` become their control byte; `\" \\ \'` are literal; any other
+//     `\X` resolves to `X` (the lexer kept escapes verbatim). A nested string's
+//     `\"` interior is unescaped one layer (see unescapeBackslashes) before parsing.
 //   - modeBody — a {{ }} raw-shell body. Only `\$` and `\@` are special (they
 //     suppress ${…}/@{…}/$(…)); every other backslash — `\"`, `\\`, `\n` — is
 //     shell text and passes through verbatim.
@@ -77,10 +78,15 @@ func (ip *interp) expandTemplate(raw string, mode tmplMode) ([]string, error) {
 		c := raw[i]
 		switch {
 		case c == '\\' && i+1 < len(raw):
-			// modeString: every \X -> X. modeBody: only \$ and \@ are special
-			// (suppress interpolation); any other backslash is literal shell text.
+			// modeString: C-style escapes (\n \r \t \b \f \v \a \0) become their
+			// control byte; \" \\ \' are literal; any other \X -> X. modeBody: only
+			// \$ and \@ are special (suppress interpolation); any other backslash is
+			// literal shell text (the shell interprets its own escapes).
 			n := raw[i+1]
-			if mode == modeString || n == '$' || n == '@' {
+			if mode == modeString {
+				buf.WriteByte(stringEscape(n))
+				i += 2
+			} else if n == '$' || n == '@' {
 				buf.WriteByte(n)
 				i += 2
 			} else {
@@ -155,6 +161,33 @@ func (ip *interp) expandTemplate(raw string, mode tmplMode) ([]string, error) {
 		result = next
 	}
 	return result, nil
+}
+
+// stringEscape maps a backslash-escaped character in a "…" string literal to its
+// byte. The listed C-style escapes become their control byte; any other character
+// is returned as-is — the historical \X -> X rule — so \" \\ \' are literal and
+// e.g. \. -> '.'.
+func stringEscape(c byte) byte {
+	switch c {
+	case 'n':
+		return '\n'
+	case 'r':
+		return '\r'
+	case 't':
+		return '\t'
+	case 'b':
+		return '\b'
+	case 'f':
+		return '\f'
+	case 'v':
+		return '\v'
+	case 'a':
+		return '\a'
+	case '0':
+		return 0
+	default:
+		return c
+	}
 }
 
 // braceSpan returns the byte offset in s of the `}` that closes a ${…} or @{…}

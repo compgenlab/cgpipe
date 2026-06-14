@@ -1,0 +1,6 @@
+tab:	end
+line1
+line2
+quote:"q" slash:\
+unlisted:.d
+sigils:$x @{y}

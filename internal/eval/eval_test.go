@@ -81,6 +81,26 @@ func TestStringAndListOps(t *testing.T) {
 	}
 }
 
+func TestStringEscapes(t *testing.T) {
+	// keys are cgp source (raw backslashes); values are the expected resolved bytes.
+	cases := map[string]string{
+		`"a\tb"`:        "a\tb",
+		`"a\nb"`:        "a\nb",
+		`"x\\y"`:        "x\\y",
+		`"q\"q"`:        "q\"q",
+		`"\r\b\f\v\a"`:  "\r\b\f\v\a",
+		`"\0"`:          "\x00",
+		`"a\.b"`:        "a.b", // unlisted escape: \X -> X (backward compatible)
+		`"cost \$5"`:    "cost $5",
+		`"\@{x} stays"`: "@{x} stays",
+	}
+	for src, want := range cases {
+		if got := stringify(evalExprStr(t, src, nil)); got != want {
+			t.Errorf("%s = %q, want %q", src, got, want)
+		}
+	}
+}
+
 func TestComparisonsAndLogic(t *testing.T) {
 	cases := map[string]bool{
 		"1 < 2":            true,

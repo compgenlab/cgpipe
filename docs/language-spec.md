@@ -130,7 +130,7 @@ Inside a string literal:
 | `${{var}}` | Double evaluation — substitute, then evaluate the result as source |
 | `$(cmd)`   | Run `cmd` in the shell at parse time; substitute its stdout |
 
-Escaping: inside a `"…"` string literal a backslash escapes the next character — `\X` resolves to `X` — so `\$`/`\@` give a literal `$`/`@` (suppressing substitution) and `\"` gives a literal quote. This resolution applies across the whole string **including inside a `${…}`**, so an expression that needs a nested string literal escapes its quotes to survive the outer ones: `"${x.sub(\".bam\", \"\")}"`. A string nested inside a `${…}` inside a string is two escape layers deep, so a backslash that must reach the inner string (e.g. a regex `\.`) is written `\\\\`. If the whole string will be evaluated again, escape the substitution sigil twice (`\\$`).
+Escaping: inside a `"…"` string literal a backslash introduces an escape. The C-style escapes `\n \r \t \b \f \v \a \0` resolve to their control byte; `\"`, `\\`, and `\'` are the literal character; `\$`/`\@` give a literal `$`/`@` (suppressing substitution); and any **other** `\X` resolves to `X` (the backslash is dropped). This resolution applies across the whole string **including inside a `${…}`**, so an expression that needs a nested string literal escapes its quotes to survive the outer ones: `"${x.sub(\".bam\", \"\")}"`. A string nested inside a `${…}` inside a string is two escape layers deep, so a backslash that must reach the inner string (e.g. a regex `\.`) is written `\\\\`. If the whole string will be evaluated again, escape the substitution sigil twice (`\\$`).
 
 `${{var}}` (double-eval) is for when a variable's *content* is itself a template; `$(cmd)` runs at parse time and its command string is variable-substituted first.
 
@@ -462,7 +462,7 @@ called; writes happen at evaluation time (§14).
 | `close()` | — | — | Flush and close (idempotent) |
 | `exists()` / `path()` | — | bool / string | Handle introspection |
 
-With `header=false`, delimited columns are keyed positionally as `c0`, `c1`, …. Cells are auto-typed (`"3"`→int) unless `raw=true`. See §14. (cgp string escapes are `\X`→`X`, so a newline comes from `writeln`, not `"\n"`.)
+With `header=false`, delimited columns are keyed positionally as `c0`, `c1`, …. Cells are auto-typed (`"3"`→int) unless `raw=true`. See §14. (`writeln` appends a newline; `"\n"` in a string is also a real newline — see the escape rules in §4.3.)
 
 ### 9.8 Keyword arguments
 
@@ -693,9 +693,9 @@ Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0
 ### 14.1 Writing files
 
 `open(path, "w")` (truncate) or `open(path, "a")` (append) returns a write handle;
-`write(s)` writes verbatim, `writeln(s)` adds a newline, `close()` flushes. A
-newline comes from `writeln` (cgp string escapes are `\X`→`X`, so `"\n"` is the
-letter `n`).
+`write(s)` writes verbatim, `writeln(s)` appends a newline, `close()` flushes.
+`"\n"` in a string is a real newline (§4.3 escape rules), so `write("a\nb\n")` and
+`writeln`-style calls are equivalent ways to get line breaks.
 
     f = open("params.txt", "w")
     f.writeln("sample=${sample}")

@@ -29,16 +29,16 @@ func runSrcOpts(t *testing.T, src string, opts Options) (string, string) {
 
 func TestFileWriteRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "out.txt")
-	// write() is verbatim; writeln() adds a trailing newline. (cgp string escapes
-	// are \X -> X, so a literal newline comes from writeln, not "\n".)
+	// write() is verbatim (a "\n" in the string is a real newline); writeln() also
+	// appends a trailing newline.
 	src := `f = open("` + p + `", "w")
-f.write("hello ")
+f.write("hello\n")
 f.writeln("world")
 f.write("tail")
 f.close()
 print open("` + p + `").read()`
 	out, _ := runSrcOpts(t, src, Options{})
-	if out != "hello world\ntail\n" { // file is "hello world\ntail"; print adds one newline
+	if out != "hello\nworld\ntail\n" { // file is "hello\nworld\ntail"; print adds one newline
 		t.Errorf("round-trip out = %q", out)
 	}
 }
