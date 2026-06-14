@@ -105,6 +105,11 @@ func TestStringEscapes(t *testing.T) {
 	if got := stringify(evalExprStr(t, `"${nm}\tdone"`, map[string]Value{"nm": StrVal("S1")})); got != "S1\tdone" {
 		t.Errorf(`"${nm}\tdone" = %q, want "S1\tdone"`, got)
 	}
+	// a nested string literal inside a ${…} keeps its OWN C-escapes: the outer
+	// unescape only restores the escaped quotes, so \t survives to the inner literal.
+	if got := stringify(evalExprStr(t, `"${ \"a\tb\" }"`, nil)); got != "a\tb" {
+		t.Errorf(`"${ \"a\tb\" }" = %q, want "a\tb"`, got)
+	}
 }
 
 func TestComparisonsAndLogic(t *testing.T) {

@@ -159,10 +159,12 @@ func (p *parser) parseStmt() ast.Stmt {
 	case token.CARET, token.COLON:
 		return p.parseTarget()
 	case token.IDENT:
-		// export/stage are checked before the assignment test (export contains '=').
+		// export/var/stage are checked before the assignment test (each can contain '=').
 		switch p.cur().Lit {
 		case "export":
 			return p.parseExport()
+		case "var":
+			return p.parseVar()
 		case "stage":
 			return p.parseStage()
 		}
@@ -328,6 +330,19 @@ func (p *parser) parseExport() ast.Stmt {
 	name := p.expect(token.IDENT).Lit
 	p.expect(token.ASSIGN)
 	return &ast.Export{PosV: pos, Name: name, Value: p.parseExpr(0)}
+}
+
+// parseVar parses `var name` or `var name = expr` — a lexical-scope declaration.
+// Only `=` initializes (a fresh declaration has nothing for ?=/+= to build on).
+func (p *parser) parseVar() ast.Stmt {
+	pos := p.advance().Pos // var
+	name := p.expect(token.IDENT).Lit
+	node := &ast.Var{PosV: pos, Name: name}
+	if p.accept(token.ASSIGN) {
+		node.Value = p.parseExpr(0)
+		node.HasInit = true
+	}
+	return node
 }
 
 // parseStage parses `stage NAME FILE ARGS...`. The rest of the line is captured

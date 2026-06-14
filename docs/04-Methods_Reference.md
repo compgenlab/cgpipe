@@ -145,6 +145,11 @@ A handle from `open(path[, mode])` — `mode` is `"r"` (default), `"w"` (truncat
 | `close()` | — | — | Flush and close (idempotent) |
 | `exists()` / `path()` | — | bool / string | Introspection |
 
+> `read_tsv`/`read_csv` default to `comment="#"`, so a line whose first character is
+> `#` is skipped — including a **header that starts with `#`** (e.g. a VCF-style
+> `#CHROM	POS …`). Pass `comment=""` to disable comment stripping when your header or
+> data legitimately begins with `#`.
+
 ```
 samples = open("samples.tsv").read_tsv(header=true)   # list of maps
 ids     = open("ids.txt").read_lines(comment="#")     # list of strings
@@ -153,6 +158,12 @@ f = open("params.txt", "w")                           # writes run at eval time
 f.writeln("ref=hg38")                                 # writeln adds the newline
 f.close()                                             # (no-op under -dr, with a warning)
 ```
+
+A write handle is flushed and closed automatically when the scope its variable lives
+in exits (a `{ }` block, a loop iteration, a target render, or end of evaluation), so
+`close()` is optional; it stays valid and idempotent. Bind a handle with `var` to
+scope it to a block, or with `var` in an outer scope to keep it open across a loop —
+see [scoping](language-spec.md#65-scoping).
 
 ## int / float / bool
 

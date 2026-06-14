@@ -1,6 +1,9 @@
 # §5.1 `for <var> in <iterable> with <i>` binds a 1-based loop counter alongside
-# the element. Works over lists and ranges; both vars persist after the loop.
-for s in ["a", "b", "c"] with i { print i, s }
+# the element. The loop variable and counter are block-scoped — to carry a value
+# past the loop, declare it with `var` in the enclosing scope and assign through it.
+var last_i
+var last_s
+for s in ["a", "b", "c"] with i { print i, s; last_i = i; last_s = s }
 for x in 10..12 with n { print n, x }
-print "last", i, s
+print "last", last_i, last_s
 exit

@@ -29,6 +29,9 @@ Reader options are keyword arguments: `read_tsv(header=false, sep="|", comment="
 skip=0, raw=false)`. With `header=false` columns are keyed `c0`, `c1`, …; with
 `raw=true` cells stay strings instead of being auto-typed (`"3"` → int).
 
+The default `comment="#"` drops any line beginning with `#` — including a header that
+starts with `#` (e.g. a VCF-style `#CHROM` row). Pass `comment=""` to keep such lines.
+
 ## Scatter and gather
 
 Accumulate the per-sample outputs into a list as you emit each target, then make a

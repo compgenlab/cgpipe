@@ -77,8 +77,16 @@ func (p *Program) RenderPostsubmit(job *Target, jobID string) (string, error) {
 	sc.set("output", StrList(job.Outputs))
 	sc.set("stem", StrVal(job.Stem))
 	sc.set("jobid", StrVal(jobID))
-	ip := &interp{sc: sc, out: io.Discard, prog: p}
+	ip := p.renderInterp(sc)
+	defer ip.closeWrites()
 	return ip.renderBodyText(p.Postsubmit.Body)
+}
+
+// renderInterp builds an interpreter for rendering a body/template against sc. It
+// inherits the program's dry-run flag (so a body directive's open-for-write is a
+// no-op under -dr) and tracks its own write handles; callers defer ip.closeWrites().
+func (p *Program) renderInterp(sc *Scope) *interp {
+	return &interp{sc: sc, out: io.Discard, errOut: io.Discard, prog: p, dryRun: p.DryRun, warnedWrites: map[string]bool{}}
 }
 
 // RenderText renders an arbitrary template string (a runner submission template)
@@ -89,7 +97,8 @@ func (p *Program) RenderText(tmpl string, vars map[string]Value) (string, error)
 	for k, v := range vars {
 		sc.set(k, v)
 	}
-	ip := &interp{sc: sc, out: io.Discard, prog: p}
+	ip := p.renderInterp(sc)
+	defer ip.closeWrites()
 	return ip.renderBodyText(tmpl)
 }
 
@@ -105,7 +114,8 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 	if !sc.has("job.name") {
 		sc.set("job.name", StrVal(defaultJobName(t)))
 	}
-	ip := &interp{sc: sc, out: io.Discard, prog: p}
+	ip := p.renderInterp(sc)
+	defer ip.closeWrites()
 
 	// Render the main body first: its directive block sets per-job settings —
 	// including job.nopre / job.nopost — into sc, which then decide @pre / @post
@@ -532,8 +542,11 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 					return fmt.Errorf("%% for…in requires a list or range, got %s", v.typeName())
 				}
 				for _, e := range items {
+					pop := ip.pushScope()
 					ip.sc.set(x.varName, e)
-					if err := ip.renderNodes(x.body, out); err != nil {
+					err := ip.renderNodes(x.body, out)
+					pop()
+					if err != nil {
 						return err
 					}
 				}
@@ -549,7 +562,10 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 					if !truthy(v) {
 						break
 					}
-					if err := ip.renderNodes(x.body, out); err != nil {
+					pop := ip.pushScope()
+					err = ip.renderNodes(x.body, out)
+					pop()
+					if err != nil {
 						return err
 					}
 				}
@@ -562,7 +578,10 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 					return err
 				}
 				if truthy(v) {
-					if err := ip.renderNodes(x.blocks[i], out); err != nil {
+					pop := ip.pushScope()
+					err := ip.renderNodes(x.blocks[i], out)
+					pop()
+					if err != nil {
 						return err
 					}
 					done = true
@@ -570,7 +589,10 @@ func (ip *interp) renderNodes(nodes []bodyNode, out *[]string) error {
 				}
 			}
 			if !done && x.els != nil {
-				if err := ip.renderNodes(x.els, out); err != nil {
+				pop := ip.pushScope()
+				err := ip.renderNodes(x.els, out)
+				pop()
+				if err != nil {
 					return err
 				}
 			}

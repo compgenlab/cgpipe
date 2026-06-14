@@ -216,6 +216,17 @@ type (
 		Name  string
 		Value Expr
 	}
+	// Var declares a variable in the current lexical scope. `var name` declares it
+	// unset (a slot a deeper block can assign through and that owns its write handle
+	// for scope-exit close); `var name = expr` declares and initializes. Unlike a
+	// bare assignment, it always binds locally — never writing through to an
+	// enclosing frame.
+	Var struct {
+		PosV    token.Pos
+		Name    string
+		Value   Expr // nil for a bare `var name`
+		HasInit bool
+	}
 	// Stage declares a stage of a workflow: run File (a .cgp pipeline) with Args,
 	// exposing its exports as ${Name.export}. Name/File/Args are raw templates,
 	// resolved at orchestration time (so ${prior_stage.x} references work).
@@ -269,6 +280,7 @@ func (s *Dumpvars) Pos() token.Pos { return s.PosV }
 func (s *Showhelp) Pos() token.Pos { return s.PosV }
 func (s *Sleep) Pos() token.Pos    { return s.PosV }
 func (s *Export) Pos() token.Pos   { return s.PosV }
+func (s *Var) Pos() token.Pos      { return s.PosV }
 func (s *Stage) Pos() token.Pos    { return s.PosV }
 
 func (*Assign) stmtNode()   {}
@@ -286,4 +298,5 @@ func (*Dumpvars) stmtNode() {}
 func (*Showhelp) stmtNode() {}
 func (*Sleep) stmtNode()    {}
 func (*Export) stmtNode()   {}
+func (*Var) stmtNode()      {}
 func (*Stage) stmtNode()    {}

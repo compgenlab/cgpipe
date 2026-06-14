@@ -45,10 +45,15 @@ func TestForWhile(t *testing.T) {
 	}
 }
 
-// §5.1 The loop variable remains set after the loop.
-func TestLoopVarPersists(t *testing.T) {
-	if got := printed(t, "for i in 1..3 { }\nprint i"); got != "3\n" {
-		t.Errorf("loop var after loop = %q, want 3", got)
+// §5.1 A `{}` block (a for body included) is a lexical scope: the loop variable is
+// block-local and is unset after the loop. To keep a value, declare it with `var` in
+// the enclosing scope — the body then writes through to it.
+func TestLoopVarScoped(t *testing.T) {
+	if got := printed(t, "for i in 1..3 { }\nprint i"); got != "\n" {
+		t.Errorf("loop var after loop = %q, want empty (block-scoped)", got)
+	}
+	if got := printed(t, "var last\nfor i in 1..3 { last = i }\nprint last"); got != "3\n" {
+		t.Errorf("var-hoisted value after loop = %q, want 3", got)
 	}
 }
 

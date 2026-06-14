@@ -148,6 +148,19 @@ print g.keys()`, nil)
 	}
 }
 
+// TestMapIsReferenceType pins the reference semantics: assigning a map to another
+// variable aliases the same backing data, so a later mutation through one name is
+// fully visible (values AND key order/length) through the other.
+func TestMapIsReferenceType(t *testing.T) {
+	_, out := runSrc(t, `m = {"a": 1}
+n = m
+m["b"] = 2
+print n["b"], n.length(), n.keys()`, nil)
+	if out != "2 2 a b\n" {
+		t.Errorf("map alias = %q, want %q", out, "2 2 a b\n")
+	}
+}
+
 func TestMapIterationKeys(t *testing.T) {
 	_, out := runSrc(t, `m = {"a": 1, "b": 2}
 for k in m with i {

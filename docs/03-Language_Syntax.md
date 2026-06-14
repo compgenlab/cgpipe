@@ -75,12 +75,15 @@ evaluation time — see [Sample Sheets](13-Sample_Sheets.md). Opened with `"w"`
 
 ## Variables
 
-No declarations; the only scopes are global and a per-target body closure. Four
-forms:
+cgp is lexically **block-scoped**: each `{ }` block (an `if`/`for` body, a per-target
+body) is a scope nested in the one around it. A bare `foo = …` assigns the existing
+`foo` if one is in scope, otherwise creates `foo` in the *current* block; `var foo`
+declares a new binding in the current scope. See [scoping](language-spec.md#65-scoping).
 
 | Form | Meaning |
 |------|---------|
-| `foo = expr`  | Set `foo` |
+| `foo = expr`  | Assign `foo` — the binding in scope, else a new one in the current block |
+| `var foo [= expr]` | Declare `foo` in the current scope (shadows any outer `foo`) |
 | `foo ?= expr` | Set `foo` **only if not already set** — the defaults workhorse |
 | `foo += expr` | Append to `foo` (promotes a scalar to a list) |
 | `unset foo`   | Remove `foo` |
@@ -260,7 +263,9 @@ element — handy for numbering iterations (e.g. [array task ids](09-Array_Jobs.
 for s in ["a", "b", "c"] with i { print i, s }   # 1 a / 2 b / 3 c
 ```
 
-Loop variables remain set after the loop (no separate scope) — the counter too.
+A loop body is a scope, so the loop variable (and the `with` counter) is block-scoped
+— unset after the loop. To keep a value, declare it with `var` before the loop and
+assign through it: `var last`, then `for s in xs { last = s }`.
 
 ## Statements
 

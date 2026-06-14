@@ -67,11 +67,13 @@ A **map** is an ordered, string-keyed collection — the literal `{}` / `{"k": v
 
 ## 3. Variables
 
-Set with `=`. No declarations; the only scopes are global and the per-target body closure ([§6.5](#65-scoping)).
+Set with `=`. A `{ }` block (an `if`/`for` body, a per-target body) is a lexical scope; see [§6.5](#65-scoping) for how assignment resolves across blocks.
 
 | Form | Meaning |
 |------|---------|
-| `foo = expr`  | Set `foo` |
+| `foo = expr`  | Assign `foo` — the existing binding if one is in scope, else a new one in the current block ([§6.5](#65-scoping)) |
+| `var foo`     | Declare `foo` in the current scope (unset); a slot a deeper block can assign through |
+| `var foo = expr` | Declare and initialize `foo` in the current scope (shadows any outer `foo`) |
 | `foo ?= expr` | Set `foo` only if not already set (defaults) |
 | `foo += expr` | Append to `foo` (promotes a scalar to a list) |
 | `unset foo`   | Remove `foo` from scope |
@@ -156,10 +158,15 @@ Escaping: inside a `"…"` string literal a backslash introduces an escape. The 
     for s in xs with i  { ... }            # `with i` binds a 1-based counter
     for cond            { ... }            # while-style: runs while cond is true
 
-Loop variables remain set after the loop (no separate scope). The optional
-`with <name>` clause (on the `for…in` form only) binds `<name>` to the **1-based**
-loop index, advancing each iteration; it is set alongside the element variable and
-likewise persists after the loop.
+A loop body is a scope (each iteration is its own frame), so the loop variable is
+**block-scoped** — it is unset once the loop ends. The optional `with <name>` clause
+(on the `for…in` form only) binds `<name>` to the **1-based** loop index, advancing
+each iteration; it is scoped the same way. To carry a value out of the loop, declare
+it with `var` *before* the loop and assign through it ([§6.5](#65-scoping)):
+
+    var last
+    for s in xs { last = s }               # writes through to the outer `last`
+    # `last` holds the final element here
 
 ### 5.2 Statement keywords
 
@@ -255,7 +262,28 @@ The non-`%` lines between `% for … {` and `% }` are shell, emitted once per lo
 A `%` statement whose expression has an open `(` or `[` continues onto the following `%` lines until the brackets balance (per [§1.1](#11-source-and-encoding)), so a list or call on `%` lines may span lines; consecutive `% for`/`% if` headers each open their own block.
 
 ### 6.5 Scoping
-A target captures the surrounding global context at definition time, like a closure. The body may *read* any variable in scope at definition; assignments inside the directive block are target-local and do not leak to the global scope. The loop variable in a body-defining `for` is captured per target.
+
+cgp is **lexically block-scoped**: each `{ }` block — an `if`/`for` body (every loop iteration is its own frame) and a target's render — is a scope nested in the one that encloses it.
+
+- **Reads** resolve outward: a name is looked up in the current block, then each enclosing block, out to the global scope.
+- **`var name` / `var name = expr`** declares a name in the *current* scope. This is the only way to introduce a new binding deliberately; it may shadow an outer name of the same name, and it owns any write handle assigned to it (closed when the scope exits, §14.1).
+- **A bare `name = expr`** (and `+=`, `?=`) resolves the name outward and assigns the *existing* binding if one is in scope; if the name is bound nowhere, it creates it in the *current* block — so a name first assigned inside a block does not survive the block. Declare it with `var` in an outer scope to keep it.
+
+      var last
+      for x in xs { last = x }    # bare `last =` finds the outer `var last` and writes through
+      # `last` survives here; a name first used *inside* the loop would not
+
+  This mirrors Ruby's block-local variables, with every `{ }` (including `if`/`for`) acting as the scope.
+
+- **Reserved settings — `job.*` and `cgp.*`** — are implicitly declared at the run/render root, so assigning one inside an `if`/`for` still takes effect outside the block (a conditional `job.mem` or `cgp.runner` reaches the engine):
+
+      target: in {{
+          if big { job.mem = "32G" }    # applies to the whole job, not just the if-block
+          --
+          run ...
+      }}
+
+A target captures the surrounding scope at definition time, like a closure (flattened to a snapshot): the body may *read* any variable in scope at definition, and the loop variable in a body-defining `for` is captured per target. Assignments inside the directive block apply to that job's render scope (and, for `job.*`, the job's settings); they do not leak back to the global scope. Each workflow **stage** runs as its own pipeline with a fresh global scope (only `export`s cross between stages); an `include` merges into the current scope.
 
 ### 6.6 Snippets
 Shared body fragments are defined with `snippet name {{ }}` and invoked with `@name` inside a body:
@@ -705,6 +733,16 @@ Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0
     f.writeln("sample=${sample}")
     f.writeln("ref=${ref}")
     f.close()
+
+`close()` is optional: a write handle is flushed and closed automatically when the
+scope its variable lives in exits (§6.5) — the end of a `{ }` block (each loop
+iteration), the end of a target's render, or the end of evaluation. Closing is
+idempotent, so an explicit `close()` is still fine. To scope a handle to a block, bind
+it with `var` there; to keep one open across a loop, declare it with `var` in the
+enclosing scope:
+
+    var manifest = open("manifest.tsv", "w")
+    for row in samples { manifest.writeln(row["sample"]) }   # one handle, closed after the loop
 
 Writes happen at **evaluation time** (like `$(…)` and reads), so they occur whenever
 the script is evaluated. **Under `-dr` they are no-ops** — `open`-for-write, `write`,

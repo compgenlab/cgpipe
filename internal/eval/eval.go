@@ -44,6 +44,7 @@ type Program struct {
 	Stages      []StageDecl       // workflow stage declarations (raw templates)
 	Exports     map[string]Value  // values exposed via `export` (for a calling workflow)
 	Scope       *Scope
+	DryRun      bool // propagated to render-time interps so body-directive writes no-op under -dr
 }
 
 // StageDecl is a workflow stage: run File with Args, exposing its exports as
@@ -163,7 +164,7 @@ func Run(file *ast.File, opts Options) (*Program, error) {
 		sc:           newScope(),
 		out:          opts.Out,
 		errOut:       opts.ErrOut,
-		prog:         &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help},
+		prog:         &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help, DryRun: opts.DryRun},
 		including:    map[string]bool{},
 		dryRun:       opts.DryRun,
 		warnedWrites: map[string]bool{},
@@ -320,6 +321,8 @@ func (ip *interp) execStmt(s ast.Stmt) error {
 		}
 		ip.prog.Exports[n.Name] = v
 		return nil
+	case *ast.Var:
+		return ip.execVar(n)
 	case *ast.Stage:
 		ip.prog.Stages = append(ip.prog.Stages, StageDecl{Name: n.Name, File: n.File, Args: n.Args})
 		return nil
@@ -361,6 +364,22 @@ func (ip *interp) execInclude(n *ast.Include) error {
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
+// execVar evaluates a `var` declaration. It always binds in the CURRENT frame
+// (never writing through to an enclosing one), so it can shadow an outer name and
+// owns any write handle bound to it for scope-exit close.
+func (ip *interp) execVar(n *ast.Var) error {
+	var v Value = UnsetVal{}
+	if n.HasInit {
+		var err error
+		if v, err = ip.eval(n.Value); err != nil {
+			return err
+		}
+	}
+	ip.sc.set(n.Name, v)
+	ip.adoptHandle(ip.sc, v)
+	return nil
+}
+
 func (ip *interp) execAssign(n *ast.Assign) error {
 	v, err := ip.eval(n.Value)
 	if err != nil {
@@ -368,21 +387,21 @@ func (ip *interp) execAssign(n *ast.Assign) error {
 	}
 	switch n.Op {
 	case token.ASSIGN:
-		ip.sc.set(n.Name, v)
+		ip.adoptHandle(ip.sc.assign(n.Name, v), v)
 	case token.QASSIGN:
 		if !ip.sc.has(n.Name) {
-			ip.sc.set(n.Name, v)
+			ip.adoptHandle(ip.sc.assign(n.Name, v), v)
 		}
 	case token.PLUSASSIGN:
 		cur, ok := ip.sc.get(n.Name)
 		switch {
 		case !ok:
-			ip.sc.set(n.Name, ListVal{v})
+			ip.sc.assign(n.Name, ListVal{v})
 		default:
 			if lst, isList := cur.(ListVal); isList {
-				ip.sc.set(n.Name, append(append(ListVal{}, lst...), v))
+				ip.sc.assign(n.Name, append(append(ListVal{}, lst...), v))
 			} else {
-				ip.sc.set(n.Name, ListVal{cur, v})
+				ip.sc.assign(n.Name, ListVal{cur, v})
 			}
 		}
 	}
@@ -447,7 +466,10 @@ func (ip *interp) execAssignIndex(n *ast.Assign) error {
 			}
 		}
 	}
-	ip.sc.set(recvIdent.Name, mv)
+	// Bind the (possibly freshly-vivified) map following the bare-assignment rule:
+	// an existing map is rebound where it already lives (a no-op for the shared
+	// reference); a new one lands in the current frame (or root for job.*/cgp.*).
+	ip.sc.assign(recvIdent.Name, mv)
 	return nil
 }
 
@@ -471,10 +493,14 @@ func (ip *interp) execIf(n *ast.If) error {
 			return err
 		}
 		if truthy(v) {
+			pop := ip.pushScope()
+			defer pop()
 			return ip.execStmts(n.Blocks[i])
 		}
 	}
 	if n.Else != nil {
+		pop := ip.pushScope()
+		defer pop()
 		return ip.execStmts(n.Else)
 	}
 	return nil
@@ -491,11 +517,17 @@ func (ip *interp) execFor(n *ast.For) error {
 			return fmt.Errorf("%s: for…in requires a list or range, got %s", n.Pos(), v.typeName())
 		}
 		for i, e := range items {
+			// Each iteration is its own scope: the loop variable/counter and any
+			// new names assigned in the body are block-local (they do not persist
+			// after the loop), and a write handle opened this pass closes here.
+			pop := ip.pushScope()
 			ip.sc.set(n.Var, e)
 			if n.IndexVar != "" { // `with i`: 1-based loop counter
 				ip.sc.set(n.IndexVar, IntVal(i+1))
 			}
-			if err := ip.execStmts(n.Body); err != nil {
+			err := ip.execStmts(n.Body)
+			pop()
+			if err != nil {
 				return err
 			}
 		}
@@ -506,14 +538,17 @@ func (ip *interp) execFor(n *ast.For) error {
 		if i >= maxLoopIterations {
 			return fmt.Errorf("%s: for-loop exceeded %d iterations", n.Pos(), maxLoopIterations)
 		}
-		v, err := ip.eval(n.Cond)
+		v, err := ip.eval(n.Cond) // condition reads the enclosing scope
 		if err != nil {
 			return err
 		}
 		if !truthy(v) {
 			return nil
 		}
-		if err := ip.execStmts(n.Body); err != nil {
+		pop := ip.pushScope()
+		err = ip.execStmts(n.Body)
+		pop()
+		if err != nil {
 			return err
 		}
 	}
@@ -751,10 +786,36 @@ func (ip *interp) openWrite(path, mode string) (Value, error) {
 	return FileVal{path: path, mode: mode, w: h}, nil
 }
 
-// closeWrites flushes and closes any write handles the script left open.
+// closeWrites flushes and closes any write handles the script left open. It is the
+// end-of-eval backstop; handles owned by a scope frame are already closed when that
+// frame exits (writeHandle.close is idempotent).
 func (ip *interp) closeWrites() {
 	for _, h := range ip.openWrites {
 		_ = h.close()
+	}
+}
+
+// adoptHandle ties a write handle to the frame its variable binds in, so the handle
+// is flushed/closed when that frame exits. A handle is adopted by exactly one frame
+// (the first binding); aliasing it (`g = f`) does not re-adopt it.
+func (ip *interp) adoptHandle(frame *Scope, v Value) {
+	if fv, ok := v.(FileVal); ok && fv.w != nil && !fv.w.owned {
+		fv.w.owned = true
+		frame.handles = append(frame.handles, fv.w)
+	}
+}
+
+// pushScope enters a child frame and returns a function that, when called, flushes
+// and closes the frame's owned write handles and restores the parent frame.
+func (ip *interp) pushScope() func() {
+	parent := ip.sc
+	ip.sc = parent.child()
+	child := ip.sc
+	return func() {
+		for _, h := range child.handles {
+			_ = h.close()
+		}
+		ip.sc = parent
 	}
 }
 
