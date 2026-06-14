@@ -215,8 +215,14 @@ func TestEqualsArgIsNotKwarg(t *testing.T) {
 }
 
 func TestOpenArity(t *testing.T) {
-	if err := evalErr(t, `open()`); err == nil || !strings.Contains(err.Error(), "open() takes 1 argument") {
+	if err := evalErr(t, `open()`); err == nil || !strings.Contains(err.Error(), "open() takes a path and an optional mode") {
 		t.Errorf("open() no-arg: got %v", err)
+	}
+	if err := evalErr(t, `open("a", "b", "c")`); err == nil || !strings.Contains(err.Error(), "open() takes a path and an optional mode") {
+		t.Errorf("open() too-many-args: got %v", err)
+	}
+	if err := evalErr(t, `open("x", "z")`); err == nil || !strings.Contains(err.Error(), "unknown mode") {
+		t.Errorf("open() bad mode: got %v", err)
 	}
 	if err := evalErr(t, `nope("x")`); err == nil || !strings.Contains(err.Error(), "unknown function") {
 		t.Errorf("unknown builtin: got %v", err)

@@ -131,20 +131,27 @@ print row["bam"].basename()      # chains a string method
 
 ## file
 
-A handle from `open(path)`; reads happen when a reader method is called.
+A handle from `open(path[, mode])` — `mode` is `"r"` (default), `"w"` (truncate), or
+`"a"` (append). Read methods need an `"r"` handle; write methods a `"w"`/`"a"` one.
 
-| Method | Keyword args (defaults) | Returns | Description |
-|--------|-------------------------|---------|-------------|
-| `read_tsv(...)` | `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows |
-| `read_csv(...)` | same, `sep=","` | list of map | Comma-delimited rows |
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `read_tsv(...)` | kw: `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows |
+| `read_csv(...)` | kw: same, `sep=","` | list of map | Comma-delimited rows |
 | `read_json()` | — | list of map | A JSON array of objects |
-| `read_lines(...)` | `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
+| `read_lines(...)` | kw: `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
 | `read()` | — | string | The whole file |
+| `write(s)` / `writeln(s)` | any | file | Write `s` (verbatim / with a trailing newline) |
+| `close()` | — | — | Flush and close (idempotent) |
 | `exists()` / `path()` | — | bool / string | Introspection |
 
 ```
 samples = open("samples.tsv").read_tsv(header=true)   # list of maps
 ids     = open("ids.txt").read_lines(comment="#")     # list of strings
+
+f = open("params.txt", "w")                           # writes run at eval time
+f.writeln("ref=hg38")                                 # writeln adds the newline
+f.close()                                             # (no-op under -dr, with a warning)
 ```
 
 ## int / float / bool

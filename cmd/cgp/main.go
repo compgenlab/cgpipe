@@ -259,7 +259,7 @@ func run(args []string) int {
 // runPipeline evaluates the (already-parsed) pipeline with the given variables
 // and runs it through the selected runner, sharing the stat cache.
 func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[string]eval.Value, goals []string, runnerName string, dryRun, force bool, cache *runner.Cache) int {
-	prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: vars})
+	prog, err := eval.Run(f, eval.Options{File: file, Configs: cfgs, Vars: vars, DryRun: dryRun})
 	if err != nil {
 		var ex *eval.ExitError
 		if errors.As(err, &ex) {
@@ -447,7 +447,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
 			return 1
 		}
-		subProg, err := eval.Run(sf, eval.Options{File: subfile, Configs: cfgs, Vars: subVars})
+		subProg, err := eval.Run(sf, eval.Options{File: subfile, Configs: cfgs, Vars: subVars, DryRun: dryRun})
 		if err != nil {
 			var ex *eval.ExitError
 			if errors.As(err, &ex) {

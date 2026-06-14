@@ -65,11 +65,13 @@ selects the i-th key). Assign with `m["k"] = v`; `m["k"] += v` accumulates a lis
 `keys`, `has`, `get`, `values`, `items`, `length`. A `read_tsv()`/`read_json()`
 row is a map (see below).
 
-A **file** is a handle returned by `open(path)`; its reader methods turn a file on
-disk into cgp values: `read_tsv(...)`/`read_csv(...)` and `read_json()` return a
-list of maps, `read_lines(...)` a list of strings, and `read()` the whole file as
-one string. This is how a pipeline reads a sample sheet at evaluation time — see
-[Sample Sheets](13-Sample_Sheets.md).
+A **file** is a handle returned by `open(path[, mode])`; with the default `"r"` its
+reader methods turn a file on disk into cgp values: `read_tsv(...)`/`read_csv(...)`
+and `read_json()` return a list of maps, `read_lines(...)` a list of strings, and
+`read()` the whole file as one string. This is how a pipeline reads a sample sheet at
+evaluation time — see [Sample Sheets](13-Sample_Sheets.md). Opened with `"w"`
+(truncate) or `"a"` (append), a file is written with `write(s)`/`writeln(s)` and
+`close()` — these run at evaluation time and are no-ops under `-dr`.
 
 ## Variables
 
@@ -268,6 +270,7 @@ Loop variables remain set after the loop (no separate scope) — the counter too
 | `exit [code]` | Stop the pipeline (`exit` ⇒ `exit 0`); the code becomes cgp's exit status |
 | `dumpvars` | Print all in-scope variables (debug) |
 | `showhelp` | Print the help-text block |
+| *call* (e.g. `f.write("x")`) | A bare call on its own line runs for its side effect (how file writes are invoked) |
 
 ```
 eval "answer = 6 * 7"

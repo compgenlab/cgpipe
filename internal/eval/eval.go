@@ -124,15 +124,21 @@ type Options struct {
 	Configs []ConfigFile
 	Vars    map[string]Value
 	Out     io.Writer // destination for print (defaults to os.Stdout)
+	ErrOut  io.Writer // destination for warnings, e.g. dry-run write skips (defaults to os.Stderr)
+	DryRun  bool      // when true, open-for-write/write/close are no-ops (with a warning)
 }
 
 type interp struct {
-	file      string
-	dir       string // directory of the current file (for include resolution)
-	sc        *Scope
-	out       io.Writer
-	prog      *Program
-	including map[string]bool // include cycle guard (absolute paths)
+	file         string
+	dir          string // directory of the current file (for include resolution)
+	sc           *Scope
+	out          io.Writer
+	errOut       io.Writer
+	prog         *Program
+	including    map[string]bool // include cycle guard (absolute paths)
+	dryRun       bool            // open-for-write/write/close are no-ops when true
+	openWrites   []*writeHandle  // write handles to flush/close at end of eval
+	warnedWrites map[string]bool // dry-run write warnings already emitted (per path)
 }
 
 // seedJobDefaults pre-populates the global scope with the language-level job
@@ -152,16 +158,25 @@ func seedJobDefaults(sc *Scope) {
 // A call to exit surfaces as *ExitError.
 func Run(file *ast.File, opts Options) (*Program, error) {
 	ip := &interp{
-		file:      opts.File,
-		dir:       filepath.Dir(opts.File),
-		sc:        newScope(),
-		out:       opts.Out,
-		prog:      &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help},
-		including: map[string]bool{},
+		file:         opts.File,
+		dir:          filepath.Dir(opts.File),
+		sc:           newScope(),
+		out:          opts.Out,
+		errOut:       opts.ErrOut,
+		prog:         &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help},
+		including:    map[string]bool{},
+		dryRun:       opts.DryRun,
+		warnedWrites: map[string]bool{},
 	}
 	if ip.out == nil {
 		ip.out = os.Stdout
 	}
+	if ip.errOut == nil {
+		ip.errOut = os.Stderr
+	}
+	// Flush and close any file handles left open by the script (a forgotten
+	// close()), on every return path.
+	defer ip.closeWrites()
 	seedJobDefaults(ip.sc)
 	// 1. config files, in order (system, user, env)
 	for _, cfg := range opts.Configs {
@@ -239,6 +254,9 @@ func (ip *interp) execStmt(s ast.Stmt) error {
 			return ip.execAssignIndex(n)
 		}
 		return ip.execAssign(n)
+	case *ast.ExprStmt:
+		_, err := ip.eval(n.X)
+		return err
 	case *ast.Print:
 		return ip.execPrint(n)
 	case *ast.Exit:
@@ -658,7 +676,7 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 			}
 		}
 		if n.Recv == nil { // builtin free call, e.g. open("f")
-			r, err := callBuiltin(n.Method, args, kwargs)
+			r, err := ip.callBuiltin(n.Method, args, kwargs)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", n.Pos(), err)
 			}
@@ -678,19 +696,66 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 }
 
 // callBuiltin dispatches a free-function call (one whose AST Call has no receiver).
-// open(path) is the only builtin today; it returns a lazy file handle.
-func callBuiltin(name string, args []Value, kwargs map[string]Value) (Value, error) {
+// open(path[, mode]) is the only builtin today; "r" returns a lazy read handle,
+// "w"/"a" open the file for writing (a no-op under dry-run).
+func (ip *interp) callBuiltin(name string, args []Value, kwargs map[string]Value) (Value, error) {
 	switch name {
 	case "open":
 		if err := validateKwargs("open", kwargs); err != nil {
 			return nil, err
 		}
-		if len(args) != 1 {
-			return nil, fmt.Errorf("open() takes 1 argument (a path)")
+		if len(args) < 1 || len(args) > 2 {
+			return nil, fmt.Errorf("open() takes a path and an optional mode")
 		}
-		return FileVal{path: stringify(args[0]), mode: "r"}, nil
+		path := stringify(args[0])
+		mode := "r"
+		if len(args) == 2 {
+			mode = stringify(args[1])
+		}
+		switch mode {
+		case "r":
+			return FileVal{path: path, mode: "r"}, nil
+		case "w", "a":
+			return ip.openWrite(path, mode)
+		default:
+			return nil, fmt.Errorf("open(): unknown mode %q (use \"r\", \"w\", or \"a\")", mode)
+		}
 	}
 	return nil, fmt.Errorf("unknown function %s()", name)
+}
+
+// openWrite opens path for writing ("w" truncates, "a" appends). Under dry-run it
+// opens nothing and returns a no-op handle, warning once per path.
+func (ip *interp) openWrite(path, mode string) (Value, error) {
+	if ip.dryRun {
+		if !ip.warnedWrites[path] {
+			ip.warnedWrites[path] = true
+			fmt.Fprintf(ip.errOut, "cgp: dry-run: not writing to file %q\n", path)
+		}
+		h := &writeHandle{path: path, dryRun: true}
+		ip.openWrites = append(ip.openWrites, h)
+		return FileVal{path: path, mode: mode, w: h}, nil
+	}
+	flag := os.O_CREATE | os.O_WRONLY
+	if mode == "a" {
+		flag |= os.O_APPEND
+	} else {
+		flag |= os.O_TRUNC
+	}
+	fh, err := os.OpenFile(path, flag, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open(%q, %q): %w", path, mode, err)
+	}
+	h := &writeHandle{path: path, f: fh}
+	ip.openWrites = append(ip.openWrites, h)
+	return FileVal{path: path, mode: mode, w: h}, nil
+}
+
+// closeWrites flushes and closes any write handles the script left open.
+func (ip *interp) closeWrites() {
+	for _, h := range ip.openWrites {
+		_ = h.close()
+	}
 }
 
 func (ip *interp) evalUnary(n *ast.Unary) (Value, error) {

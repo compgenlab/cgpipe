@@ -57,7 +57,7 @@ Eight types: `bool`, `int`, `float`, `string`, `list`, `range`, `map`, `file`.
     samples = [1, 2, "x"]     # lists may mix types
     chunks  = 1..100          # range (1, 2, …, 100 when iterated)
     row     = {"a": 1, "b": 2} # map: ordered, string-keyed
-    f       = open("s.tsv")   # file: a handle for reading (see §14)
+    f       = open("s.tsv")   # file: a handle (read; open(p,"w"|"a") to write) — see §14
 
 Typing is dynamic; a value's type is mostly invisible. `.type()` returns the type name as a string. CLI argument values arrive as strings and are parsed to `int`/`float`/`bool` when they look like one.
 
@@ -176,6 +176,10 @@ likewise persists after the loop.
 | `sleep seconds` | Pause. Rarely needed. |
 
 `include` runs in global context — the included file's statements and targets become part of the current pipeline. It's the primary composition mechanism for shared defaults and target libraries. (For sharing *body* fragments, use `snippet`/`@name` — see [§6.6](#66-snippets).)
+
+### 5.3 Call statements
+
+A **call** on its own line — `f.write("x")`, `f.close()` — is a statement, evaluated for its side effect (the return value is discarded). Only a call qualifies, so a line like `out.txt: …` is still a target. This is how the file-writing methods (§14) are invoked.
 
 ---
 
@@ -441,18 +445,24 @@ Also read/written by index: `m["k"]`, `m[0]`, `m["k"] = v`, `m["k"] += v` (§2).
 
 ### 9.7 file
 
-A file handle from `open(path)` (§14). Reads happen when a reader method is called.
+A file handle from `open(path[, mode])` — `mode` is `"r"` (default, read), `"w"`
+(create/truncate), or `"a"` (create/append). Read methods require an `"r"` handle;
+`write`/`writeln`/`close` a `"w"`/`"a"` handle. Reads happen when a reader method is
+called; writes happen at evaluation time (§14).
 
-| Method | Keyword args (defaults) | Returns | Description |
-|--------|-------------------------|---------|-------------|
-| `read_tsv(...)` | `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows as maps keyed by header |
-| `read_csv(...)` | same, `sep=","` | list of map | Comma-delimited rows |
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `read_tsv(...)` | kw: `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows as maps keyed by header |
+| `read_csv(...)` | kw: same, `sep=","` | list of map | Comma-delimited rows |
 | `read_json()` | — | list of map | A JSON array of objects |
-| `read_lines(...)` | `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
+| `read_lines(...)` | kw: `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
 | `read()` | — | string | The whole file |
+| `write(s)` | any | file | Write `s` verbatim; returns the handle (chains) |
+| `writeln(s)` | any | file | Write `s` followed by a newline |
+| `close()` | — | — | Flush and close (idempotent) |
 | `exists()` / `path()` | — | bool / string | Handle introspection |
 
-With `header=false`, delimited columns are keyed positionally as `c0`, `c1`, …. Cells are auto-typed (`"3"`→int) unless `raw=true`. See §14.
+With `header=false`, delimited columns are keyed positionally as `c0`, `c1`, …. Cells are auto-typed (`"3"`→int) unless `raw=true`. See §14. (cgp string escapes are `\X`→`X`, so a newline comes from `writeln`, not `"\n"`.)
 
 ### 9.8 Keyword arguments
 
@@ -679,6 +689,29 @@ Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0
     }
 
 > A column used inside a `"…"` string must be bound to a plain variable first (e.g. `name = row["sample"]`), because a nested `"` would close the string. In a target declaration or a `{{ }}` body, `${row["col"]}` is written as-is.
+
+### 14.1 Writing files
+
+`open(path, "w")` (truncate) or `open(path, "a")` (append) returns a write handle;
+`write(s)` writes verbatim, `writeln(s)` adds a newline, `close()` flushes. A
+newline comes from `writeln` (cgp string escapes are `\X`→`X`, so `"\n"` is the
+letter `n`).
+
+    f = open("params.txt", "w")
+    f.writeln("sample=${sample}")
+    f.writeln("ref=${ref}")
+    f.close()
+
+Writes happen at **evaluation time** (like `$(…)` and reads), so they occur whenever
+the script is evaluated. **Under `-dr` they are no-ops** — `open`-for-write, `write`,
+and `close` do nothing and cgp prints `dry-run: not writing to file "…"` once per
+path. (Dry-run is the only safe-preview signal known before evaluation; to inspect a
+write-bearing pipeline with no side effects, add `-dr`.)
+
+Because an eval-time write is not a graph node, a file a **job consumes** is usually
+better produced by a **target body** (`params.txt: {{ printf … > ${output} }}`) so it
+is stale-checked, scheduled, and present under `-dr`. Reserve `open(…,"w")` for files
+*outside* the dependency graph — logs, sidecar metadata, a derived list.
 
 ---
 

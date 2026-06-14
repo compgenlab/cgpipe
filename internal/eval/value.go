@@ -34,11 +34,14 @@ type (
 	// in optional contexts; using it where a value is required is an error.
 	UnsetVal struct{}
 	// FileVal is a file handle returned by open(). It carries the path and an
-	// access mode ("r" for now); reader methods (read_tsv, read_lines, …) hang
-	// off it. Reads happen lazily, when a reader method is called.
+	// access mode ("r" read, "w" truncate, "a" append). Reader methods (read_tsv,
+	// …) hang off an "r" handle; write/writeln/close off a "w"/"a" handle. For a
+	// write handle, w points to the shared open file so copies of the value all
+	// write to and close the same file.
 	FileVal struct {
 		path string
 		mode string
+		w    *writeHandle
 	}
 	// MapVal is an ordered, string-keyed map (the type readers return per row and
 	// the value of a {…} literal). keys preserves insertion/column order; m holds

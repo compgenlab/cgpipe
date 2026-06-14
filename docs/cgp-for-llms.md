@@ -36,8 +36,8 @@ Run: `cgp hello.cgp` prints the assembled bash to stdout (pipe to `bash` to run)
 `bool` (`true`/`false`), `int`, `float`, `string` (always `"..."`),
 `list` (`["a","b"]`, may mix types), `range` (`1..100`, inclusive, stores only
 bounds), `map` (`{}` or `{"k": v}`; `m["k"]` indexes, `m["k"] += v` accumulates a
-list, `for k in m` iterates keys), `file` (a handle from `open(path)`; see Reading
-files). `.type()` returns the type name.
+list, `for k in m` iterates keys), `file` (a handle from `open(path[, "r"|"w"|"a"])`;
+see Reading/Writing files). `.type()` returns the type name.
 
 ## Variables
 ```
@@ -93,7 +93,7 @@ exit 1                # stop; code becomes cgp's exit status
 - list: `.length() .contains(v) .join(sep)` (+ index/slice/`+=`).
 - range: `.length() .contains(v)`; iterates/indexes like a list.
 - map: `.keys() .values() .items() .has(k) .get(k, default) .length()`.
-- file (from `open`): `.read_tsv(...) .read_csv(...) .read_json() .read_lines(...) .read()`.
+- file (from `open(path[, "r"|"w"|"a"])`): read `.read_tsv(...) .read_csv(...) .read_json() .read_lines(...) .read()`; write `.write(s) .writeln(s) .close()`; also `.exists() .path()`.
 
 ## Targets
 ```
@@ -185,6 +185,20 @@ cohort.txt: @{outs} {{ cat ${input} > ${output} }}   # gather over every scatter
 Quoting gotcha: inside a `"..."` string a column **must** be bound to a plain var
 first (`name = row["sample"]`); on a target line or in a `{{ }}` body, `${row["col"]}`
 is fine directly.
+
+## Writing files
+`open(path, "w")` (truncate) / `open(path, "a")` (append) → a write handle. `write(s)`
+is verbatim, `writeln(s)` adds a newline (cgp escapes are `\X`→`X`, so a newline comes
+from `writeln`, not `"\n"`), `close()` flushes. A bare call is a statement.
+```
+f = open("params.txt", "w")
+f.writeln("ref=hg38")
+f.close()
+```
+Writes run at **eval time** (like `$(…)`/reads). **Under `-dr` they are no-ops** (cgp
+warns `not writing to file "…"`). A file a *job consumes* should instead be a target
+body (`params.txt: {{ printf … > ${output} }}`) so it is graph-tracked and `-dr`-safe;
+use `open(…,"w")` for files outside the graph (logs, sidecar metadata).
 
 ## Keyword arguments
 Calls accept named args: `read_tsv(header=true, sep="|")`. Positional and keyword may

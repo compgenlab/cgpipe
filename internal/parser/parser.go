@@ -191,6 +191,18 @@ func (p *parser) parseStmt() ast.Stmt {
 			t := p.advance()
 			return &ast.Showhelp{PosV: t.Pos}
 		}
+		// A call line with no top-level ':' (e.g. `f.write("x")`, `f.close()`) is a
+		// call-expression statement, evaluated for its side effect. Anything else
+		// (including a bare name or a malformed target) falls through to parseTarget,
+		// preserving its error. Only *ast.Call qualifies, so targets are untouched.
+		if p.findColon() < 0 {
+			save := p.i
+			expr := p.parseExpr(0)
+			if call, ok := expr.(*ast.Call); ok && p.atStmtEnd() {
+				return &ast.ExprStmt{PosV: call.Pos(), X: call}
+			}
+			p.i = save
+		}
 		return p.parseTarget()
 	default:
 		// A line that isn't a recognized statement but has a top-level ':' is a

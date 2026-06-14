@@ -10,14 +10,48 @@ import (
 	"strings"
 )
 
-// fileMethod implements the reader methods on a file handle (from open()). Reads
-// happen here, lazily, when the method is called — open() itself only records the
-// path. Keyword arguments configure the readers (header, sep, comment, …).
+// writeHandle is the shared, mutable state behind a "w"/"a" file handle: the open
+// file plus its closed flag. Under dry-run it holds no file and every operation is
+// a no-op. Copies of a FileVal share one writeHandle, so write/close act on the
+// same file regardless of which copy is used.
+type writeHandle struct {
+	path   string
+	f      *os.File // nil under dry-run
+	closed bool
+	dryRun bool
+}
+
+func (h *writeHandle) write(s string) error {
+	if h.dryRun || h.f == nil {
+		return nil
+	}
+	if h.closed {
+		return fmt.Errorf("write to closed file %q", h.path)
+	}
+	_, err := h.f.WriteString(s)
+	return err
+}
+
+func (h *writeHandle) close() error {
+	if h.closed || h.dryRun || h.f == nil {
+		h.closed = true
+		return nil
+	}
+	h.closed = true
+	return h.f.Close()
+}
+
+// fileMethod implements the methods on a file handle (from open()). Read methods
+// (read_tsv, …) act lazily when called and require an "r" handle; write/writeln/
+// close require a "w"/"a" handle. open() itself only records the path (and, for a
+// write handle, opens the file).
 func fileMethod(f FileVal, name string, args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) != 0 {
+	// Every method except write/writeln takes no positional arguments.
+	if name != "write" && name != "writeln" && len(args) != 0 {
 		return nil, fmt.Errorf("file.%s() takes no positional arguments", name)
 	}
 	switch name {
+	// ---- introspection (any mode) ----
 	case "type":
 		return StrVal("file"), nil
 	case "path":
@@ -25,6 +59,38 @@ func fileMethod(f FileVal, name string, args []Value, kwargs map[string]Value) (
 	case "exists":
 		_, err := os.Stat(f.path)
 		return BoolVal(err == nil), nil
+
+	// ---- writing ("w"/"a" handle) ----
+	case "write", "writeln":
+		if f.w == nil {
+			return nil, fmt.Errorf("file.%s(): %q is not open for writing (use open(path, \"w\"))", name, f.path)
+		}
+		if len(args) != 1 {
+			return nil, fmt.Errorf("file.%s() takes 1 argument", name)
+		}
+		s := stringify(args[0])
+		if name == "writeln" {
+			s += "\n"
+		}
+		if err := f.w.write(s); err != nil {
+			return nil, err
+		}
+		return f, nil // chainable: f.write(a).write(b)
+	case "close":
+		if f.w == nil {
+			return nil, fmt.Errorf("file.close(): %q is not open for writing", f.path)
+		}
+		if err := f.w.close(); err != nil {
+			return nil, err
+		}
+		return UnsetVal{}, nil
+	}
+
+	// ---- reading ("r" handle) ----
+	if f.mode != "r" {
+		return nil, fmt.Errorf("file.%s(): %q is open for writing; cannot read", name, f.path)
+	}
+	switch name {
 	case "read":
 		if err := validateKwargs("file.read", kwargs); err != nil {
 			return nil, err

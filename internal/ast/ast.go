@@ -154,6 +154,13 @@ type (
 		Op     token.Kind
 		Value  Expr
 	}
+	// ExprStmt is a bare call expression used as a statement, evaluated for its
+	// side effect (e.g. `f.write("x")`, `f.close()`). Restricted to calls by the
+	// parser so other statement forms (notably targets) are unaffected.
+	ExprStmt struct {
+		PosV token.Pos
+		X    Expr
+	}
 	// Print writes its args to stdout (or, inside a body, appends to the script).
 	Print struct {
 		PosV token.Pos
@@ -248,6 +255,7 @@ type Body struct {
 }
 
 func (s *Assign) Pos() token.Pos   { return s.PosV }
+func (s *ExprStmt) Pos() token.Pos { return s.PosV }
 func (s *Print) Pos() token.Pos    { return s.PosV }
 func (s *Exit) Pos() token.Pos     { return s.PosV }
 func (s *Unset) Pos() token.Pos    { return s.PosV }
@@ -264,6 +272,7 @@ func (s *Export) Pos() token.Pos   { return s.PosV }
 func (s *Stage) Pos() token.Pos    { return s.PosV }
 
 func (*Assign) stmtNode()   {}
+func (*ExprStmt) stmtNode() {}
 func (*Print) stmtNode()    {}
 func (*Exit) stmtNode()     {}
 func (*Unset) stmtNode()    {}
