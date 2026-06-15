@@ -132,7 +132,7 @@
 
     "builtin": {
       "name": "support.function.builtin.cgp",
-      "match": "(?<![\\w.])(print|exit|unset|include|snippet|eval|sleep|dumpvars|showhelp|export|stage)\\b"
+      "match": "(?<![\\w.])(print|exit|unset|var|include|snippet|eval|sleep|dumpvars|showhelp|export|stage)\\b"
     },
 
     "reserved-target": {

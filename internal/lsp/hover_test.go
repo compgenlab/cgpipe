@@ -39,6 +39,20 @@ func TestHoverReservedTarget(t *testing.T) {
 	}
 }
 
+func TestHoverWithKeyword(t *testing.T) {
+	h := hoverAtPos("for s in xs with i {\n}", 0, 12) // cursor on "with"
+	if h == nil || !strings.Contains(h.Contents.Value, "with") {
+		t.Fatalf("expected hover doc for keyword `with`, got %+v", h)
+	}
+}
+
+func TestHoverVarDeclaration(t *testing.T) {
+	h := hoverAtPos("var last", 0, 0) // cursor on "var"
+	if h == nil || !strings.Contains(h.Contents.Value, "var") {
+		t.Fatalf("expected hover doc for `var`, got %+v", h)
+	}
+}
+
 func TestHoverPlainVariableIsNil(t *testing.T) {
 	if h := hoverAtPos("x = 1", 0, 0); h != nil { // "x" is a user variable, not documented
 		t.Errorf("expected nil hover for a plain variable, got %+v", h)

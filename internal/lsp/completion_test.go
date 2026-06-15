@@ -23,6 +23,9 @@ func TestCompletionsIncludeKeywordsBuiltinsAndReserved(t *testing.T) {
 	if it, ok := findItem(items, "print"); !ok || it.Kind != ciFunction {
 		t.Errorf("built-in `print` = %+v (ok=%v), want kind ciFunction", it, ok)
 	}
+	if it, ok := findItem(items, "var"); !ok || it.Kind != ciFunction {
+		t.Errorf("built-in `var` = %+v (ok=%v), want kind ciFunction", it, ok)
+	}
 	if it, ok := findItem(items, "@default"); !ok || it.Kind != ciKeyword {
 		t.Errorf("reserved target `@default` = %+v (ok=%v), want kind ciKeyword", it, ok)
 	}

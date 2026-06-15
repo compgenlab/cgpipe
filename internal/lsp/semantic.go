@@ -107,7 +107,7 @@ func atStmtStart(prev token.Kind) bool {
 // semanticType maps a token to its semantic type, or ok=false to skip it.
 func semanticType(t token.Token, stmtStart bool) (int, bool) {
 	switch t.Kind {
-	case token.IF, token.ELIF, token.ELSE, token.FOR, token.IN, token.TRUE, token.FALSE:
+	case token.IF, token.ELIF, token.ELSE, token.FOR, token.IN, token.WITH, token.TRUE, token.FALSE:
 		return stKeyword, true
 	case token.STRING:
 		return stString, true
