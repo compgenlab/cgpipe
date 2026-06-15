@@ -1,6 +1,6 @@
 #!/bin/bash
 #BATCHQ -name merged.vcf
-#BATCHQ -afterok 1001_1,1001_2,1001_3
+#BATCHQ -afterok 1001
 #BATCHQ -input calls.chr1.vcf
 #BATCHQ -input calls.chr2.vcf
 #BATCHQ -input calls.chr3.vcf

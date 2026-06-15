@@ -1,6 +1,7 @@
 # A for-loop fan-out marked with `job.array` (the element's task index, via
 # `with i`) is submitted as ONE scheduler job array, not one job per element.
-# The gather depends on each element's per-task id (afterok:<id>_<i>).
+# A gather that consumes every element depends on the whole array by its base id
+# (afterok:<arrayid>); see array-subset.cgp for the per-task (partial) case.
 chroms = ["chr1", "chr2", "chr3"]
 calls  = []
 for c in chroms with i {

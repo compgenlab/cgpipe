@@ -33,8 +33,9 @@ merged.vcf: @{calls} {{
 @default: merged.vcf
 `
 
-// A for-loop marked with job.array submits as one scheduler array (--array=1-N)
-// and the gather depends on each element's per-task id (afterok:<id>_<i>).
+// A for-loop marked with job.array submits as one scheduler array (--array=1-N).
+// A gather that consumes every element depends on the whole array by its base id
+// (afterok:<arrayid>), which the scheduler expands back to per-task edges.
 func TestPipelineArraySubmitsOneArray(t *testing.T) {
 	t.Chdir(t.TempDir())
 	os.WriteFile("aligned.bam", []byte("x\n"), 0o644)
@@ -44,11 +45,15 @@ func TestPipelineArraySubmitsOneArray(t *testing.T) {
 		"#SBATCH --array=1,2,3",
 		`case "$SLURM_ARRAY_TASK_ID" in`,
 		"call_variants --region chr2 aligned.bam > calls.chr2.vcf",
-		"#SBATCH -d afterok:dryrun.1_1:dryrun.1_2:dryrun.1_3", // gather → per-task ids
+		"#SBATCH -d afterok:dryrun.1", // full-array gather → collapsed base id
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("array dry-run missing %q\n--- got ---\n%s", want, out)
 		}
+	}
+	// The collapsed dep must NOT also list the per-task addresses.
+	if strings.Contains(out, "afterok:dryrun.1_1") {
+		t.Errorf("expected collapsed afterok:dryrun.1, got per-task ids:\n%s", out)
 	}
 }
 
@@ -76,8 +81,9 @@ func TestPipelineArraySparseRestart(t *testing.T) {
 }
 
 // An element-wise array→array edge (each downstream task depends on the matching
-// upstream task) needs aftercorr, which isn't supported yet → a clear error.
-func TestPipelineArrayElementWiseErrors(t *testing.T) {
+// upstream task) is wired as a single aftercorr directive on the partner array;
+// a gather over the whole downstream array then collapses to its base id.
+func TestPipelineArrayElementWiseAfterCorr(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, f := range []string{"in.chr1", "in.chr2"} {
 		os.WriteFile(f, []byte("x\n"), 0o644)
@@ -107,8 +113,57 @@ done: @{outs} {{
 }}
 @default: done
 `)
-	if code := run([]string{"-dr", "-r", "slurm", "p.cgp"}); code == 0 {
-		t.Fatal("element-wise array→array should error (needs aftercorr)")
+	out := captureStdout(t, func() int { return run([]string{"-dr", "-r", "slurm", "p.cgp"}) })
+	for _, want := range []string{
+		"#SBATCH -d aftercorr:dryrun.1", // array b ← array a, element-wise
+		"#SBATCH -d afterok:dryrun.2",   // gather over the whole array b
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("element-wise dry-run missing %q\n--- got ---\n%s", want, out)
+		}
+	}
+}
+
+// A broadcast — every element of one array depending on ALL of another array — is
+// a whole-array afterok (collapsed to the base id), NOT element-wise aftercorr.
+func TestPipelineArrayBroadcastNotAfterCorr(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, f := range []string{"in.chr1", "in.chr2"} {
+		os.WriteFile(f, []byte("x\n"), 0o644)
+	}
+	writeCGP(t, "p.cgp", `chroms = ["chr1", "chr2"]
+a = []
+for c in chroms with i {
+    a += "a.${c}"
+    ^a.${c}: in.${c} {{
+        job.array = i
+        job.name = "a"
+        --
+        echo ${input} > ${output}
+    }}
+}
+outs = []
+for c in chroms with i {
+    outs += "b.${c}"
+    ^b.${c}: @{a} {{
+        job.array = i
+        job.name = "b"
+        --
+        cat ${input} > ${output}
+    }}
+}
+done: @{outs} {{
+    --
+    cat ${input} > ${output}
+}}
+@default: done
+`)
+	out := captureStdout(t, func() int { return run([]string{"-dr", "-r", "slurm", "p.cgp"}) })
+	if !strings.Contains(out, "#SBATCH -d afterok:dryrun.1") {
+		t.Errorf("broadcast should be a whole-array afterok, got:\n%s", out)
+	}
+	if strings.Contains(out, "aftercorr") {
+		t.Errorf("broadcast must NOT be wired as aftercorr, got:\n%s", out)
 	}
 }
 

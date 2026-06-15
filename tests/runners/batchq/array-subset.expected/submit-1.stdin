@@ -1,0 +1,28 @@
+#!/bin/bash
+#BATCHQ -name call
+#BATCHQ -array 1,2,3
+#BATCHQ -input aligned.bam
+#BATCHQ -output calls.chr1.vcf
+#BATCHQ -output calls.chr2.vcf
+#BATCHQ -output calls.chr3.vcf
+#BATCHQ -wd .
+
+set -eo pipefail
+
+
+case "$BATCHQ_ARRAY_TASK_ID" in
+1)
+call_variants --region chr1 aligned.bam > calls.chr1.vcf
+
+;;
+2)
+call_variants --region chr2 aligned.bam > calls.chr2.vcf
+
+;;
+3)
+call_variants --region chr3 aligned.bam > calls.chr3.vcf
+
+;;
+*) echo "cgp: no array task $BATCHQ_ARRAY_TASK_ID" >&2; exit 1 ;;
+esac
+
