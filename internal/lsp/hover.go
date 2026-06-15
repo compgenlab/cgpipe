@@ -20,7 +20,7 @@ func hoverAt(src, file string, pos Position) *hoverResult {
 
 	var doc string
 	switch t.Kind {
-	case token.IF, token.ELIF, token.ELSE, token.FOR, token.IN, token.TRUE, token.FALSE:
+	case token.IF, token.ELIF, token.ELSE, token.FOR, token.IN, token.WITH, token.TRUE, token.FALSE:
 		doc = keywordDocs[t.Kind.String()]
 	case token.IDENT:
 		// A reserved target reads as AT followed by the name (e.g. @default).

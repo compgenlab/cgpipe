@@ -13,7 +13,7 @@ package ast
 // BuiltinStmts are the statement-leading built-in words, in a stable order
 // (used for completion ordering).
 var BuiltinStmts = []string{
-	"print", "exit", "unset", "include", "snippet",
+	"print", "exit", "unset", "var", "include", "snippet",
 	"eval", "sleep", "dumpvars", "showhelp", "export", "stage",
 }
 

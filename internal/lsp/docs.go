@@ -9,6 +9,7 @@ var builtinDocs = map[string]string{
 	"print":    "`print <expr>...` — evaluate the expressions and write them to stdout, space-separated.",
 	"exit":     "`exit [code]` — stop the pipeline immediately; the optional integer becomes cgp's exit status.",
 	"unset":    "`unset <name>` — remove a variable binding.",
+	"var":      "`var <name> [= <value>]` — declare a variable in the current lexical scope (a `{ }` block). A bare `name = …` writes through to an existing binding; `var` forces a new local one — which a deeper block can then assign through, and which owns any write handle bound to it (closed when the scope exits).",
 	"include":  "`include <path>` — splice another cgp file into this one.",
 	"snippet":  "`snippet <name> {{ ... }}` — define a reusable shell-body fragment, invoked as `@name` inside a `{{ }}` body.",
 	"eval":     "`eval <string>` — parse and run cgp source produced at runtime.",
