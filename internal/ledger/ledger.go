@@ -57,6 +57,11 @@ type Job struct {
 	Deps       []string          `json:"deps,omitempty"`
 	Script     string            `json:"script,omitempty"` // rendered job body (searchable)
 	Settings   map[string]string `json:"settings,omitempty"`
+	// ArrayID/TaskIndex are set when this job is one task of a scheduler array:
+	// JobID is then "<ArrayID>_<TaskIndex>". ArrayID being non-empty is the marker
+	// that this is an array task; a query by the bare array id matches every task.
+	ArrayID   string `json:"array_id,omitempty"`
+	TaskIndex int    `json:"task_index,omitempty"`
 }
 
 // record is one line in a JSONL file: a Job plus the ordering fields that let
@@ -402,13 +407,20 @@ func (l *Ledger) Vacuum() error {
 }
 
 // Filter selects jobs in Search. Empty fields are ignored; set fields are ANDed.
-// Name/Input/Output/Grep are substring (contains) matches; ID is exact.
+// Name/Input/Output/Grep are substring (contains) matches; ID matches a job id
+// exactly OR an array id (then every task "<arrayid>_<index>" of it).
 type Filter struct {
-	ID     string // exact job id
+	ID     string // a job id, or an array id (matches all its tasks)
 	Name   string // job name contains
 	Input  string // some input path contains
 	Output string // some output path contains
 	Grep   string // some job-script line contains
+}
+
+// matchID reports whether j is selected by an id filter: the job's own id, or
+// the array id it belongs to (so "<arrayid>" matches every "<arrayid>_<index>").
+func matchID(j Job, id string) bool {
+	return j.JobID == id || (j.ArrayID != "" && j.ArrayID == id)
 }
 
 // Search returns the ids of jobs matching the filter, ordered by submit time.
@@ -417,7 +429,7 @@ func (l *Ledger) Search(f Filter) ([]string, error) {
 	defer l.mu.Unlock()
 	var ids []string
 	for _, j := range l.sortedJobs() {
-		if f.ID != "" && j.JobID != f.ID {
+		if f.ID != "" && !matchID(j, f.ID) {
 			continue
 		}
 		if f.Name != "" && !strings.Contains(j.Name, f.Name) {
@@ -443,13 +455,18 @@ func (l *Ledger) Search(f Filter) ([]string, error) {
 func (l *Ledger) Dump(w io.Writer, only []string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	onlySet := map[string]bool{}
-	for _, id := range only {
-		onlySet[id] = true
-	}
 	for _, j := range l.sortedJobs() {
-		if len(onlySet) > 0 && !onlySet[j.JobID] {
-			continue
+		if len(only) > 0 {
+			matched := false
+			for _, id := range only {
+				if matchID(j, id) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
 		}
 		id := j.JobID
 		kv := func(key, val string) {
@@ -462,6 +479,10 @@ func (l *Ledger) Dump(w io.Writer, only []string) error {
 		kv("RUNID", j.RunID)
 		kv("NAME", j.Name)
 		kv("USER", j.User)
+		if j.ArrayID != "" {
+			kv("ARRAY", j.ArrayID)
+			fmt.Fprintf(w, "%s\tTASKINDEX\t%d\n", id, j.TaskIndex)
+		}
 		if j.SubmitTime != 0 {
 			fmt.Fprintf(w, "%s\tSUBMIT\t%d\n", id, j.SubmitTime)
 		}

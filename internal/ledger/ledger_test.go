@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -77,6 +78,57 @@ func TestDumpAndSearch(t *testing.T) {
 		t.Errorf("filtered dump leaked job 1001:\n%s", b2.String())
 	}
 }
+
+// Array tasks carry their array id and index; a query by the bare array id
+// matches every task, and the dump surfaces ARRAY/TASKINDEX.
+func TestArrayIDMatching(t *testing.T) {
+	l := open(t)
+	for i := 1; i <= 3; i++ {
+		if err := l.Record(Job{
+			JobID: "arr_" + itoa(i), ArrayID: "arr", TaskIndex: i, SubmitTime: int64(100 + i),
+			Outputs: []string{"calls." + itoa(i) + ".vcf"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A lone non-array job, to confirm the array id doesn't over-match.
+	if err := l.Record(Job{JobID: "solo", SubmitTime: 200, Outputs: []string{"merged.vcf"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The bare array id matches all three tasks; a specific task id matches one.
+	ids, err := l.Search(Filter{ID: "arr"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(ids)
+	if got := strings.Join(ids, ","); got != "arr_1,arr_2,arr_3" {
+		t.Errorf("Search(ID=arr) = %q, want arr_1,arr_2,arr_3", got)
+	}
+	if ids, _ := l.Search(Filter{ID: "arr_2"}); strings.Join(ids, ",") != "arr_2" {
+		t.Errorf("Search(ID=arr_2) = %v, want [arr_2]", ids)
+	}
+	if ids, _ := l.Search(Filter{ID: "solo"}); strings.Join(ids, ",") != "solo" {
+		t.Errorf("Search(ID=solo) = %v, want [solo]", ids)
+	}
+
+	// Dump by the array id returns all tasks with ARRAY/TASKINDEX, and no solo.
+	var b strings.Builder
+	if err := l.Dump(&b, []string{"arr"}); err != nil {
+		t.Fatal(err)
+	}
+	d := b.String()
+	for _, want := range []string{"arr_1\tARRAY\tarr", "arr_1\tTASKINDEX\t1", "arr_3\tTASKINDEX\t3"} {
+		if !strings.Contains(d, want) {
+			t.Errorf("dump missing %q in:\n%s", want, d)
+		}
+	}
+	if strings.Contains(d, "solo\t") {
+		t.Errorf("dump of array id leaked the solo job:\n%s", d)
+	}
+}
+
+func itoa(i int) string { return strconv.Itoa(i) }
 
 func open(t *testing.T) *Ledger {
 	t.Helper()

@@ -24,7 +24,7 @@ search filters (substring match; combined with AND):
     -o PATH      an output path contains PATH
     -g PATTERN   a job-script line contains PATTERN (grep)
     -name NAME   the job name contains NAME
-    -id JOBID    the job id (exact)
+    -id JOBID    a job id, or an array id (matches all its tasks)
 
 status options:
     -r RUNNER    scheduler to query (slurm/sge/pbs/batchq); defaults to cgp.runner from config
