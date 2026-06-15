@@ -4,3 +4,4 @@ line2
 quote:"q" slash:\
 unlisted:.d
 sigils:$x @{y}
+nested:a	b

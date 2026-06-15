@@ -1,0 +1,10 @@
+# A write handle opened with `var` inside a loop is flushed and closed at the end
+# of each iteration (its scope), so a later read sees the finished file. Handles
+# also close at end of evaluation as a backstop.
+for s in ["a", "b"] {
+    var f = open(s + ".txt", "w")
+    f.writeln("sample " + s)
+}
+print open("a.txt").read()
+print open("b.txt").read()
+exit

@@ -39,7 +39,8 @@ func Interpolate(raw string, vars map[string]Value) (string, error) {
 	for k, v := range vars {
 		sc.set(k, v)
 	}
-	ip := &interp{sc: sc, out: io.Discard, prog: &Program{Snippets: map[string]string{}, Exports: map[string]Value{}}}
+	ip := &interp{sc: sc, out: io.Discard, errOut: io.Discard, prog: &Program{Snippets: map[string]string{}, Exports: map[string]Value{}}, warnedWrites: map[string]bool{}}
+	defer ip.closeWrites()
 	return ip.interpolate(raw, modeString)
 }
 
@@ -228,18 +229,22 @@ func braceSpan(s string) int {
 	return -1
 }
 
-// unescapeBackslashes resolves `\X` -> `X` for every escape in s. Applied to a
-// ${…}/@{…} interior lifted from a "…" string literal, so the expression parser
-// sees real quotes (\" -> ") instead of the verbatim escapes the lexer preserved.
+// unescapeBackslashes undoes ONLY the `\"` the lexer preserved when a ${…}/@{…}
+// was written inside a "…" string literal: the interior had to escape its quotes
+// to survive the outer string, so `\"` -> `"` recovers real quotes for the
+// expression parser. Every other backslash is left verbatim — in particular a
+// nested string literal's own escapes (`\t`, `\\`, …) must reach that inner literal
+// intact so its own escape processing applies; collapsing them here would, e.g.,
+// turn `${ "a\tb" }` into "atb" instead of "a<tab>b".
 func unescapeBackslashes(s string) string {
-	if !strings.Contains(s, `\`) {
+	if !strings.Contains(s, `\"`) {
 		return s
 	}
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) {
-			b.WriteByte(s[i+1])
+		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '"' {
+			b.WriteByte('"')
 			i++
 			continue
 		}

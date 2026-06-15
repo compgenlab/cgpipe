@@ -175,6 +175,7 @@ To scatter a [sample sheet](13-Sample_Sheets.md) as an array, loop its rows with
 counter and set `job.array` to the index:
 
 ```
+bams = []
 for row in open("samples.tsv").read_tsv(header=true) with i {
     name = row["sample"]
     bams += "${name}.bam"

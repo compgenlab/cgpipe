@@ -19,6 +19,7 @@ type writeHandle struct {
 	f      *os.File // nil under dry-run
 	closed bool
 	dryRun bool
+	owned  bool // adopted by a scope frame (closed when that frame exits)
 }
 
 func (h *writeHandle) write(s string) error {

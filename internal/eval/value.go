@@ -44,14 +44,20 @@ type (
 		w    *writeHandle
 	}
 	// MapVal is an ordered, string-keyed map (the type readers return per row and
-	// the value of a {…} literal). keys preserves insertion/column order; m holds
-	// the values. The map is a reference type: copying a MapVal shares m, so a
-	// mutation via index assignment is written back to the owning variable.
-	MapVal struct {
-		keys []string
-		m    map[string]Value
-	}
+	// the value of a {…} literal). It is a reference type: the ordered keys and the
+	// values both live behind a shared *mapData pointer, so copying a MapVal (e.g.
+	// `n = m`, a scope capture, or passing it around) aliases the same underlying
+	// map — a mutation through any copy (index assignment, set) is seen by all of
+	// them, key order included.
+	MapVal struct{ *mapData }
 )
+
+// mapData is the shared backing of a MapVal: keys preserves insertion/column
+// order, m holds the values.
+type mapData struct {
+	keys []string
+	m    map[string]Value
+}
 
 func (IntVal) typeName() string   { return "int" }
 func (FloatVal) typeName() string { return "float" }
@@ -64,14 +70,15 @@ func (FileVal) typeName() string  { return "file" }
 func (MapVal) typeName() string   { return "map" }
 
 // newMap returns an empty MapVal ready for set().
-func newMap() MapVal { return MapVal{m: map[string]Value{}} }
+func newMap() MapVal { return MapVal{&mapData{m: map[string]Value{}}} }
 
-// set stores v under key k, appending k to the key order if new.
-func (mv *MapVal) set(k string, v Value) {
-	if _, ok := mv.m[k]; !ok {
-		mv.keys = append(mv.keys, k)
+// set stores v under key k, appending k to the key order if new. It mutates the
+// shared backing, so every MapVal aliasing this data observes the change.
+func (d *mapData) set(k string, v Value) {
+	if _, ok := d.m[k]; !ok {
+		d.keys = append(d.keys, k)
 	}
-	mv.m[k] = v
+	d.m[k] = v
 }
 
 func (r RangeVal) slice() []Value {
@@ -196,20 +203,102 @@ func asList(v Value) ([]Value, bool) {
 
 // ---- scope ----
 
-// Scope is a flat variable environment.
-type Scope struct{ vars map[string]Value }
+// Scope is one frame of a lexical scope chain. parent links to the enclosing
+// frame (nil for the root). handles holds write handles bound in THIS frame, which
+// are flushed/closed when the frame exits (see interp.popScope). A `{ }` block —
+// if/for body, target render — pushes a child frame; declarations (`var`) and
+// new-name assignments bind locally, while a bare assignment to an existing name
+// writes through to the frame that already holds it.
+type Scope struct {
+	vars    map[string]Value
+	parent  *Scope
+	handles []*writeHandle
+}
 
 func newScope() *Scope { return &Scope{vars: map[string]Value{}} }
 
-func (s *Scope) get(name string) (Value, bool) { v, ok := s.vars[name]; return v, ok }
-func (s *Scope) set(name string, v Value)      { s.vars[name] = v }
-func (s *Scope) has(name string) bool          { _, ok := s.vars[name]; return ok }
-func (s *Scope) del(name string)               { delete(s.vars, name) }
+// child returns a new frame nested inside s.
+func (s *Scope) child() *Scope { return &Scope{vars: map[string]Value{}, parent: s} }
 
+// root returns the bottom-most frame of the chain (the run/render root). Used as
+// the implicit home of the reserved job.*/cgp.* setting namespaces.
+func (s *Scope) root() *Scope {
+	for s.parent != nil {
+		s = s.parent
+	}
+	return s
+}
+
+// get resolves name up the chain, returning the nearest binding.
+func (s *Scope) get(name string) (Value, bool) {
+	for f := s; f != nil; f = f.parent {
+		if v, ok := f.vars[name]; ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// has reports whether name is bound anywhere in the chain.
+func (s *Scope) has(name string) bool { _, ok := s.get(name); return ok }
+
+// set binds name in THIS frame (used to seed a frame's own variables — defaults,
+// loop vars, input/output/stem — and as `var`'s local declaration).
+func (s *Scope) set(name string, v Value) { s.vars[name] = v }
+
+// frameOf returns the nearest frame that already binds name, or nil if none.
+func (s *Scope) frameOf(name string) *Scope {
+	for f := s; f != nil; f = f.parent {
+		if _, ok := f.vars[name]; ok {
+			return f
+		}
+	}
+	return nil
+}
+
+// assign implements a bare `name = v`: write to the nearest enclosing frame that
+// already binds name; if it is bound nowhere, create it in the current frame —
+// except reserved settings (job.* / cgp.*), which are implicitly declared at the
+// root so a conditional `job.mem`/`cgp.runner` inside a block still reaches the
+// engine. It returns the frame the binding landed in (for write-handle ownership).
+func (s *Scope) assign(name string, v Value) *Scope {
+	if f := s.frameOf(name); f != nil {
+		f.vars[name] = v
+		return f
+	}
+	target := s
+	if isReservedSetting(name) {
+		target = s.root()
+	}
+	target.vars[name] = v
+	return target
+}
+
+// isReservedSetting reports whether name is in the job.*/cgp.* setting namespace.
+func isReservedSetting(name string) bool {
+	return strings.HasPrefix(name, "job.") || strings.HasPrefix(name, "cgp.")
+}
+
+// del removes name from the nearest frame that binds it.
+func (s *Scope) del(name string) {
+	if f := s.frameOf(name); f != nil {
+		delete(f.vars, name)
+	}
+}
+
+// clone flattens the chain into a single detached root frame (inner frames shadow
+// outer), used to snapshot the scope at a target's definition for later render.
+// Handles are not carried over — they are owned by their live frame, not the snapshot.
 func (s *Scope) clone() *Scope {
 	c := newScope()
-	for k, v := range s.vars {
-		c.vars[k] = v
+	var frames []*Scope
+	for f := s; f != nil; f = f.parent {
+		frames = append(frames, f)
+	}
+	for i := len(frames) - 1; i >= 0; i-- { // root first so inner frames overwrite
+		for k, v := range frames[i].vars {
+			c.vars[k] = v
+		}
 	}
 	return c
 }

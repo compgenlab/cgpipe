@@ -1,0 +1,12 @@
+# A map is a reference type: assigning it to another name aliases the same
+# backing data, so a later mutation through one name is visible through the other
+# — values AND key order/length.
+m = {"a": 1}
+n = m
+m["b"] = 2          # mutate via m
+print n["b"]        # 2  (visible via n)
+print n.length()    # 2
+print n.keys()      # a b
+m["a"] = 99         # update an existing key via m
+print n["a"]        # 99
+exit

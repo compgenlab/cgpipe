@@ -41,11 +41,19 @@ see Reading/Writing files). `.type()` returns the type name.
 
 ## Variables
 ```
-x = 4            # set
+x = 4            # assign existing binding in scope, else create in current block
+var x            # declare x in the current scope (block-local; can shadow outer)
+var x = 4        # declare + initialize
 x ?= 9           # set only if unset (defaults; respects CLI/env/config)
 x += 2           # append (promotes scalar -> list)
 unset x          # remove
 ```
+Lexically block-scoped: every `{ }` (if/for body, target body) is a scope. A bare
+`x =` writes through to an enclosing binding if one exists, else makes a block-local
+that dies with the block — so a loop variable and a name first used inside a loop do
+NOT persist after it. Declare with `var` in an outer scope to keep a value:
+`var last` then `for s in xs { last = s }`. `job.*`/`cgp.*` settings assigned inside a
+block still take effect outside it. Write handles auto-close on scope exit.
 
 ## Command-line variables (double hyphen)
 `cgp p.cgp --sample s1 --threads 16` sets `sample`, `threads`. Rules:

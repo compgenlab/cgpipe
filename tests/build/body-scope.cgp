@@ -1,0 +1,12 @@
+# Block scoping in a {{ }} body: a `% for` body is a scope. A name declared with
+# `var` before the loop accumulates across iterations (a bare assignment inside
+# writes through to it); the loop variable is block-local to the loop.
+build.sh: {{
+    % var total = 0
+    % for x in [1, 2, 3] {
+    echo "step ${x}"
+    %   total = total + x
+    % }
+    echo "total ${total}"
+}}
+@default: build.sh
