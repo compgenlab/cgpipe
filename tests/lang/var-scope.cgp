@@ -1,0 +1,19 @@
+# `var x` declares x in the current scope. A bare `x = …` writes through to an
+# existing binding up the scope chain, or—if the name is new—creates it in the
+# current block, so it does not survive the block. Use `var` in an outer scope to
+# keep a value past a block.
+total = 0
+for n in [1, 2, 3] {
+    sq = n * n            # block-local: unset after the loop
+    total = total + sq    # writes through to the outer 'total'
+}
+print "total", total
+print sq                  # empty line: sq was block-local
+
+name = "outer"
+if true {
+    var name = "inner"    # shadows the outer 'name' for this block only
+    print "block", name
+}
+print "after", name
+exit

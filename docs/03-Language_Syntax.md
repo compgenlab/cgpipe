@@ -35,8 +35,8 @@ The first blank or non-comment line ends the help block.
 
 ## Types
 
-Six types. Typing is dynamic — you rarely name a type, and `.type()` returns it as
-a string.
+Eight types. Typing is dynamic — you rarely name a type, and `.type()` returns it
+as a string.
 
 ```
 flag    = true            # bool   (lowercase true / false)
@@ -45,6 +45,8 @@ rate    = 0.5             # float
 name    = "sample-1"      # string (always double-quoted)
 samples = ["s1", "s2"]    # list   (may mix types)
 chunks  = 1..100          # range  (1, 2, … 100 when iterated)
+row     = {"sample": "s1", "n": 3}   # map  (ordered, string-keyed)
+f       = open("samples.tsv")        # file (a handle to read from)
 ```
 
 A **range** stores only its bounds — never a materialized list — so `1..1000000`
@@ -56,14 +58,32 @@ for x in 5..1 { print x }    # 5 4 3 2 1
 print (1..10).contains(10)   # true
 ```
 
+A **map** is an ordered, string-keyed collection — the literal `{}` /
+`{"k": v, …}`. Read by key, `m["sample"]`, or by position, `m[0]` (an int index
+selects the i-th key). Assign with `m["k"] = v`; `m["k"] += v` accumulates a list
+(creating the map if unset). `for k in m` iterates keys in order; methods include
+`keys`, `has`, `get`, `values`, `items`, `length`. A `read_tsv()`/`read_json()`
+row is a map (see below).
+
+A **file** is a handle returned by `open(path[, mode])`; with the default `"r"` its
+reader methods turn a file on disk into cgp values: `read_tsv(...)`/`read_csv(...)`
+and `read_json()` return a list of maps, `read_lines(...)` a list of strings, and
+`read()` the whole file as one string. This is how a pipeline reads a sample sheet at
+evaluation time — see [Sample Sheets](13-Sample_Sheets.md). Opened with `"w"`
+(truncate) or `"a"` (append), a file is written with `write(s)`/`writeln(s)` and
+`close()` — these run at evaluation time and are no-ops under `-dr`.
+
 ## Variables
 
-No declarations; the only scopes are global and a per-target body closure. Four
-forms:
+cgp is lexically **block-scoped**: each `{ }` block (an `if`/`for` body, a per-target
+body) is a scope nested in the one around it. A bare `foo = …` assigns the existing
+`foo` if one is in scope, otherwise creates `foo` in the *current* block; `var foo`
+declares a new binding in the current scope. See [scoping](language-spec.md#65-scoping).
 
 | Form | Meaning |
 |------|---------|
-| `foo = expr`  | Set `foo` |
+| `foo = expr`  | Assign `foo` — the binding in scope, else a new one in the current block |
+| `var foo [= expr]` | Declare `foo` in the current scope (shadows any outer `foo`) |
 | `foo ?= expr` | Set `foo` **only if not already set** — the defaults workhorse |
 | `foo += expr` | Append to `foo` (promotes a scalar to a list) |
 | `unset foo`   | Remove `foo` |
@@ -142,6 +162,13 @@ f[:-1]    # a b c
 f[10:]    # (empty)
 ```
 
+A **map** indexes by key, `m["sample"]`, or by position, `m[0]` (an int index
+selects the i-th key in insertion order); a missing key is unset (empty).
+
+Some calls take **keyword arguments** after their positional ones —
+`open("s.tsv").read_tsv(header=false, sep="|")` — used by the reader methods to
+configure parsing. A positional argument may not follow a keyword one.
+
 ## String substitution
 
 Inside a `"…"` string literal:
@@ -181,14 +208,18 @@ print "$(echo ${name})"     # sample-1
 
 ### Escaping
 
-Inside a string literal a backslash escapes the next character: `\$` and `\@`
-produce a literal `$`/`@` (suppressing substitution), and `\"` a literal quote.
+Inside a string literal a backslash introduces an escape. The C-style escapes
+`\n \r \t \b \f \v \a \0` resolve to their control character; `\"`, `\\`, and `\'`
+are the literal character; `\$` and `\@` produce a literal `$`/`@` (suppressing
+substitution); any other `\X` resolves to `X` (the backslash is dropped).
 
 ```
 name = "bob"
 print "${name} vs \${name}"   # bob vs ${name}
 print "cost is \$5"           # cost is $5
 print "Hello \"world\"!"      # Hello "world"!
+print "col1\tcol2"            # a real tab between col1 and col2
+print "line1\nline2"          # two lines
 ```
 
 A string is one escape domain, resolved before the `${…}` interior is parsed, so a
@@ -232,7 +263,9 @@ element — handy for numbering iterations (e.g. [array task ids](09-Array_Jobs.
 for s in ["a", "b", "c"] with i { print i, s }   # 1 a / 2 b / 3 c
 ```
 
-Loop variables remain set after the loop (no separate scope) — the counter too.
+A loop body is a scope, so the loop variable (and the `with` counter) is block-scoped
+— unset after the loop. To keep a value, declare it with `var` before the loop and
+assign through it: `var last`, then `for s in xs { last = s }`.
 
 ## Statements
 
@@ -246,6 +279,7 @@ Loop variables remain set after the loop (no separate scope) — the counter too
 | `exit [code]` | Stop the pipeline (`exit` ⇒ `exit 0`); the code becomes cgp's exit status |
 | `dumpvars` | Print all in-scope variables (debug) |
 | `showhelp` | Print the help-text block |
+| *call* (e.g. `f.write("x")`) | A bare call on its own line runs for its side effect (how file writes are invoked) |
 
 ```
 eval "answer = 6 * 7"

@@ -81,6 +81,37 @@ func TestStringAndListOps(t *testing.T) {
 	}
 }
 
+func TestStringEscapes(t *testing.T) {
+	// keys are cgp source (raw backslashes); values are the expected resolved bytes.
+	cases := map[string]string{
+		`"a\tb"`:        "a\tb",
+		`"a\nb"`:        "a\nb",
+		`"x\\y"`:        "x\\y",
+		`"q\"q"`:        "q\"q",
+		`"\r\b\f\v\a"`:  "\r\b\f\v\a",
+		`"\0"`:          "\x00",
+		`"a\.b"`:        "a.b", // unlisted escape: \X -> X (backward compatible)
+		`"cost \$5"`:    "cost $5",
+		`"\@{x} stays"`: "@{x} stays",
+		`"it\'s"`:       "it's",  // \' is literal
+		`"end\\"`:       "end\\", // trailing escaped backslash (lexer + interp)
+	}
+	for src, want := range cases {
+		if got := stringify(evalExprStr(t, src, nil)); got != want {
+			t.Errorf("%s = %q, want %q", src, got, want)
+		}
+	}
+	// an escape adjacent to a real ${…} substitution
+	if got := stringify(evalExprStr(t, `"${nm}\tdone"`, map[string]Value{"nm": StrVal("S1")})); got != "S1\tdone" {
+		t.Errorf(`"${nm}\tdone" = %q, want "S1\tdone"`, got)
+	}
+	// a nested string literal inside a ${…} keeps its OWN C-escapes: the outer
+	// unescape only restores the escaped quotes, so \t survives to the inner literal.
+	if got := stringify(evalExprStr(t, `"${ \"a\tb\" }"`, nil)); got != "a\tb" {
+		t.Errorf(`"${ \"a\tb\" }" = %q, want "a\tb"`, got)
+	}
+}
+
 func TestComparisonsAndLogic(t *testing.T) {
 	cases := map[string]bool{
 		"1 < 2":            true,

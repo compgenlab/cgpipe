@@ -16,7 +16,7 @@ to a technique.
 | 8 | [Composing with include](tutorials/08-include.md) | shared defaults and target libraries across files |
 | 9 | [Containerized jobs](tutorials/09-containers.md) | Docker/Singularity wrapping, bind mounts, GPUs |
 | 10 | [Custom job-submission templates](tutorials/10-custom-templates.md) | site-specific scheduler templates |
-| 11 | [Manifest fan-out](tutorials/11-manifest-fanout.md) | run a pipeline once per sample row |
+| 11 | [Sample sheets](tutorials/11-sample-sheets.md) | scatter and gather a cohort from one sheet |
 | 12 | [Stage workflows](tutorials/12-stage-workflow.md) | chaining standalone pipelines with `stage`/`export` |
 | 13 | [Restartable pipelines and the ledger](tutorials/13-ledger-restart.md) | mtime restarts, `-force`, cross-run reuse |
 | 14 | [A status report](tutorials/14-status-report.md) | the `html` and `graphviz` runners |

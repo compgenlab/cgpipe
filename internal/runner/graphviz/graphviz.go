@@ -178,29 +178,6 @@ func writeEdges(b *strings.Builder, indent string, edges []Edge) {
 	}
 }
 
-// Labeled pairs a graph with a label (a manifest row's sample id).
-type Labeled struct {
-	Label string
-	Graph Graph
-}
-
-// DOTCombined renders several labeled graphs as one digraph, each in its own
-// `subgraph cluster_<i>` — used for a manifest run (one cluster per sample).
-func DOTCombined(secs []Labeled) string {
-	var b strings.Builder
-	b.WriteString("digraph cgp {\n")
-	b.WriteString("  rankdir=LR;\n")
-	b.WriteString("  node [shape=box, style=rounded];\n")
-	for i, s := range secs {
-		fmt.Fprintf(&b, "  subgraph cluster_%d {\n    label=%s;\n", i, quote(s.Label))
-		writeNodes(&b, "    ", s.Graph.Nodes)
-		writeEdges(&b, "    ", s.Graph.Edges)
-		b.WriteString("  }\n")
-	}
-	b.WriteString("}\n")
-	return b.String()
-}
-
 func hasWildcard(outs []string) bool {
 	for _, o := range outs {
 		if strings.Contains(o, "%") {

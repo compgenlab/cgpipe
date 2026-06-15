@@ -128,7 +128,8 @@ a default for your genome build in `~/.cgp/config`.
 - For a single-sample callset, swap `-ERC GVCF` + `MergeVcfs` for direct VCF output;
   for a cohort, keep the gVCFs and feed them to
   [Cohort joint genotyping](cohort-joint-genotyping.md).
-- Run it across many samples with a [manifest](../13-Manifests_and_Fanout.md).
+- Run it across many samples by wrapping the per-sample targets in a `for` loop over
+  a [sample sheet](../13-Sample_Sheets.md) (`open(sheet).read_tsv(header=true)`).
 
 See [Tutorial 4: Map-reduce](../tutorials/04-map-reduce.md) and
 [Tutorial 5: Opportunistic cleanup](../tutorials/05-opportunistic-cleanup.md).

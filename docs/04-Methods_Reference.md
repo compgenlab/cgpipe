@@ -105,6 +105,66 @@ print big.type()      # range
 print big.length()    # 1000000   (no million-element list is materialized)
 ```
 
+## map
+
+An ordered, string-keyed collection — the `{}` literal and the value
+`read_tsv()`/`read_json()` produce per row ([Sample Sheets](13-Sample_Sheets.md)).
+
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `get(key[, default])` | string or int | any | Value for `key` (or i-th by position); missing ⇒ `default` (or unset) |
+| `has(key)` | string | bool | Is `key` present |
+| `keys()` | — | list | Keys, in insertion/column order |
+| `values()` | — | list | Values, in key order |
+| `items()` | — | list | One `[key, value]` pair per entry |
+| `length()` | — | int | Number of entries |
+
+Also read/written by index — `m["k"]`, `m[0]` (positional), `m["k"] = v`,
+`m["k"] += v`. A field read keeps its type, so it chains:
+
+```
+row = open("samples.tsv").read_tsv()[0]
+print row["sample"]              # by name
+print row[0]                     # by position
+print row["bam"].basename()      # chains a string method
+```
+
+## file
+
+A handle from `open(path[, mode])` — `mode` is `"r"` (default), `"w"` (truncate), or
+`"a"` (append). Read methods need an `"r"` handle; write methods a `"w"`/`"a"` one.
+
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `read_tsv(...)` | kw: `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows |
+| `read_csv(...)` | kw: same, `sep=","` | list of map | Comma-delimited rows |
+| `read_json()` | — | list of map | A JSON array of objects |
+| `read_lines(...)` | kw: `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
+| `read()` | — | string | The whole file |
+| `write(s)` / `writeln(s)` | any | file | Write `s` (verbatim / with a trailing newline) |
+| `close()` | — | — | Flush and close (idempotent) |
+| `exists()` / `path()` | — | bool / string | Introspection |
+
+> `read_tsv`/`read_csv` default to `comment="#"`, so a line whose first character is
+> `#` is skipped — including a **header that starts with `#`** (e.g. a VCF-style
+> `#CHROM	POS …`). Pass `comment=""` to disable comment stripping when your header or
+> data legitimately begins with `#`.
+
+```
+samples = open("samples.tsv").read_tsv(header=true)   # list of maps
+ids     = open("ids.txt").read_lines(comment="#")     # list of strings
+
+f = open("params.txt", "w")                           # writes run at eval time
+f.writeln("ref=hg38")                                 # writeln adds the newline
+f.close()                                             # (no-op under -dr, with a warning)
+```
+
+A write handle is flushed and closed automatically when the scope its variable lives
+in exits (a `{ }` block, a loop iteration, a target render, or end of evaluation), so
+`close()` is optional; it stays valid and idempotent. Bind a handle with `var` to
+scope it to a block, or with `var` in an outer scope to keep it open across a loop —
+see [scoping](language-spec.md#65-scoping).
+
 ## int / float / bool
 
 Only `type()`. Arithmetic and comparison are done with operators (see

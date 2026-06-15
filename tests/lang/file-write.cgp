@@ -1,0 +1,15 @@
+# open(path, "w") returns a write handle; write() is verbatim, writeln() adds a
+# newline; close() flushes. A later read sees what was written.
+f = open("out.txt", "w")
+f.write("name=")
+f.writeln("sample-1")
+f.writeln("ok")
+f.close()
+
+# append mode adds to the end
+g = open("out.txt", "a")
+g.writeln("appended")
+g.close()
+
+print open("out.txt").read()
+exit

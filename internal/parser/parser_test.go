@@ -35,6 +35,26 @@ func TestAssign(t *testing.T) {
 	}
 }
 
+func TestCallStatement(t *testing.T) {
+	// A bare method call on its own line is an expression statement.
+	es, ok := only(t, `f.write("x")`).(*ast.ExprStmt)
+	if !ok {
+		t.Fatalf("got %#v, want *ast.ExprStmt", only(t, `f.write("x")`))
+	}
+	call, ok := es.X.(*ast.Call)
+	if !ok || call.Method != "write" {
+		t.Fatalf("ExprStmt.X = %#v, want a Call to write", es.X)
+	}
+	// A builtin free call statement too.
+	if _, ok := only(t, `f.close()`).(*ast.ExprStmt); !ok {
+		t.Fatalf("f.close() did not parse as an ExprStmt")
+	}
+	// A non-call, colon-less line still errors as a target declaration.
+	if _, err := Parse("foo bar\n", "t"); err == nil {
+		t.Fatalf("a non-call, colon-less line should still error as a target")
+	}
+}
+
 func TestDottedAssign(t *testing.T) {
 	a := only(t, `cgp.runner = "slurm"`).(*ast.Assign)
 	if a.Name != "cgp.runner" {

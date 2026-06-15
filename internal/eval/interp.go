@@ -17,9 +17,10 @@ var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
 // tmplMode selects the escape policy for a template. The two template sources
 // have opposite expectations for the backslash:
 //
-//   - modeString — a cgp "…" string literal. It is one escape domain: every
-//     `\X` resolves to `X` (the lexer kept escapes verbatim), including inside a
-//     ${…}/@{…}, so a nested string written `\"…\"` parses as `"…"`.
+//   - modeString — a cgp "…" string literal. C-style escapes apply: `\n \r \t \b
+//     \f \v \a \0` become their control byte; `\" \\ \'` are literal; any other
+//     `\X` resolves to `X` (the lexer kept escapes verbatim). A nested string's
+//     `\"` interior is unescaped one layer (see unescapeBackslashes) before parsing.
 //   - modeBody — a {{ }} raw-shell body. Only `\$` and `\@` are special (they
 //     suppress ${…}/@{…}/$(…)); every other backslash — `\"`, `\\`, `\n` — is
 //     shell text and passes through verbatim.
@@ -38,7 +39,8 @@ func Interpolate(raw string, vars map[string]Value) (string, error) {
 	for k, v := range vars {
 		sc.set(k, v)
 	}
-	ip := &interp{sc: sc, out: io.Discard, prog: &Program{Snippets: map[string]string{}, Exports: map[string]Value{}}}
+	ip := &interp{sc: sc, out: io.Discard, errOut: io.Discard, prog: &Program{Snippets: map[string]string{}, Exports: map[string]Value{}}, warnedWrites: map[string]bool{}}
+	defer ip.closeWrites()
 	return ip.interpolate(raw, modeString)
 }
 
@@ -77,10 +79,15 @@ func (ip *interp) expandTemplate(raw string, mode tmplMode) ([]string, error) {
 		c := raw[i]
 		switch {
 		case c == '\\' && i+1 < len(raw):
-			// modeString: every \X -> X. modeBody: only \$ and \@ are special
-			// (suppress interpolation); any other backslash is literal shell text.
+			// modeString: C-style escapes (\n \r \t \b \f \v \a \0) become their
+			// control byte; \" \\ \' are literal; any other \X -> X. modeBody: only
+			// \$ and \@ are special (suppress interpolation); any other backslash is
+			// literal shell text (the shell interprets its own escapes).
 			n := raw[i+1]
-			if mode == modeString || n == '$' || n == '@' {
+			if mode == modeString {
+				buf.WriteByte(stringEscape(n))
+				i += 2
+			} else if n == '$' || n == '@' {
 				buf.WriteByte(n)
 				i += 2
 			} else {
@@ -157,6 +164,33 @@ func (ip *interp) expandTemplate(raw string, mode tmplMode) ([]string, error) {
 	return result, nil
 }
 
+// stringEscape maps a backslash-escaped character in a "…" string literal to its
+// byte. The listed C-style escapes become their control byte; any other character
+// is returned as-is — the historical \X -> X rule — so \" \\ \' are literal and
+// e.g. \. -> '.'.
+func stringEscape(c byte) byte {
+	switch c {
+	case 'n':
+		return '\n'
+	case 'r':
+		return '\r'
+	case 't':
+		return '\t'
+	case 'b':
+		return '\b'
+	case 'f':
+		return '\f'
+	case 'v':
+		return '\v'
+	case 'a':
+		return '\a'
+	case '0':
+		return 0
+	default:
+		return c
+	}
+}
+
 // braceSpan returns the byte offset in s of the `}` that closes a ${…} or @{…}
 // whose opening has already been consumed, or -1 if unterminated. A double-quoted
 // substring is opaque (its braces are content, not structure), and \-escaped
@@ -195,18 +229,22 @@ func braceSpan(s string) int {
 	return -1
 }
 
-// unescapeBackslashes resolves `\X` -> `X` for every escape in s. Applied to a
-// ${…}/@{…} interior lifted from a "…" string literal, so the expression parser
-// sees real quotes (\" -> ") instead of the verbatim escapes the lexer preserved.
+// unescapeBackslashes undoes ONLY the `\"` the lexer preserved when a ${…}/@{…}
+// was written inside a "…" string literal: the interior had to escape its quotes
+// to survive the outer string, so `\"` -> `"` recovers real quotes for the
+// expression parser. Every other backslash is left verbatim — in particular a
+// nested string literal's own escapes (`\t`, `\\`, …) must reach that inner literal
+// intact so its own escape processing applies; collapsing them here would, e.g.,
+// turn `${ "a\tb" }` into "atb" instead of "a<tab>b".
 func unescapeBackslashes(s string) string {
-	if !strings.Contains(s, `\`) {
+	if !strings.Contains(s, `\"`) {
 		return s
 	}
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) {
-			b.WriteByte(s[i+1])
+		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '"' {
+			b.WriteByte('"')
 			i++
 			continue
 		}

@@ -33,8 +33,14 @@ or submitting. [Running Jobs](08-Running_Jobs.md#dry-runs).
 workflow as `${stage.name}`; a no-op when the pipeline runs standalone.
 [Workflows](12-Workflows.md#exposing-values-with-export).
 
-**Fan-out.** Running one pipeline once per row of a manifest (across a cohort).
-[Manifests and Fan-out](13-Manifests_and_Fanout.md).
+**Fan-out.** Emitting many independent targets from a loop — e.g. one per row of a
+sample sheet, or `cgp sub` over a list of files. Pairs with a **gather** target that
+depends on `@{…}` of the fanned-out outputs.
+[Sample Sheets](13-Sample_Sheets.md).
+
+**Gather.** A target that depends on every output of a scatter (via an accumulated
+list and `@{…}`), so it runs once they are all built.
+[Sample Sheets](13-Sample_Sheets.md).
 
 **Goal.** A target requested to be built — on the command line, or via `@default`.
 
@@ -43,9 +49,14 @@ owns (last produced) which output. Enables cross-run reuse; stores no mtimes and
 no job state.
 [The Ledger](11-The_Ledger.md).
 
-**Manifest.** A table (TSV/CSV/JSON) or glob of `.cgp` files whose rows each supply
-variables for one run of a pipeline.
-[Manifests and Fan-out](13-Manifests_and_Fanout.md).
+**Map.** An ordered, string-keyed collection — the `{}` literal and the value
+`read_tsv()`/`read_json()` produce per row. Read by key (`m["k"]`) or position
+(`m[0]`); `m["k"] += v` accumulates a list.
+[language-spec.md §2](language-spec.md#2-data-types).
+
+**Sample sheet.** A TSV/CSV/JSON table of samples, read in-pipeline with
+`open(path).read_tsv()` so a single graph can scatter per row and gather the cohort.
+[Sample Sheets](13-Sample_Sheets.md).
 
 **Opportunistic job.** A target with no outputs (`: inputs`) that runs only if its
 inputs already exist, never forcing them — the pattern for guarded cleanup.

@@ -1,0 +1,24 @@
+# Reading a sample sheet with open().read_tsv(): each row is an ordered map,
+# indexed by column name or position, and field values keep their type.
+samples = open("samples.tsv").read_tsv(header=true)
+print "rows:", samples.length()
+s = samples[0]
+print "by-name:", s["sample"], s["input"], s["n"]
+print "by-pos:", s[0], s[1], s[2]
+print "keys:", s.keys()
+print "basename:", s["input"].basename()
+print "n-plus-1:", s["n"] + 1
+print "missing:[", s["nope"], "]"
+
+# read_lines() returns raw lines, skipping comments
+print "ids:", open("ids.txt").read_lines(comment="#")
+
+# a {} map literal, mutation via +=, and key iteration: grouping samples
+groups = {}
+for row in samples {
+    groups[row["category"]] += row["sample"]
+}
+for cat in groups {
+    print "group", cat, "=", groups[cat]
+}
+exit

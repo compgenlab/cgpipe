@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- s1.sum ----
+
+wc -w < data/s1.txt > s1.sum
+
+
+# ---- s2.sum ----
+
+wc -w < data/s2.txt > s2.sum
+
+
+# ---- s3.sum ----
+
+wc -w < data/s3.txt > s3.sum
+
+
+# ---- cohort.txt ----
+
+cat s1.sum s2.sum s3.sum > cohort.txt
+
+

@@ -47,7 +47,7 @@ See [§6 Target bodies](#6-target-bodies) for what happens inside `{{ }}`.
 
 ## 2. Data types
 
-Six types: `bool`, `int`, `float`, `string`, `list`, `range`.
+Eight types: `bool`, `int`, `float`, `string`, `list`, `range`, `map`, `file`.
 
     flag    = true            # bool (case-sensitive: true / false)
     count   = 10              # int
@@ -56,18 +56,24 @@ Six types: `bool`, `int`, `float`, `string`, `list`, `range`.
     samples = []              # list
     samples = [1, 2, "x"]     # lists may mix types
     chunks  = 1..100          # range (1, 2, …, 100 when iterated)
+    row     = {"a": 1, "b": 2} # map: ordered, string-keyed
+    f       = open("s.tsv")   # file: a handle (read; open(p,"w"|"a") to write) — see §14
 
 Typing is dynamic; a value's type is mostly invisible. `.type()` returns the type name as a string. CLI argument values arrive as strings and are parsed to `int`/`float`/`bool` when they look like one.
+
+A **map** is an ordered, string-keyed collection — the literal `{}` / `{"k": v, …}`, and the value `read_tsv()`/`read_json()` produce per row (§14). Read a value by key with `m["k"]` (a missing key is unset, i.e. empty), or by position with `m[0]` (an `int` index selects the i-th key in insertion order). Keys are always strings; a string index is a key lookup, an int index is positional. Assign with `m["k"] = v`; `m["k"] += v` accumulates a list (and auto-creates the map if it is unset). Iterating a map (`for k in m`) yields its keys in order. Map methods are in §9.
 
 ---
 
 ## 3. Variables
 
-Set with `=`. No declarations; the only scopes are global and the per-target body closure ([§6.5](#65-scoping)).
+Set with `=`. A `{ }` block (an `if`/`for` body, a per-target body) is a lexical scope; see [§6.5](#65-scoping) for how assignment resolves across blocks.
 
 | Form | Meaning |
 |------|---------|
-| `foo = expr`  | Set `foo` |
+| `foo = expr`  | Assign `foo` — the existing binding if one is in scope, else a new one in the current block ([§6.5](#65-scoping)) |
+| `var foo`     | Declare `foo` in the current scope (unset); a slot a deeper block can assign through |
+| `var foo = expr` | Declare and initialize `foo` in the current scope (shadows any outer `foo`) |
 | `foo ?= expr` | Set `foo` only if not already set (defaults) |
 | `foo += expr` | Append to `foo` (promotes a scalar to a list) |
 | `unset foo`   | Remove `foo` from scope |
@@ -126,7 +132,7 @@ Inside a string literal:
 | `${{var}}` | Double evaluation — substitute, then evaluate the result as source |
 | `$(cmd)`   | Run `cmd` in the shell at parse time; substitute its stdout |
 
-Escaping: inside a `"…"` string literal a backslash escapes the next character — `\X` resolves to `X` — so `\$`/`\@` give a literal `$`/`@` (suppressing substitution) and `\"` gives a literal quote. This resolution applies across the whole string **including inside a `${…}`**, so an expression that needs a nested string literal escapes its quotes to survive the outer ones: `"${x.sub(\".bam\", \"\")}"`. A string nested inside a `${…}` inside a string is two escape layers deep, so a backslash that must reach the inner string (e.g. a regex `\.`) is written `\\\\`. If the whole string will be evaluated again, escape the substitution sigil twice (`\\$`).
+Escaping: inside a `"…"` string literal a backslash introduces an escape. The C-style escapes `\n \r \t \b \f \v \a \0` resolve to their control byte; `\"`, `\\`, and `\'` are the literal character; `\$`/`\@` give a literal `$`/`@` (suppressing substitution); and any **other** `\X` resolves to `X` (the backslash is dropped). This resolution applies across the whole string **including inside a `${…}`**, so an expression that needs a nested string literal escapes its quotes to survive the outer ones: `"${x.sub(\".bam\", \"\")}"`. A string nested inside a `${…}` inside a string is two escape layers deep, so a backslash that must reach the inner string (e.g. a regex `\.`) is written `\\\\`. If the whole string will be evaluated again, escape the substitution sigil twice (`\\$`).
 
 `${{var}}` (double-eval) is for when a variable's *content* is itself a template; `$(cmd)` runs at parse time and its command string is variable-substituted first.
 
@@ -152,10 +158,15 @@ Escaping: inside a `"…"` string literal a backslash escapes the next character
     for s in xs with i  { ... }            # `with i` binds a 1-based counter
     for cond            { ... }            # while-style: runs while cond is true
 
-Loop variables remain set after the loop (no separate scope). The optional
-`with <name>` clause (on the `for…in` form only) binds `<name>` to the **1-based**
-loop index, advancing each iteration; it is set alongside the element variable and
-likewise persists after the loop.
+A loop body is a scope (each iteration is its own frame), so the loop variable is
+**block-scoped** — it is unset once the loop ends. The optional `with <name>` clause
+(on the `for…in` form only) binds `<name>` to the **1-based** loop index, advancing
+each iteration; it is scoped the same way. To carry a value out of the loop, declare
+it with `var` *before* the loop and assign through it ([§6.5](#65-scoping)):
+
+    var last
+    for s in xs { last = s }               # writes through to the outer `last`
+    # `last` holds the final element here
 
 ### 5.2 Statement keywords
 
@@ -172,6 +183,10 @@ likewise persists after the loop.
 | `sleep seconds` | Pause. Rarely needed. |
 
 `include` runs in global context — the included file's statements and targets become part of the current pipeline. It's the primary composition mechanism for shared defaults and target libraries. (For sharing *body* fragments, use `snippet`/`@name` — see [§6.6](#66-snippets).)
+
+### 5.3 Call statements
+
+A **call** on its own line — `f.write("x")`, `f.close()` — is a statement, evaluated for its side effect (the return value is discarded). Only a call qualifies, so a line like `out.txt: …` is still a target. This is how the file-writing methods (§14) are invoked.
 
 ---
 
@@ -247,7 +262,28 @@ The non-`%` lines between `% for … {` and `% }` are shell, emitted once per lo
 A `%` statement whose expression has an open `(` or `[` continues onto the following `%` lines until the brackets balance (per [§1.1](#11-source-and-encoding)), so a list or call on `%` lines may span lines; consecutive `% for`/`% if` headers each open their own block.
 
 ### 6.5 Scoping
-A target captures the surrounding global context at definition time, like a closure. The body may *read* any variable in scope at definition; assignments inside the directive block are target-local and do not leak to the global scope. The loop variable in a body-defining `for` is captured per target.
+
+cgp is **lexically block-scoped**: each `{ }` block — an `if`/`for` body (every loop iteration is its own frame) and a target's render — is a scope nested in the one that encloses it.
+
+- **Reads** resolve outward: a name is looked up in the current block, then each enclosing block, out to the global scope.
+- **`var name` / `var name = expr`** declares a name in the *current* scope. This is the only way to introduce a new binding deliberately; it may shadow an outer name of the same name, and it owns any write handle assigned to it (closed when the scope exits, §14.1).
+- **A bare `name = expr`** (and `+=`, `?=`) resolves the name outward and assigns the *existing* binding if one is in scope; if the name is bound nowhere, it creates it in the *current* block — so a name first assigned inside a block does not survive the block. Declare it with `var` in an outer scope to keep it.
+
+      var last
+      for x in xs { last = x }    # bare `last =` finds the outer `var last` and writes through
+      # `last` survives here; a name first used *inside* the loop would not
+
+  This mirrors Ruby's block-local variables, with every `{ }` (including `if`/`for`) acting as the scope.
+
+- **Reserved settings — `job.*` and `cgp.*`** — are implicitly declared at the run/render root, so assigning one inside an `if`/`for` still takes effect outside the block (a conditional `job.mem` or `cgp.runner` reaches the engine):
+
+      target: in {{
+          if big { job.mem = "32G" }    # applies to the whole job, not just the if-block
+          --
+          run ...
+      }}
+
+A target captures the surrounding scope at definition time, like a closure (flattened to a snapshot): the body may *read* any variable in scope at definition, and the loop variable in a body-defining `for` is captured per target. Assignments inside the directive block apply to that job's render scope (and, for `job.*`, the job's settings); they do not leak back to the global scope. Each workflow **stage** runs as its own pipeline with a fresh global scope (only `export`s cross between stages); an `include` merges into the current scope.
 
 ### 6.6 Snippets
 Shared body fragments are defined with `snippet name {{ }}` and invoked with `@name` inside a body:
@@ -422,6 +458,44 @@ Also indexed, sliced, and appended with `+=`. `",".join(list)` (receiver-flipped
 ### 9.5 int / float / bool
 Only `type()`. No implicit coercion; an unknown method throws `Method not found`.
 
+### 9.6 map
+
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `get(key[, default])` | string or int | any | Value for `key` (or i-th by position); missing ⇒ `default` (or unset) |
+| `has(key)` | string | bool | Is `key` present |
+| `keys()` | — | list | Keys, in insertion/column order |
+| `values()` | — | list | Values, in key order |
+| `items()` | — | list | One `[key, value]` pair per entry |
+| `length()` | — | int | Number of entries |
+
+Also read/written by index: `m["k"]`, `m[0]`, `m["k"] = v`, `m["k"] += v` (§2). A field read keeps its type, so it chains: `row["bam"].basename()`, `row["n"] + 1`.
+
+### 9.7 file
+
+A file handle from `open(path[, mode])` — `mode` is `"r"` (default, read), `"w"`
+(create/truncate), or `"a"` (create/append). Read methods require an `"r"` handle;
+`write`/`writeln`/`close` a `"w"`/`"a"` handle. Reads happen when a reader method is
+called; writes happen at evaluation time (§14).
+
+| Method | Args | Returns | Description |
+|--------|------|---------|-------------|
+| `read_tsv(...)` | kw: `header=true`, `sep="\t"`, `comment="#"`, `skip=0`, `raw=false` | list of map | Tab-delimited rows as maps keyed by header |
+| `read_csv(...)` | kw: same, `sep=","` | list of map | Comma-delimited rows |
+| `read_json()` | — | list of map | A JSON array of objects |
+| `read_lines(...)` | kw: `comment=""`, `skip=0`, `blank=true` | list of string | Raw lines |
+| `read()` | — | string | The whole file |
+| `write(s)` | any | file | Write `s` verbatim; returns the handle (chains) |
+| `writeln(s)` | any | file | Write `s` followed by a newline |
+| `close()` | — | — | Flush and close (idempotent) |
+| `exists()` / `path()` | — | bool / string | Handle introspection |
+
+With `header=false`, delimited columns are keyed positionally as `c0`, `c1`, …. Cells are auto-typed (`"3"`→int) unless `raw=true`. See §14. (`writeln` appends a newline; `"\n"` in a string is also a real newline — see the escape rules in §4.3.)
+
+### 9.8 Keyword arguments
+
+A call may take keyword arguments after its positional ones: `f.read_tsv(header=false, sep="|")`. Used by the reader methods (above) to configure parsing; an unknown keyword is an error. A positional argument may not follow a keyword one.
+
 ---
 
 ## 10. The ledger (job tracking)
@@ -462,7 +536,7 @@ The `submit_time` field (whole seconds) is the job's recorded submission time, u
 - **Vacuum** (`cgp ledger vacuum`): re-fold the directory, write the jobs that still own at least one output to a fresh `snapshot.jsonl` (temp file + atomic rename), then remove the per-process logs that were folded. The last owner of each path survives even if it failed. Logs still being appended by a live local process are left in place and reclaimed by a later vacuum once idle, so run it when the ledger is otherwise quiet.
 
 ### 10.4 Restart
-Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. The `-force` option rebuilds every target in the goal graph regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` across many manifest-fan-out runs is stat-ed once, not per run).
+Restart is **mtime-based**, make-style: an output is rebuilt if it is missing or older than any input. The `-force` option rebuilds every target in the goal graph regardless. There are no "restart modes." The performance win at scale is a **run-scoped stat cache**: within one invocation each path is `stat`-ed once and reused (e.g. a shared `ref.fa` referenced by every sample's target is stat-ed once, not per target).
 
 Because staleness is mtime-based and cgp tracks ownership, **not** job success (only the scheduler knows that), a job killed mid-write can leave a half-written output that looks current and is skipped on restart. The recommended user-level guard is to write atomically — emit to a temp path and `mv` into place only on success (`cmd > ${output}.tmp && mv ${output}.tmp ${output}`) — so the final filename never exists in a partial state. This is an idiom, not a built-in: correctness depends on the temp and final paths sharing a filesystem and on a partial write being meaningful for the format, neither of which cgp can assume generically.
 
@@ -604,21 +678,82 @@ References to stage exports are checked two ways:
 
 ---
 
-## 14. Manifests and fan-out
+## 14. Reading files: sample sheets, scatter and gather
 
-A single pipeline (or workflow) can be run once per row of a **manifest**, with the row's columns supplied as variables. The format is always explicit — cgp never guesses from the extension:
+`open(path)` returns a **file** handle; its reader methods turn a sample sheet into data the pipeline can loop over. Reading happens at evaluation time, so the whole cohort lives in **one** dependency graph — you can scatter a per-sample target and then **gather** every sample's output into a downstream target, all in one pipeline.
 
-| Flag | Manifest format |
-|------|-----------------|
-| `-manifest FILE` (alias `-manifest-cgp`) | A shell glob of `.cgp` manifest files; each matched file's variables become one run |
-| `-manifest-tsv FILE` | Tab-separated; the header row names the columns |
-| `-manifest-csv FILE` | Comma-separated; the header row names the columns |
-| `-manifest-json FILE` | A JSON array of objects; each object's keys become variables |
+    samples = open("samples.tsv").read_tsv(header=true)   # list of maps, one per row
 
-    $ cgp align.cgp -manifest-tsv samples.tsv          # one run per data row
-    $ cgp wgs.cgp   -manifest /data/P*/manifest.cgp    # one workflow run per patient file
+| Reader | Returns | Notes |
+|--------|---------|-------|
+| `read_tsv(...)` / `read_csv(...)` | list of map | Header row names the columns; cells auto-typed (§9.7) |
+| `read_json()` | list of map | A JSON array of objects |
+| `read_lines(...)` | list of string | Raw lines (comment- and blank-aware) |
+| `read()` | string | The whole file |
 
-Each row runs the whole pipeline (or, for a workflow, all of its stages). Explicit command-line `--name value` variables override columns of the same name. A single **stat cache is shared across all runs**, so an invariant input like a shared `ref.fa` is `stat`-ed once rather than once per row. (Each row's pipeline graph is re-evaluated per row — per-row variables legitimately change which targets and branches exist — but the *parse* of the file happens once.)
+Each row is a `map`: read a column by name (`row["sample"]`) or position (`row[0]`). A field keeps its type, so it chains — `row["bam"].basename()`, `row["n"] + 1`.
+
+**Scatter and gather** — accumulate per-sample outputs into a list, then depend on `@{…}`:
+
+    samples = open("samples.tsv").read_tsv(header=true)
+    sums = []
+    for row in samples {
+        name = row["sample"]
+        out  = name + ".sum"
+        sums += out
+        ${out}: ${row["input"]} {{
+            wc -w < ${input} > ${output}
+        }}
+    }
+    cohort.txt: @{sums} {{          # the gather
+        cat ${input} > ${output}
+    }}
+    @default: cohort.txt
+
+**Group by a column** — a map of lists buckets rows, then one gather per group:
+
+    groups = {}
+    for row in samples { groups[row["category"]] += row["sample"] + ".sum" }
+    for cat in groups {
+        ${cat}.report: @{groups[cat]} {{
+            cat ${input} > ${output}
+        }}
+    }
+
+> A column used inside a `"…"` string must be bound to a plain variable first (e.g. `name = row["sample"]`), because a nested `"` would close the string. In a target declaration or a `{{ }}` body, `${row["col"]}` is written as-is.
+
+### 14.1 Writing files
+
+`open(path, "w")` (truncate) or `open(path, "a")` (append) returns a write handle;
+`write(s)` writes verbatim, `writeln(s)` appends a newline, `close()` flushes.
+`"\n"` in a string is a real newline (§4.3 escape rules), so `write("a\nb\n")` and
+`writeln`-style calls are equivalent ways to get line breaks.
+
+    f = open("params.txt", "w")
+    f.writeln("sample=${sample}")
+    f.writeln("ref=${ref}")
+    f.close()
+
+`close()` is optional: a write handle is flushed and closed automatically when the
+scope its variable lives in exits (§6.5) — the end of a `{ }` block (each loop
+iteration), the end of a target's render, or the end of evaluation. Closing is
+idempotent, so an explicit `close()` is still fine. To scope a handle to a block, bind
+it with `var` there; to keep one open across a loop, declare it with `var` in the
+enclosing scope:
+
+    var manifest = open("manifest.tsv", "w")
+    for row in samples { manifest.writeln(row["sample"]) }   # one handle, closed after the loop
+
+Writes happen at **evaluation time** (like `$(…)` and reads), so they occur whenever
+the script is evaluated. **Under `-dr` they are no-ops** — `open`-for-write, `write`,
+and `close` do nothing and cgp prints `dry-run: not writing to file "…"` once per
+path. (Dry-run is the only safe-preview signal known before evaluation; to inspect a
+write-bearing pipeline with no side effects, add `-dr`.)
+
+Because an eval-time write is not a graph node, a file a **job consumes** is usually
+better produced by a **target body** (`params.txt: {{ printf … > ${output} }}`) so it
+is stale-checked, scheduled, and present under `-dr`. Reserve `open(…,"w")` for files
+*outside* the dependency graph — logs, sidecar metadata, a derived list.
 
 ---
 
@@ -642,11 +777,10 @@ The default runner is `shell`, which **assembles the stale targets into one runn
 | `-dr` | Dry run — render the scripts instead of executing/submitting. |
 | `-force` | Rebuild every target in the goal graph, ignoring staleness ([§10.4](#104-restart)). |
 | `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` (also `cgp.runner`). |
-| `-manifest*` | Manifest fan-out ([§14](#14-manifests-and-fan-out)). |
 
 `-r graphviz` writes the dependency graph as Graphviz DOT to stdout (pipe to `dot -Tsvg`). `-r html` writes a **self-contained HTML status report** of the DAG to stdout: each output is colored by status — *done* (on disk), *running*/*queued* (its owning job is active in the scheduler, per the ledger), *failed* (owning job ended without producing it), or *pending* (not built). The report reads the ledger read-only, so it is safe to run while the pipeline is in flight.
 
-Both build the graph reachable from the goals (instantiating any wildcard rules along the way), not every declared target. Combined with a manifest ([§14](#14-manifests-and-fan-out)), they produce **one** document covering all rows — graphviz a single `digraph` with a `subgraph cluster` per row, html a single page with a section per row (labeled by the row's `sample`/`id`/`name` column, else `row N`).
+Both build the graph reachable from the goals (instantiating any wildcard rules along the way), not every declared target. Because a sample-sheet cohort ([§14](#14-reading-files-sample-sheets-scatter-and-gather)) is one graph, `-r graphviz`/`-r html` already render the whole cohort — scatter and gather — in a single document.
 
 ### 15.1 `cgp sub` — one-off submission
 Submits a single command as a job, using the same runners, settings, and ledger as a pipeline. The first token that is not a recognized option begins the command; everything from there until a bare `--` is the command, treated as a body (`${input}`/`${output}` substitute):

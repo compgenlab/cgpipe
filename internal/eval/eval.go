@@ -44,6 +44,7 @@ type Program struct {
 	Stages      []StageDecl       // workflow stage declarations (raw templates)
 	Exports     map[string]Value  // values exposed via `export` (for a calling workflow)
 	Scope       *Scope
+	DryRun      bool // propagated to render-time interps so body-directive writes no-op under -dr
 }
 
 // StageDecl is a workflow stage: run File with Args, exposing its exports as
@@ -124,15 +125,21 @@ type Options struct {
 	Configs []ConfigFile
 	Vars    map[string]Value
 	Out     io.Writer // destination for print (defaults to os.Stdout)
+	ErrOut  io.Writer // destination for warnings, e.g. dry-run write skips (defaults to os.Stderr)
+	DryRun  bool      // when true, open-for-write/write/close are no-ops (with a warning)
 }
 
 type interp struct {
-	file      string
-	dir       string // directory of the current file (for include resolution)
-	sc        *Scope
-	out       io.Writer
-	prog      *Program
-	including map[string]bool // include cycle guard (absolute paths)
+	file         string
+	dir          string // directory of the current file (for include resolution)
+	sc           *Scope
+	out          io.Writer
+	errOut       io.Writer
+	prog         *Program
+	including    map[string]bool // include cycle guard (absolute paths)
+	dryRun       bool            // open-for-write/write/close are no-ops when true
+	openWrites   []*writeHandle  // write handles to flush/close at end of eval
+	warnedWrites map[string]bool // dry-run write warnings already emitted (per path)
 }
 
 // seedJobDefaults pre-populates the global scope with the language-level job
@@ -152,16 +159,25 @@ func seedJobDefaults(sc *Scope) {
 // A call to exit surfaces as *ExitError.
 func Run(file *ast.File, opts Options) (*Program, error) {
 	ip := &interp{
-		file:      opts.File,
-		dir:       filepath.Dir(opts.File),
-		sc:        newScope(),
-		out:       opts.Out,
-		prog:      &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help},
-		including: map[string]bool{},
+		file:         opts.File,
+		dir:          filepath.Dir(opts.File),
+		sc:           newScope(),
+		out:          opts.Out,
+		errOut:       opts.ErrOut,
+		prog:         &Program{Snippets: map[string]string{}, Exports: map[string]Value{}, Help: file.Help, DryRun: opts.DryRun},
+		including:    map[string]bool{},
+		dryRun:       opts.DryRun,
+		warnedWrites: map[string]bool{},
 	}
 	if ip.out == nil {
 		ip.out = os.Stdout
 	}
+	if ip.errOut == nil {
+		ip.errOut = os.Stderr
+	}
+	// Flush and close any file handles left open by the script (a forgotten
+	// close()), on every return path.
+	defer ip.closeWrites()
 	seedJobDefaults(ip.sc)
 	// 1. config files, in order (system, user, env)
 	for _, cfg := range opts.Configs {
@@ -235,7 +251,13 @@ func (ip *interp) execStmts(stmts []ast.Stmt) error {
 func (ip *interp) execStmt(s ast.Stmt) error {
 	switch n := s.(type) {
 	case *ast.Assign:
+		if n.Target != nil {
+			return ip.execAssignIndex(n)
+		}
 		return ip.execAssign(n)
+	case *ast.ExprStmt:
+		_, err := ip.eval(n.X)
+		return err
 	case *ast.Print:
 		return ip.execPrint(n)
 	case *ast.Exit:
@@ -299,6 +321,8 @@ func (ip *interp) execStmt(s ast.Stmt) error {
 		}
 		ip.prog.Exports[n.Name] = v
 		return nil
+	case *ast.Var:
+		return ip.execVar(n)
 	case *ast.Stage:
 		ip.prog.Stages = append(ip.prog.Stages, StageDecl{Name: n.Name, File: n.File, Args: n.Args})
 		return nil
@@ -340,6 +364,22 @@ func (ip *interp) execInclude(n *ast.Include) error {
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
+// execVar evaluates a `var` declaration. It always binds in the CURRENT frame
+// (never writing through to an enclosing one), so it can shadow an outer name and
+// owns any write handle bound to it for scope-exit close.
+func (ip *interp) execVar(n *ast.Var) error {
+	var v Value = UnsetVal{}
+	if n.HasInit {
+		var err error
+		if v, err = ip.eval(n.Value); err != nil {
+			return err
+		}
+	}
+	ip.sc.set(n.Name, v)
+	ip.adoptHandle(ip.sc, v)
+	return nil
+}
+
 func (ip *interp) execAssign(n *ast.Assign) error {
 	v, err := ip.eval(n.Value)
 	if err != nil {
@@ -347,24 +387,89 @@ func (ip *interp) execAssign(n *ast.Assign) error {
 	}
 	switch n.Op {
 	case token.ASSIGN:
-		ip.sc.set(n.Name, v)
+		ip.adoptHandle(ip.sc.assign(n.Name, v), v)
 	case token.QASSIGN:
 		if !ip.sc.has(n.Name) {
-			ip.sc.set(n.Name, v)
+			ip.adoptHandle(ip.sc.assign(n.Name, v), v)
 		}
 	case token.PLUSASSIGN:
 		cur, ok := ip.sc.get(n.Name)
 		switch {
 		case !ok:
-			ip.sc.set(n.Name, ListVal{v})
+			ip.sc.assign(n.Name, ListVal{v})
 		default:
 			if lst, isList := cur.(ListVal); isList {
-				ip.sc.set(n.Name, append(append(ListVal{}, lst...), v))
+				ip.sc.assign(n.Name, append(append(ListVal{}, lst...), v))
 			} else {
-				ip.sc.set(n.Name, ListVal{cur, v})
+				ip.sc.assign(n.Name, ListVal{cur, v})
 			}
 		}
 	}
+	return nil
+}
+
+// execAssignIndex handles an index-target assignment `m[key] OP value`. The map
+// variable is auto-vivified (created empty) if unset, so the grouping idiom
+// `groups[cat] += out` needs no prior `groups = {}`. Keys are strings only.
+func (ip *interp) execAssignIndex(n *ast.Assign) error {
+	idxExpr := n.Target.(*ast.Index)
+	recvIdent, ok := idxExpr.Recv.(*ast.Ident)
+	if !ok {
+		return fmt.Errorf("%s: index assignment target must be a named variable", n.Pos())
+	}
+	keyVal, err := ip.eval(idxExpr.Idx)
+	if err != nil {
+		return err
+	}
+	ks, ok := keyVal.(StrVal)
+	if !ok {
+		return fmt.Errorf("%s: map assignment key must be a string, got %s", n.Pos(), keyVal.typeName())
+	}
+	key := string(ks)
+
+	base, exists := ip.sc.get(recvIdent.Name)
+	var mv MapVal
+	switch {
+	case !exists:
+		mv = newMap()
+	default:
+		if m, isMap := base.(MapVal); isMap {
+			mv = m
+		} else if _, unset := base.(UnsetVal); unset {
+			mv = newMap()
+		} else {
+			return fmt.Errorf("%s: cannot index-assign into %s", n.Pos(), base.typeName())
+		}
+	}
+
+	v, err := ip.eval(n.Value)
+	if err != nil {
+		return err
+	}
+	switch n.Op {
+	case token.ASSIGN:
+		mv.set(key, v)
+	case token.QASSIGN:
+		if _, ok := mv.m[key]; !ok {
+			mv.set(key, v)
+		}
+	case token.PLUSASSIGN:
+		cur, ok := mv.m[key]
+		switch {
+		case !ok:
+			mv.set(key, ListVal{v})
+		default:
+			if lst, isList := cur.(ListVal); isList {
+				mv.set(key, append(append(ListVal{}, lst...), v))
+			} else {
+				mv.set(key, ListVal{cur, v})
+			}
+		}
+	}
+	// Bind the (possibly freshly-vivified) map following the bare-assignment rule:
+	// an existing map is rebound where it already lives (a no-op for the shared
+	// reference); a new one lands in the current frame (or root for job.*/cgp.*).
+	ip.sc.assign(recvIdent.Name, mv)
 	return nil
 }
 
@@ -388,10 +493,14 @@ func (ip *interp) execIf(n *ast.If) error {
 			return err
 		}
 		if truthy(v) {
+			pop := ip.pushScope()
+			defer pop()
 			return ip.execStmts(n.Blocks[i])
 		}
 	}
 	if n.Else != nil {
+		pop := ip.pushScope()
+		defer pop()
 		return ip.execStmts(n.Else)
 	}
 	return nil
@@ -408,11 +517,17 @@ func (ip *interp) execFor(n *ast.For) error {
 			return fmt.Errorf("%s: for…in requires a list or range, got %s", n.Pos(), v.typeName())
 		}
 		for i, e := range items {
+			// Each iteration is its own scope: the loop variable/counter and any
+			// new names assigned in the body are block-local (they do not persist
+			// after the loop), and a write handle opened this pass closes here.
+			pop := ip.pushScope()
 			ip.sc.set(n.Var, e)
 			if n.IndexVar != "" { // `with i`: 1-based loop counter
 				ip.sc.set(n.IndexVar, IntVal(i+1))
 			}
-			if err := ip.execStmts(n.Body); err != nil {
+			err := ip.execStmts(n.Body)
+			pop()
+			if err != nil {
 				return err
 			}
 		}
@@ -423,14 +538,17 @@ func (ip *interp) execFor(n *ast.For) error {
 		if i >= maxLoopIterations {
 			return fmt.Errorf("%s: for-loop exceeded %d iterations", n.Pos(), maxLoopIterations)
 		}
-		v, err := ip.eval(n.Cond)
+		v, err := ip.eval(n.Cond) // condition reads the enclosing scope
 		if err != nil {
 			return err
 		}
 		if !truthy(v) {
 			return nil
 		}
-		if err := ip.execStmts(n.Body); err != nil {
+		pop := ip.pushScope()
+		err = ip.execStmts(n.Body)
+		pop()
+		if err != nil {
 			return err
 		}
 	}
@@ -554,11 +672,25 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 		return ip.evalIndex(n)
 	case *ast.Slice:
 		return ip.evalSlice(n)
-	case *ast.Call:
-		recv, err := ip.eval(n.Recv)
-		if err != nil {
-			return nil, err
+	case *ast.MapLit:
+		mv := newMap()
+		for _, ent := range n.Entries {
+			kv, err := ip.eval(ent.Key)
+			if err != nil {
+				return nil, err
+			}
+			ks, ok := kv.(StrVal)
+			if !ok {
+				return nil, fmt.Errorf("%s: map key must be a string, got %s", n.Pos(), kv.typeName())
+			}
+			vv, err := ip.eval(ent.Value)
+			if err != nil {
+				return nil, err
+			}
+			mv.set(string(ks), vv)
 		}
+		return mv, nil
+	case *ast.Call:
 		args := make([]Value, len(n.Args))
 		for i, a := range n.Args {
 			v, err := ip.eval(a)
@@ -567,13 +699,124 @@ func (ip *interp) eval(e ast.Expr) (Value, error) {
 			}
 			args[i] = v
 		}
-		r, err := callMethod(recv, n.Method, args)
+		var kwargs map[string]Value
+		if len(n.Kwargs) > 0 {
+			kwargs = make(map[string]Value, len(n.Kwargs))
+			for _, kw := range n.Kwargs {
+				v, err := ip.eval(kw.Value)
+				if err != nil {
+					return nil, err
+				}
+				kwargs[kw.Name] = v
+			}
+		}
+		if n.Recv == nil { // builtin free call, e.g. open("f")
+			r, err := ip.callBuiltin(n.Method, args, kwargs)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", n.Pos(), err)
+			}
+			return r, nil
+		}
+		recv, err := ip.eval(n.Recv)
+		if err != nil {
+			return nil, err
+		}
+		r, err := callMethod(recv, n.Method, args, kwargs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", n.Pos(), err)
 		}
 		return r, nil
 	}
 	return nil, fmt.Errorf("%s: cannot evaluate %T", e.Pos(), e)
+}
+
+// callBuiltin dispatches a free-function call (one whose AST Call has no receiver).
+// open(path[, mode]) is the only builtin today; "r" returns a lazy read handle,
+// "w"/"a" open the file for writing (a no-op under dry-run).
+func (ip *interp) callBuiltin(name string, args []Value, kwargs map[string]Value) (Value, error) {
+	switch name {
+	case "open":
+		if err := validateKwargs("open", kwargs); err != nil {
+			return nil, err
+		}
+		if len(args) < 1 || len(args) > 2 {
+			return nil, fmt.Errorf("open() takes a path and an optional mode")
+		}
+		path := stringify(args[0])
+		mode := "r"
+		if len(args) == 2 {
+			mode = stringify(args[1])
+		}
+		switch mode {
+		case "r":
+			return FileVal{path: path, mode: "r"}, nil
+		case "w", "a":
+			return ip.openWrite(path, mode)
+		default:
+			return nil, fmt.Errorf("open(): unknown mode %q (use \"r\", \"w\", or \"a\")", mode)
+		}
+	}
+	return nil, fmt.Errorf("unknown function %s()", name)
+}
+
+// openWrite opens path for writing ("w" truncates, "a" appends). Under dry-run it
+// opens nothing and returns a no-op handle, warning once per path.
+func (ip *interp) openWrite(path, mode string) (Value, error) {
+	if ip.dryRun {
+		if !ip.warnedWrites[path] {
+			ip.warnedWrites[path] = true
+			fmt.Fprintf(ip.errOut, "cgp: dry-run: not writing to file %q\n", path)
+		}
+		h := &writeHandle{path: path, dryRun: true}
+		ip.openWrites = append(ip.openWrites, h)
+		return FileVal{path: path, mode: mode, w: h}, nil
+	}
+	flag := os.O_CREATE | os.O_WRONLY
+	if mode == "a" {
+		flag |= os.O_APPEND
+	} else {
+		flag |= os.O_TRUNC
+	}
+	fh, err := os.OpenFile(path, flag, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open(%q, %q): %w", path, mode, err)
+	}
+	h := &writeHandle{path: path, f: fh}
+	ip.openWrites = append(ip.openWrites, h)
+	return FileVal{path: path, mode: mode, w: h}, nil
+}
+
+// closeWrites flushes and closes any write handles the script left open. It is the
+// end-of-eval backstop; handles owned by a scope frame are already closed when that
+// frame exits (writeHandle.close is idempotent).
+func (ip *interp) closeWrites() {
+	for _, h := range ip.openWrites {
+		_ = h.close()
+	}
+}
+
+// adoptHandle ties a write handle to the frame its variable binds in, so the handle
+// is flushed/closed when that frame exits. A handle is adopted by exactly one frame
+// (the first binding); aliasing it (`g = f`) does not re-adopt it.
+func (ip *interp) adoptHandle(frame *Scope, v Value) {
+	if fv, ok := v.(FileVal); ok && fv.w != nil && !fv.w.owned {
+		fv.w.owned = true
+		frame.handles = append(frame.handles, fv.w)
+	}
+}
+
+// pushScope enters a child frame and returns a function that, when called, flushes
+// and closes the frame's owned write handles and restores the parent frame.
+func (ip *interp) pushScope() func() {
+	parent := ip.sc
+	ip.sc = parent.child()
+	child := ip.sc
+	return func() {
+		for _, h := range child.handles {
+			_ = h.close()
+		}
+		ip.sc = parent
+	}
 }
 
 func (ip *interp) evalUnary(n *ast.Unary) (Value, error) {
@@ -638,6 +881,29 @@ func (ip *interp) evalIndex(n *ast.Index) (Value, error) {
 	idx, err := ip.eval(n.Idx)
 	if err != nil {
 		return nil, err
+	}
+	// A map is indexed by string key (lookup; miss → unset) or int (positional
+	// lookup into the ordered keys). Keys are always strings, so the two never
+	// collide.
+	if mv, isMap := recv.(MapVal); isMap {
+		switch k := idx.(type) {
+		case StrVal:
+			if v, ok := mv.m[string(k)]; ok {
+				return v, nil
+			}
+			return UnsetVal{}, nil
+		case IntVal:
+			i := int(k)
+			if i < 0 {
+				i += len(mv.keys)
+			}
+			if i < 0 || i >= len(mv.keys) {
+				return nil, fmt.Errorf("%s: index %d out of range (len %d)", n.Pos(), int(k), len(mv.keys))
+			}
+			return mv.m[mv.keys[i]], nil
+		default:
+			return nil, fmt.Errorf("%s: map index must be a string key or int position, got %s", n.Pos(), idx.typeName())
+		}
 	}
 	// A range yields its i-th value arithmetically — no need to materialize the
 	// whole sequence to read one element.

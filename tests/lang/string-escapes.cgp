@@ -1,0 +1,9 @@
+# C-style escapes in string literals: \n \t \" \\ become real control chars; an
+# unlisted escape keeps the historical \X -> X (the backslash is dropped).
+print "tab:\tend"
+print "line1\nline2"
+print "quote:\"q\" slash:\\"
+print "unlisted:\.\d"     # -> unlisted:.d
+print "sigils:\$x \@{y}"  # -> sigils:$x @{y}  (suppressed substitution)
+print "nested:${ \"a\tb\" }"  # nested string keeps its own \t -> nested:a<tab>b
+exit

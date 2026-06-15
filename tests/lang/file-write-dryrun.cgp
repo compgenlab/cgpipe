@@ -1,0 +1,7 @@
+# Under -dr, open-for-write / write / close are no-ops and cgp warns once per
+# path; the file is never created. (See the .args sidecar: -dr.)
+f = open("skip.txt", "w")
+f.writeln("nothing is written")
+f.close()
+print "done"
+exit

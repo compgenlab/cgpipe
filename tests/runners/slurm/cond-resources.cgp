@@ -1,0 +1,17 @@
+# A directive's `if`/`for` is a lexical scope, but reserved `job.*` settings are
+# hoisted to the job's render scope — so a `job.mem` set inside an `if` (or a
+# `job.custom +=` inside a `for`) still reaches the scheduler.
+big = true
+out.bam: {{
+    job.name = "align"
+    if big {
+        job.mem   = "16G"
+        job.procs = 8
+    }
+    for opt in ["--exclusive", "--constraint=haswell"] {
+        job.custom += opt
+    }
+    --
+    echo aligning > ${output}
+}}
+@default: out.bam

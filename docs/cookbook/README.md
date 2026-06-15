@@ -9,9 +9,9 @@ in your reference and reads and they're ready to run.
 | Recipe | Workflow | cgp patterns it shows |
 |--------|----------|-----------------------|
 | [Reference preparation](reference-preparation.md) | build bwa / faidx / dict indexes | prerequisite targets, an `all` aggregator |
-| [FASTQ QC & trimming](fastq-qc-trim.md) | fastp + FastQC | multi-output targets, manifest fan-out |
+| [FASTQ QC & trimming](fastq-qc-trim.md) | fastp + FastQC | multi-output targets, sample-sheet scatter |
 | [DNA-seq variant calling](dnaseq-variant-calling.md) | bwa → markdup → BQSR → HaplotypeCaller | **scatter-gather**, temp files (`^`), opportunistic cleanup |
-| [RNA-seq quantification](rnaseq-quantification.md) | STAR → ngsutilsj bam-count | per-sample chains, manifest fan-out over a cohort |
+| [RNA-seq quantification](rnaseq-quantification.md) | STAR → ngsutilsj bam-count | per-sample chains, sample-sheet scatter+gather over a cohort |
 | [Cohort joint genotyping](cohort-joint-genotyping.md) | GenomicsDBImport → GenotypeGVCFs | gathering many samples → one, **`stage`/`export` workflows** |
 | [ChIP-seq / ATAC-seq peaks](chipseq-atac-peaks.md) | bowtie2 → MACS2 | **multi-input targets** (treatment vs. control) |
 

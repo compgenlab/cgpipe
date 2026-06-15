@@ -33,7 +33,31 @@ type (
 	// UnsetVal is the value of an unset variable. It is falsy and stringifies to ""
 	// in optional contexts; using it where a value is required is an error.
 	UnsetVal struct{}
+	// FileVal is a file handle returned by open(). It carries the path and an
+	// access mode ("r" read, "w" truncate, "a" append). Reader methods (read_tsv,
+	// …) hang off an "r" handle; write/writeln/close off a "w"/"a" handle. For a
+	// write handle, w points to the shared open file so copies of the value all
+	// write to and close the same file.
+	FileVal struct {
+		path string
+		mode string
+		w    *writeHandle
+	}
+	// MapVal is an ordered, string-keyed map (the type readers return per row and
+	// the value of a {…} literal). It is a reference type: the ordered keys and the
+	// values both live behind a shared *mapData pointer, so copying a MapVal (e.g.
+	// `n = m`, a scope capture, or passing it around) aliases the same underlying
+	// map — a mutation through any copy (index assignment, set) is seen by all of
+	// them, key order included.
+	MapVal struct{ *mapData }
 )
+
+// mapData is the shared backing of a MapVal: keys preserves insertion/column
+// order, m holds the values.
+type mapData struct {
+	keys []string
+	m    map[string]Value
+}
 
 func (IntVal) typeName() string   { return "int" }
 func (FloatVal) typeName() string { return "float" }
@@ -42,6 +66,20 @@ func (BoolVal) typeName() string  { return "bool" }
 func (ListVal) typeName() string  { return "list" }
 func (RangeVal) typeName() string { return "range" }
 func (UnsetVal) typeName() string { return "unset" }
+func (FileVal) typeName() string  { return "file" }
+func (MapVal) typeName() string   { return "map" }
+
+// newMap returns an empty MapVal ready for set().
+func newMap() MapVal { return MapVal{&mapData{m: map[string]Value{}}} }
+
+// set stores v under key k, appending k to the key order if new. It mutates the
+// shared backing, so every MapVal aliasing this data observes the change.
+func (d *mapData) set(k string, v Value) {
+	if _, ok := d.m[k]; !ok {
+		d.keys = append(d.keys, k)
+	}
+	d.m[k] = v
+}
 
 func (r RangeVal) slice() []Value {
 	var out []Value
@@ -80,6 +118,14 @@ func stringify(v Value) string {
 		return strings.Join(parts, " ")
 	case RangeVal:
 		return stringify(ListVal(x.slice()))
+	case FileVal:
+		return x.path
+	case MapVal:
+		parts := make([]string, len(x.keys))
+		for i, k := range x.keys {
+			parts[i] = k + "=" + stringify(x.m[k])
+		}
+		return strings.Join(parts, " ")
 	case UnsetVal:
 		return ""
 	}
@@ -101,6 +147,8 @@ func truthy(v Value) bool {
 		return len(x) > 0
 	case RangeVal:
 		return x.count() > 0 // a range always yields ≥1 value; avoids materializing it
+	case MapVal:
+		return len(x.keys) > 0
 	case UnsetVal:
 		return false
 	}
@@ -108,8 +156,8 @@ func truthy(v Value) bool {
 }
 
 // ParseScalar parses an external scalar string (a command-line value or a
-// manifest cell) into a typed value: true/false become bools, integer and float
-// literals become numbers, and anything else stays a string.
+// sample-sheet cell) into a typed value: true/false become bools, integer and
+// float literals become numbers, and anything else stays a string.
 func ParseScalar(s string) Value {
 	switch s {
 	case "true":
@@ -135,52 +183,219 @@ func StrList(ss []string) ListVal {
 	return out
 }
 
-// asList coerces lists and ranges to a slice of values for iteration.
+// asList coerces lists, ranges, and maps to a slice of values for iteration. A
+// map yields its keys (as strings) in order, so `for k in m` iterates keys.
 func asList(v Value) ([]Value, bool) {
 	switch x := v.(type) {
 	case ListVal:
 		return []Value(x), true
 	case RangeVal:
 		return x.slice(), true
+	case MapVal:
+		out := make([]Value, len(x.keys))
+		for i, k := range x.keys {
+			out[i] = StrVal(k)
+		}
+		return out, true
 	}
 	return nil, false
 }
 
 // ---- scope ----
 
-// Scope is a flat variable environment.
-type Scope struct{ vars map[string]Value }
+// Scope is one frame of a lexical scope chain. parent links to the enclosing
+// frame (nil for the root). handles holds write handles bound in THIS frame, which
+// are flushed/closed when the frame exits (see interp.popScope). A `{ }` block —
+// if/for body, target render — pushes a child frame; declarations (`var`) and
+// new-name assignments bind locally, while a bare assignment to an existing name
+// writes through to the frame that already holds it.
+type Scope struct {
+	vars    map[string]Value
+	parent  *Scope
+	handles []*writeHandle
+}
 
 func newScope() *Scope { return &Scope{vars: map[string]Value{}} }
 
-func (s *Scope) get(name string) (Value, bool) { v, ok := s.vars[name]; return v, ok }
-func (s *Scope) set(name string, v Value)      { s.vars[name] = v }
-func (s *Scope) has(name string) bool          { _, ok := s.vars[name]; return ok }
-func (s *Scope) del(name string)               { delete(s.vars, name) }
+// child returns a new frame nested inside s.
+func (s *Scope) child() *Scope { return &Scope{vars: map[string]Value{}, parent: s} }
 
+// root returns the bottom-most frame of the chain (the run/render root). Used as
+// the implicit home of the reserved job.*/cgp.* setting namespaces.
+func (s *Scope) root() *Scope {
+	for s.parent != nil {
+		s = s.parent
+	}
+	return s
+}
+
+// get resolves name up the chain, returning the nearest binding.
+func (s *Scope) get(name string) (Value, bool) {
+	for f := s; f != nil; f = f.parent {
+		if v, ok := f.vars[name]; ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// has reports whether name is bound anywhere in the chain.
+func (s *Scope) has(name string) bool { _, ok := s.get(name); return ok }
+
+// set binds name in THIS frame (used to seed a frame's own variables — defaults,
+// loop vars, input/output/stem — and as `var`'s local declaration).
+func (s *Scope) set(name string, v Value) { s.vars[name] = v }
+
+// frameOf returns the nearest frame that already binds name, or nil if none.
+func (s *Scope) frameOf(name string) *Scope {
+	for f := s; f != nil; f = f.parent {
+		if _, ok := f.vars[name]; ok {
+			return f
+		}
+	}
+	return nil
+}
+
+// assign implements a bare `name = v`: write to the nearest enclosing frame that
+// already binds name; if it is bound nowhere, create it in the current frame —
+// except reserved settings (job.* / cgp.*), which are implicitly declared at the
+// root so a conditional `job.mem`/`cgp.runner` inside a block still reaches the
+// engine. It returns the frame the binding landed in (for write-handle ownership).
+func (s *Scope) assign(name string, v Value) *Scope {
+	if f := s.frameOf(name); f != nil {
+		f.vars[name] = v
+		return f
+	}
+	target := s
+	if isReservedSetting(name) {
+		target = s.root()
+	}
+	target.vars[name] = v
+	return target
+}
+
+// isReservedSetting reports whether name is in the job.*/cgp.* setting namespace.
+func isReservedSetting(name string) bool {
+	return strings.HasPrefix(name, "job.") || strings.HasPrefix(name, "cgp.")
+}
+
+// del removes name from the nearest frame that binds it.
+func (s *Scope) del(name string) {
+	if f := s.frameOf(name); f != nil {
+		delete(f.vars, name)
+	}
+}
+
+// clone flattens the chain into a single detached root frame (inner frames shadow
+// outer), used to snapshot the scope at a target's definition for later render.
+// Handles are not carried over — they are owned by their live frame, not the snapshot.
 func (s *Scope) clone() *Scope {
 	c := newScope()
-	for k, v := range s.vars {
-		c.vars[k] = v
+	var frames []*Scope
+	for f := s; f != nil; f = f.parent {
+		frames = append(frames, f)
+	}
+	for i := len(frames) - 1; i >= 0; i-- { // root first so inner frames overwrite
+		for k, v := range frames[i].vars {
+			c.vars[k] = v
+		}
 	}
 	return c
 }
 
 // ---- methods ----
 
-func callMethod(recv Value, name string, args []Value) (Value, error) {
+func callMethod(recv Value, name string, args []Value, kwargs map[string]Value) (Value, error) {
 	switch r := recv.(type) {
+	case FileVal:
+		return fileMethod(r, name, args, kwargs)
+	case MapVal:
+		if err := noKwargs("map", name, kwargs); err != nil {
+			return nil, err
+		}
+		return mapMethod(r, name, args)
 	case StrVal:
+		if err := noKwargs("string", name, kwargs); err != nil {
+			return nil, err
+		}
 		return stringMethod(string(r), name, args)
 	case ListVal:
+		if err := noKwargs("list", name, kwargs); err != nil {
+			return nil, err
+		}
 		return listMethod([]Value(r), name, args)
 	case RangeVal:
+		if err := noKwargs("range", name, kwargs); err != nil {
+			return nil, err
+		}
 		return rangeMethod(r, name, args)
 	}
 	if name == "type" && len(args) == 0 {
 		return StrVal(recv.typeName()), nil
 	}
 	return nil, fmt.Errorf("method not found: %s.%s()", recv.typeName(), name)
+}
+
+// noKwargs reports an error if kwargs were passed to a method that takes none.
+func noKwargs(typ, name string, kwargs map[string]Value) error {
+	if len(kwargs) > 0 {
+		return fmt.Errorf("%s.%s() does not take keyword arguments", typ, name)
+	}
+	return nil
+}
+
+// mapMethod implements methods on a map. Field access is via indexing
+// (m["k"] / m[0]); these methods cover inspection and conversion.
+func mapMethod(mv MapVal, name string, args []Value) (Value, error) {
+	switch name {
+	case "type":
+		return StrVal("map"), nil
+	case "length":
+		return IntVal(len(mv.keys)), nil
+	case "keys":
+		return StrList(mv.keys), nil
+	case "values":
+		out := make(ListVal, len(mv.keys))
+		for i, k := range mv.keys {
+			out[i] = mv.m[k]
+		}
+		return out, nil
+	case "items":
+		out := make(ListVal, len(mv.keys))
+		for i, k := range mv.keys {
+			out[i] = ListVal{StrVal(k), mv.m[k]}
+		}
+		return out, nil
+	case "has":
+		if len(args) != 1 {
+			return nil, fmt.Errorf("map.has() takes 1 argument")
+		}
+		_, ok := mv.m[stringify(args[0])]
+		return BoolVal(ok), nil
+	case "get":
+		if len(args) < 1 || len(args) > 2 {
+			return nil, fmt.Errorf("map.get() takes a key and an optional default")
+		}
+		var def Value = UnsetVal{}
+		if len(args) == 2 {
+			def = args[1]
+		}
+		if iv, ok := args[0].(IntVal); ok { // positional lookup
+			i := int(iv)
+			if i < 0 {
+				i += len(mv.keys)
+			}
+			if i < 0 || i >= len(mv.keys) {
+				return def, nil
+			}
+			return mv.m[mv.keys[i]], nil
+		}
+		if v, ok := mv.m[stringify(args[0])]; ok {
+			return v, nil
+		}
+		return def, nil
+	}
+	return nil, fmt.Errorf("method not found: map.%s()", name)
 }
 
 // count returns the number of values a range yields without materializing them.

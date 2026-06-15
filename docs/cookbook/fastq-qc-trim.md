@@ -2,41 +2,50 @@
 
 The usual first step: trim adapters and low-quality bases, and produce a QC
 report. This recipe runs `fastp` (trim + report in one pass) and `FastQC` on the
-trimmed reads, per sample — and scales to a whole cohort with a manifest.
+trimmed reads, looping over every sample in a sample sheet so one run QCs the
+whole cohort.
 
 > Requires: `fastp`, `fastqc`.
 
 ```
 #!/usr/bin/env cgp
 #
-# Per-sample read QC and adapter/quality trimming. Run one sample, or a whole
-# cohort with a manifest:
+# Read QC and adapter/quality trimming for a whole cohort. Reads a sample sheet
+# and emits one fastp + FastQC chain per row:
 #
-#     cgp fastq-qc-trim.cgp --sample s1 --r1 fq/s1_R1.fq.gz --r2 fq/s1_R2.fq.gz
-#     cgp fastq-qc-trim.cgp -manifest-tsv samples.tsv          # one run per row
+#     cgp fastq-qc-trim.cgp --sheet samples.tsv
+#
+# samples.tsv has columns: sample, r1, r2
 
-if !sample { print "ERROR: --sample required"; exit 1 }
+if !sheet { print "ERROR: --sheet required"; exit 1 }
 
-# fastp does the trimming and emits a QC report in one pass.
-${sample}.trim.R1.fq.gz ${sample}.trim.R2.fq.gz ${sample}.fastp.json: ${r1} ${r2} {{
-    job.name  = "fastp-${sample}"
-    job.procs = 4
-    job.mem   = "4G"
-    --
-    fastp -i ${input[0]} -I ${input[1]} \
-          -o ${output[0]} -O ${output[1]} \
-          --json ${output[2]} --thread ${job.procs}
-}}
+samples = open(sheet).read_tsv(header=true)
+qc = []
+for row in samples {
+    sample = row["sample"]
+    qc += "${sample}.qc"
 
-# FastQC on the trimmed reads (a sentinel HTML marks completion).
-${sample}.trim.R1_fastqc.html: ${sample}.trim.R1.fq.gz {{
-    job.name = "fastqc-${sample}"
-    --
-    fastqc ${input}
-}}
+    # fastp does the trimming and emits a QC report in one pass.
+    ${sample}.trim.R1.fq.gz ${sample}.trim.R2.fq.gz ${sample}.fastp.json: ${row["r1"]} ${row["r2"]} {{
+        job.name  = "fastp-${sample}"
+        job.procs = 4
+        job.mem   = "4G"
+        --
+        fastp -i ${input[0]} -I ${input[1]} \
+              -o ${output[0]} -O ${output[1]} \
+              --json ${output[2]} --thread ${job.procs}
+    }}
 
-${sample}.qc: ${sample}.fastp.json ${sample}.trim.R1_fastqc.html
-@default: ${sample}.qc
+    # FastQC on the trimmed reads (a sentinel HTML marks completion).
+    ${sample}.trim.R1_fastqc.html: ${sample}.trim.R1.fq.gz {{
+        job.name = "fastqc-${sample}"
+        --
+        fastqc ${input}
+    }}
+
+    ${sample}.qc: ${sample}.fastp.json ${sample}.trim.R1_fastqc.html
+}
+@default: @{qc}
 ```
 
 ## What it shows
@@ -44,18 +53,15 @@ ${sample}.qc: ${sample}.fastp.json ${sample}.trim.R1_fastqc.html
 - **A multi-output target.** `fastp` produces two trimmed FASTQs *and* a JSON report
   in one job; the rule lists all three outputs and indexes them with
   `${output[0]}` … `${output[2]}`.
-- **Manifest fan-out.** Write the pipeline for one sample, then run it across a
-  cohort with `-manifest-tsv` — each row's `sample`/`r1`/`r2` columns become the
-  variables. See the [Manifests chapter](../13-Manifests_and_Fanout.md).
-- **A sentinel aggregator** (`${sample}.qc`) groups the two QC outputs into one goal.
+- **Sample-sheet scatter.** `open(sheet).read_tsv(header=true)` reads the sheet at
+  eval time and returns one map per row; the `for` loop emits a fastp + FastQC chain
+  per sample. A row column is read by name — `row["r1"]`, written as-is inside the
+  target declaration — while `sample` is bound to a plain var first so it can be used
+  inside `"..."` strings. See the [Sample Sheets chapter](../13-Sample_Sheets.md).
+- **A sentinel aggregator** (`${sample}.qc`) groups each sample's two QC outputs into
+  one goal; `@{qc}` gathers every sample's sentinel into the default goal.
 
 ## Run it
-
-One sample:
-
-```sh
-cgp fastq-qc-trim.cgp --sample s1 --r1 fq/s1_R1.fq.gz --r2 fq/s1_R2.fq.gz | bash
-```
 
 A cohort — `samples.tsv` with columns `sample`, `r1`, `r2`:
 
@@ -65,7 +71,7 @@ s1	fq/s1_R1.fq.gz	fq/s1_R2.fq.gz
 s2	fq/s2_R1.fq.gz	fq/s2_R2.fq.gz
 ```
 ```sh
-cgp -r slurm fastq-qc-trim.cgp -manifest-tsv samples.tsv
+cgp -r slurm fastq-qc-trim.cgp --sheet samples.tsv
 ```
 
 ## Adapt it
@@ -74,6 +80,6 @@ cgp -r slurm fastq-qc-trim.cgp -manifest-tsv samples.tsv
 - Swap `fastp` for `Trim Galore` or `cutadapt` — the rule shape is unchanged.
 - The trimmed FASTQs feed straight into the
   [DNA-seq](dnaseq-variant-calling.md) or [RNA-seq](rnaseq-quantification.md)
-  recipes — point their `--r1`/`--r2` at `${sample}.trim.R*.fq.gz`.
+  recipes — point their reads at `${sample}.trim.R*.fq.gz`.
 
-See [Tutorial 11: Manifest fan-out](../tutorials/11-manifest-fanout.md).
+See [Tutorial 11: Sample sheets](../tutorials/11-sample-sheets.md).
