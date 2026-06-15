@@ -37,14 +37,40 @@ func installBatchqStatus(t *testing.T, status map[string]string) {
 	dir := t.TempDir()
 	var cases strings.Builder
 	for id, st := range status {
-		fmt.Fprintf(&cases, "    %s) echo \"%s %s\" ;;\n", id, id, st)
+		fmt.Fprintf(&cases, "    %s) st=%s ;;\n", id, st)
 	}
-	script := "#!/bin/bash\n[ \"$1\" = status ] || exit 0\ncase \"$2\" in\n" +
-		cases.String() + "esac\nexit 0\n"
+	// Supports both `batchq status <id>` (echo "<id> <st>") and the machine form
+	// `batchq status --porcelain <id>` (printf "<id>\t<st>").
+	script := "#!/bin/bash\n[ \"$1\" = status ] || exit 0\n" +
+		"id=\"$2\"; porc=\n[ \"$2\" = --porcelain ] && { porc=1; id=\"$3\"; }\n" +
+		"st=\ncase \"$id\" in\n" + cases.String() + "esac\n" +
+		"[ -n \"$st\" ] || exit 0\n" +
+		"if [ -n \"$porc\" ]; then printf '%s\\t%s\\n' \"$id\" \"$st\"; else echo \"$id $st\"; fi\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(dir, "batchq"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// batchqPickStatus parses status output without shelling out, including the case
+// where a task-address query echoes the resolved UUID (not the queried id) in
+// field 0 — the parser must still read the status from that single line.
+func TestBatchqPickStatus(t *testing.T) {
+	const uuid = "4e5c6e40-4d70-4bab-a3a5-45b422f6886f"
+	cases := []struct {
+		name, id, out, want string
+	}{
+		{"plain job echoes id", "j-1", "j-1 RUNNING\n", "RUNNING"},
+		{"porcelain task addr", "arr_1", "arr_1\tPROXYQUEUED\n", "PROXYQUEUED"},
+		{"human task addr is resolved uuid", "arr_1", uuid + " PROXYQUEUED\n", "PROXYQUEUED"},
+		{"whole-array summary, no match", "arr", "array    : arr\ntasks    : 3 (0 done)\nstatus   : PROXYQUEUED 3\n", ""},
+		{"unknown / empty", "j-x", "", ""},
+	}
+	for _, c := range cases {
+		if got := batchqPickStatus(c.id, c.out); got != c.want {
+			t.Errorf("%s: batchqPickStatus(%q, %q) = %q, want %q", c.name, c.id, c.out, got, c.want)
+		}
+	}
 }
 
 func TestBatchqActiveAndState(t *testing.T) {

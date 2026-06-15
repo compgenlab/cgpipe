@@ -11,7 +11,15 @@ case "${1:-}" in
         ;;
     status)
         capture_call status "$@"
-        serve_response batchq "${2:-}" >/dev/null && exit 0
+        # Supports `status <id>` and `status --porcelain <id>`. A canned response
+        # (or, absent CGP_TEST_RESPONSES, the default) reports the job active.
+        id="${2:-}"; porc=
+        [ "${2:-}" = --porcelain ] && { porc=1; id="${3:-}"; }
+        if out=$(serve_response batchq "$id"); then
+            [ -n "$out" ] || out=PROXYQUEUED
+            if [ -n "$porc" ]; then printf '%s\t%s\n' "$id" "$out"; else echo "$id $out"; fi
+            exit 0
+        fi
         exit 1
         ;;
     release)

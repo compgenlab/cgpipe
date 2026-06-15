@@ -176,19 +176,44 @@ func slurmEndTime(id string) (int64, bool) {
 }
 
 // batchqStatus returns the status word BatchQ reports for a job (e.g. "RUNNING",
-// "SUCCESS"), or "" if the job is unknown or the query fails. `batchq status <id>`
-// prints one "<jobid> <STATUS>" line per job and exits 0 even for finished jobs —
-// so the status word, not the exit code, is what tells active from done.
+// "SUCCESS"), or "" if the job is unknown or the query fails. The status word, not
+// the exit code, tells active from done (batchq exits 0 even for finished jobs).
 func batchqStatus(id string) string {
+	// Prefer the stable machine-readable form: one "<queried-id>\t<STATUS>" line
+	// with the queried token echoed in field 0 — unambiguous for a task address
+	// "<arrayid>_<index>" or an array id (which the human format renders specially).
+	if out, err := exec.Command("batchq", "status", "--porcelain", id).Output(); err == nil {
+		if s := batchqPickStatus(id, string(out)); s != "" {
+			return s
+		}
+	}
+	// Fallback for a batchq without --porcelain.
 	out, err := exec.Command("batchq", "status", id).Output()
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		f := strings.Fields(line)
-		if len(f) >= 2 && f[0] == id {
+	return batchqPickStatus(id, string(out))
+}
+
+// batchqPickStatus extracts the status word for id from `batchq status` output.
+// A plain job / array id echoes the queried id in field 0 (matched directly); a
+// task address instead prints the resolved UUID there, so a single status line
+// from our single-id query is trusted by its status field regardless of field 0.
+// A multi-line whole-array summary with no id match yields "".
+func batchqPickStatus(id, out string) string {
+	var lines [][]string
+	for _, line := range strings.Split(out, "\n") {
+		if f := strings.Fields(line); len(f) >= 2 {
+			lines = append(lines, f)
+		}
+	}
+	for _, f := range lines {
+		if f[0] == id {
 			return f[1]
 		}
+	}
+	if len(lines) == 1 {
+		return lines[0][1]
 	}
 	return ""
 }
@@ -542,6 +567,28 @@ func (b *backend) PostSubmit(job *eval.Target, jobID string) error {
 	return nil
 }
 
+// reuseActiveOwner reports a still-active scheduler job that already owns one of
+// t's outputs (recorded in the ledger by a prior run / earlier stage), so a
+// restart can depend on it instead of resubmitting. Every output is checked, not
+// just the first: a target's outputs are produced by one job, but the first
+// output may be unowned while a later one is owned. Returns ("", false) with no
+// ledger or no active owner.
+func (b *backend) reuseActiveOwner(t *eval.Target) (string, bool) {
+	if b.ledger == nil {
+		return "", false
+	}
+	for _, out := range t.Outputs {
+		owner, ok, err := b.ledger.OwnerOf(out)
+		if err != nil || !ok || owner == "" {
+			continue
+		}
+		if b.sch.IsActive == nil || b.sch.IsActive(owner) {
+			return owner, true
+		}
+	}
+	return "", false
+}
+
 func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// Multiple inputs can come from one upstream (multi-output) job, so the same
 	// dependency id may appear more than once; collapse duplicates before wiring
@@ -549,19 +596,9 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	deps = dedupeIDs(deps)
 	// Cross-run reuse: if an existing job still owns any of this target's outputs
 	// and is still active in the scheduler, depend on it instead of resubmitting.
-	// Check every output (not just the first): a target's outputs are produced by
-	// one job, but the first output may be unowned while a later one is owned.
-	if b.ledger != nil {
-		for _, out := range t.Outputs {
-			owner, ok, err := b.ledger.OwnerOf(out)
-			if err != nil || !ok || owner == "" {
-				continue
-			}
-			if b.sch.IsActive == nil || b.sch.IsActive(owner) {
-				fmt.Fprintf(b.opts.Out, "# reuse: %s already owned by active job %s\n", runner.Label(t), owner)
-				return owner, nil
-			}
-		}
+	if owner, ok := b.reuseActiveOwner(t); ok {
+		fmt.Fprintf(b.opts.Out, "# reuse: %s already owned by active job %s\n", runner.Label(t), owner)
+		return owner, nil
 	}
 
 	vars, body, err := b.prog.JobContext(t)
@@ -649,22 +686,30 @@ func (b *backend) finalizeVars(vars map[string]eval.Value, body string, inputs, 
 
 // SubmitArray submits a group of array-member targets (parallel indices[]) as a
 // single scheduler job array, returning each member's per-task job id
-// (<arrayid>_<index>). The members must be submission-compatible (same job.*
-// settings apart from the index); the differing per-element commands become the
-// branches of a `case` keyed by the scheduler's task-id variable. Schedulers
-// without array support (ArrayTaskVar == "") fall back to one job per element.
-func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps []string) (map[*eval.Target]string, error) {
+// (<arrayid>_<index>) and the array's base id. The members must be
+// submission-compatible (same job.* settings apart from the index); the differing
+// per-element commands become the branches of a `case` keyed by the scheduler's
+// task-id variable. deps are shared afterok ids; aftercorr carries element-wise
+// array→array partner ids (one directive the scheduler expands per index).
+// Schedulers without array support (ArrayTaskVar == "") fall back to one job per
+// element and cannot express aftercorr.
+func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps, aftercorr []string) (map[*eval.Target]string, string, error) {
 	deps = dedupeIDs(deps)
+	aftercorr = dedupeIDs(aftercorr)
 	if b.sch.ArrayTaskVar == "" {
+		if len(aftercorr) > 0 {
+			return nil, "", fmt.Errorf("array %q: element-wise (aftercorr) dependencies need an array-capable scheduler (this is %s)",
+				runner.Label(members[0]), b.sch.Name)
+		}
 		out := make(map[*eval.Target]string, len(members))
 		for _, m := range members {
 			id, err := b.Submit(m, deps)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			out[m] = id
 		}
-		return out, nil
+		return out, "", nil
 	}
 
 	type elem struct {
@@ -672,24 +717,39 @@ func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps []stri
 		idx  int
 		body string
 	}
+	// out carries every member's resolved job id: reused (still-active) members
+	// keep their existing per-task id; the rest are submitted below as one array.
+	out := make(map[*eval.Target]string, len(members))
 	var elems []elem
 	var baseVars map[string]eval.Value
 	var baseSig string
 	for i, m := range members {
+		// Restart reuse: a member already owned by an active job is not
+		// resubmitted; it's excluded from the array and kept by its existing id.
+		if owner, ok := b.reuseActiveOwner(m); ok {
+			fmt.Fprintf(b.opts.Out, "# reuse: %s already owned by active job %s\n", runner.Label(m), owner)
+			out[m] = owner
+			continue
+		}
 		vars, body, err := b.prog.JobContext(m)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		sig := arraySignature(vars)
-		if i == 0 {
+		// Baseline from the first non-reused element (reused ones are gone).
+		if len(elems) == 0 {
 			baseVars, baseSig = vars, sig
 		} else if sig != baseSig {
-			return nil, fmt.Errorf("array %q: element %q is not submission-compatible with the first element "+
+			return nil, "", fmt.Errorf("array %q: element %q is not submission-compatible with the first element "+
 				"(differing job.* settings) — all array tasks share one set of resources/name; "+
 				"split the divergent element out or drop job.array",
 				runner.Label(members[0]), runner.Label(m))
 		}
 		elems = append(elems, elem{m, indices[i], body})
+	}
+	// Everything was reused (the whole array is still active) — nothing to submit.
+	if len(elems) == 0 {
+		return out, "", nil
 	}
 	sort.Slice(elems, func(i, j int) bool { return elems[i].idx < elems[j].idx })
 
@@ -711,6 +771,9 @@ func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps []stri
 	vars := baseVars
 	vars["job.array"] = eval.StrVal(spec.String())
 	b.finalizeVars(vars, casebody.String(), uniqueStrings(allIn), uniqueStrings(allOut), deps)
+	if len(aftercorr) > 0 {
+		vars["job.aftercorr"] = eval.StrVal(strings.Join(aftercorr, b.sch.DepSep))
+	}
 
 	script, err := b.prog.RenderText(b.sch.Template, vars)
 	if err != nil {
@@ -718,16 +781,15 @@ func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps []stri
 		if src == "" {
 			src = "built-in"
 		}
-		return nil, fmt.Errorf("runner %s: rendering array template (%s): %w", b.sch.Name, src, err)
+		return nil, "", fmt.Errorf("runner %s: rendering array template (%s): %w", b.sch.Name, src, err)
 	}
 	baseID, err := b.submitScript(runner.Label(members[0])+"[]", script)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Each element's outputs are owned by its own task id (<base>_<index>), so a
 	// downstream dependency resolves to the exact task that produces what it needs.
-	out := make(map[*eval.Target]string, len(elems))
 	for _, e := range elems {
 		taskID := baseID + "_" + strconv.Itoa(e.idx)
 		out[e.t] = taskID
@@ -738,11 +800,11 @@ func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps []stri
 				Outputs: e.t.Outputs, Temp: e.t.Temp, Inputs: e.t.Inputs, Deps: deps,
 				Script: e.body, Settings: jobSettings(vars),
 			}); err != nil {
-				return nil, fmt.Errorf("ledger record: %w", err)
+				return nil, "", fmt.Errorf("ledger record: %w", err)
 			}
 		}
 	}
-	return out, nil
+	return out, baseID, nil
 }
 
 // arraySignature is a deterministic fingerprint of a member's job.* settings,

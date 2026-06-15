@@ -1,0 +1,19 @@
+# A consumer that depends on only SOME of an array's elements wires per-task ids
+# (afterok:<id>_<i>) — the whole-array collapse applies only when every element is
+# consumed. Here the gather takes two of the three array outputs.
+chroms = ["chr1", "chr2", "chr3"]
+calls  = []
+for c in chroms with i {
+    calls += "calls.${c}.vcf"
+    ^calls.${c}.vcf: aligned.bam {{
+        job.array = i
+        job.name  = "call"
+        --
+        call_variants --region ${c} ${input} > ${output}
+    }}
+}
+partial.vcf: calls.chr1.vcf calls.chr2.vcf {{
+    --
+    bcftools concat ${input} > ${output}
+}}
+@default: partial.vcf

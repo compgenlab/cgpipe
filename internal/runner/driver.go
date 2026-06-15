@@ -14,11 +14,13 @@ import (
 )
 
 // arrayBackend is an optional Backend capability: submit a group of array-member
-// targets as one scheduler job array, returning each member's per-task job id. A
-// backend that doesn't implement it (shell, graphviz, …) falls back to submitting
-// each member individually.
+// targets as one scheduler job array, returning each member's per-task job id and
+// the array's base id (for downstream whole-array dependencies). deps are shared
+// afterok ids; aftercorr carries element-wise array→array partner ids. A backend
+// that doesn't implement it (shell, graphviz, …) falls back to submitting each
+// member individually.
 type arrayBackend interface {
-	SubmitArray(members []*eval.Target, indices []int, deps []string) (map[*eval.Target]string, error)
+	SubmitArray(members []*eval.Target, indices []int, deps, aftercorr []string) (ids map[*eval.Target]string, baseID string, err error)
 }
 
 // arrayGroup is a set of targets from one declaration (same source position) that
@@ -75,6 +77,7 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 		done:          map[*eval.Target]bool{},
 		arrayOf:       map[*eval.Target]*arrayGroup{},
 		arrayDone:     map[*arrayGroup]bool{},
+		arrayBase:     map[*arrayGroup]string{},
 	}
 	for _, t := range p.Targets {
 		// A target with no outputs is opportunistic: it runs after the goals, only
@@ -173,6 +176,16 @@ type driver struct {
 
 	arrayOf   map[*eval.Target]*arrayGroup // array members → their group
 	arrayDone map[*arrayGroup]bool         // group already submitted
+	arrayBase map[*arrayGroup]string       // group → base array job id (when submitted as one array)
+}
+
+// depEdge is a resolved dependency of a target: the wired job id and, for an
+// in-run producer, the target that produced it (nil for external/ledger deps).
+// The producer lets the driver recognize array-group structure (to collapse a
+// whole-array dependency to its base id, or detect element-wise aftercorr edges).
+type depEdge struct {
+	id       string
+	producer *eval.Target
 }
 
 func (r *driver) buildGoal(goal string) error {
@@ -223,10 +236,21 @@ func (r *driver) submit(t *eval.Target) (string, error) {
 	return id, nil
 }
 
-// collectDeps resolves t's inputs, submitting any in-run producers and gathering
-// their job ids (plus external/ledger producers for inputs not on disk).
+// collectDeps resolves t's inputs into the dependency job ids to wire, collapsing
+// a fully-consumed array to its single base id (see collapseFullArrayDeps).
 func (r *driver) collectDeps(t *eval.Target) ([]string, error) {
-	var deps []string
+	edges, err := r.collectDepEdges(t)
+	if err != nil {
+		return nil, err
+	}
+	return r.collapseFullArrayDeps(edges), nil
+}
+
+// collectDepEdges resolves t's inputs, submitting any in-run producers and
+// gathering their job ids (plus external/ledger producers for inputs not on
+// disk), tracking the producing target behind each edge.
+func (r *driver) collectDepEdges(t *eval.Target) ([]depEdge, error) {
+	var edges []depEdge
 	for _, in := range t.Inputs {
 		pt := r.producerFor(in)
 		if pt == nil {
@@ -234,7 +258,7 @@ func (r *driver) collectDeps(t *eval.Target) ([]string, error) {
 			// will produce it, depend on that job.
 			if !r.statExists(in) {
 				if id, ok := r.backend.ExternalDep(in); ok && id != "" {
-					deps = append(deps, id)
+					edges = append(edges, depEdge{id: id})
 				}
 			}
 			continue
@@ -249,11 +273,53 @@ func (r *driver) collectDeps(t *eval.Target) ([]string, error) {
 				return nil, err
 			}
 			if id != "" {
-				deps = append(deps, id)
+				edges = append(edges, depEdge{id: id, producer: pt})
 			}
 		}
 	}
-	return deps, nil
+	return edges, nil
+}
+
+// collapseFullArrayDeps turns dependency edges into the job-id list to wire. When
+// a consumer depends on a per-task id of *every* member of one array group (and
+// that group was submitted as a real scheduler array, so its base id is known),
+// the per-task ids are replaced with the array's single base id — one compact
+// directive (e.g. afterok:<arrayid>) instead of N task addresses, which schedulers
+// expand back to the same per-task edges.
+func (r *driver) collapseFullArrayDeps(edges []depEdge) []string {
+	seen := map[*arrayGroup]map[*eval.Target]bool{}
+	for _, e := range edges {
+		if e.producer == nil {
+			continue
+		}
+		if g := r.arrayOf[e.producer]; g != nil {
+			if seen[g] == nil {
+				seen[g] = map[*eval.Target]bool{}
+			}
+			seen[g][e.producer] = true
+		}
+	}
+	full := map[*arrayGroup]bool{}
+	for g, members := range seen {
+		if r.arrayBase[g] != "" && len(members) == len(g.members) {
+			full[g] = true
+		}
+	}
+	var ids []string
+	added := map[*arrayGroup]bool{}
+	for _, e := range edges {
+		if e.producer != nil {
+			if g := r.arrayOf[e.producer]; full[g] {
+				if !added[g] {
+					ids = append(ids, r.arrayBase[g])
+					added[g] = true
+				}
+				continue
+			}
+		}
+		ids = append(ids, e.id)
+	}
+	return ids
 }
 
 // detectArrays groups targets that mark themselves with a job.array task index
@@ -292,9 +358,10 @@ func (r *driver) detectArrays() error {
 }
 
 // submitArrayGroup submits a whole array group at once: it resolves each stale
-// member's dependencies, requires them to be identical across the group (a single
-// array submission carries one dependency directive — per-element dependencies
-// would need aftercorr), then hands the stale members to the backend as one array.
+// member's dependencies, derives the shared afterok deps and any element-wise
+// aftercorr directive (arrayDepDirectives), then hands the stale members to the
+// backend as one array. Up-to-date members are skipped, so a restart submits only
+// the gaps (sparse).
 func (r *driver) submitArrayGroup(g *arrayGroup) error {
 	if r.arrayDone[g] {
 		return nil
@@ -303,14 +370,13 @@ func (r *driver) submitArrayGroup(g *arrayGroup) error {
 
 	var stale []*eval.Target
 	var idxs []int
-	var commonDeps []string
-	have := false
+	edges := map[*eval.Target][]depEdge{}
 	for _, m := range g.members {
 		if r.done[m] {
 			continue
 		}
 		r.done[m] = true
-		deps, err := r.collectDeps(m)
+		e, err := r.collectDepEdges(m)
 		if err != nil {
 			return err
 		}
@@ -320,17 +386,11 @@ func (r *driver) submitArrayGroup(g *arrayGroup) error {
 		}
 		// Sparse: include a member when it is stale OR any of its outputs is missing
 		// (temp outputs don't count toward willRun, but a downstream still needs them
-		// built). Up-to-date members are skipped, so a restart submits only the gaps.
+		// built). Up-to-date members are skipped.
 		if !m.HasBody || (!res.willRun && r.outputsPresent(m)) {
 			continue
 		}
-		if !have {
-			commonDeps, have = deps, true
-		} else if !sameDeps(commonDeps, deps) {
-			return fmt.Errorf("array %q has per-element dependencies (an element-wise array→array edge); "+
-				"that needs aftercorr, which is not yet supported — submit one job per target instead "+
-				"(drop job.array on one of the rules)", g.name)
-		}
+		edges[m] = e
 		stale = append(stale, m)
 		idxs = append(idxs, g.index[m])
 	}
@@ -338,17 +398,28 @@ func (r *driver) submitArrayGroup(g *arrayGroup) error {
 		return nil
 	}
 
+	deps, aftercorr, err := r.arrayDepDirectives(g, stale, edges)
+	if err != nil {
+		return err
+	}
+
 	ids := map[*eval.Target]string{}
 	if ab, ok := r.backend.(arrayBackend); ok {
-		got, err := ab.SubmitArray(stale, idxs, commonDeps)
+		got, base, err := ab.SubmitArray(stale, idxs, deps, aftercorr)
 		if err != nil {
 			return err
 		}
 		ids = got
+		if base != "" {
+			r.arrayBase[g] = base
+		}
 	} else {
 		// Backend without array support (shell, graphviz, …): one submit per member.
+		if len(aftercorr) > 0 {
+			return fmt.Errorf("array %q: element-wise (aftercorr) dependencies need an array-capable scheduler", g.name)
+		}
 		for _, m := range stale {
-			id, err := r.backend.Submit(m, commonDeps)
+			id, err := r.backend.Submit(m, deps)
 			if err != nil {
 				return err
 			}
@@ -364,6 +435,102 @@ func (r *driver) submitArrayGroup(g *arrayGroup) error {
 		}
 	}
 	return nil
+}
+
+// arrayDepDirectives derives the dependency directives for an array group's stale
+// members. The common case is a single shared afterok set (scatter/gather), which
+// every member must agree on. An element-wise array→array edge — each member m
+// (index i) depending only on partner group A's task i — instead becomes one
+// aftercorr:<A> directive, with any remaining shared deps returned as afterok.
+func (r *driver) arrayDepDirectives(g *arrayGroup, stale []*eval.Target, edges map[*eval.Target][]depEdge) (deps []string, aftercorr []string, err error) {
+	// elemEdge finds m's edge to an array partner (≠ g) at m's own index — the
+	// signature of an element-wise dependency. It must be the *only* edge into that
+	// partner: a member depending on every task of an upstream array is a broadcast
+	// (a whole-array afterok), not element-wise. Returns the partner group and the
+	// edge's position in m's slice (-1 if none).
+	elemEdge := func(m *eval.Target) (*arrayGroup, int) {
+		i := g.index[m]
+		perGroup := map[*arrayGroup]int{}
+		for _, e := range edges[m] {
+			if e.producer == nil {
+				continue
+			}
+			if a := r.arrayOf[e.producer]; a != nil && a != g {
+				perGroup[a]++
+			}
+		}
+		for k, e := range edges[m] {
+			if e.producer == nil {
+				continue
+			}
+			a := r.arrayOf[e.producer]
+			if a != nil && a != g && a.index[e.producer] == i && perGroup[a] == 1 {
+				return a, k
+			}
+		}
+		return nil, -1
+	}
+
+	// A partner group must be element-wise for *every* member, and the same group.
+	var partner *arrayGroup
+	allElem := true
+	for _, m := range stale {
+		a, _ := elemEdge(m)
+		if a == nil {
+			allElem = false
+			break
+		}
+		if partner == nil {
+			partner = a
+		} else if partner != a {
+			return nil, nil, fmt.Errorf("array %q: element-wise dependencies on more than one array are not supported", g.name)
+		}
+	}
+
+	if allElem && partner != nil {
+		// Partner must cover every member's index, and must have been submitted as a
+		// real array (so it has a base id to wire the single aftercorr directive).
+		base := r.arrayBase[partner]
+		if base == "" {
+			return nil, nil, fmt.Errorf("array %q: aftercorr partner %q was not submitted as a scheduler array", g.name, partner.name)
+		}
+		partnerIdx := map[int]bool{}
+		for _, pm := range partner.members {
+			partnerIdx[partner.index[pm]] = true
+		}
+		// The remaining (non-element-wise) deps must be identical across members.
+		have := false
+		for _, m := range stale {
+			if !partnerIdx[g.index[m]] {
+				return nil, nil, fmt.Errorf("array %q: aftercorr partner %q has no task at index %d", g.name, partner.name, g.index[m])
+			}
+			_, k := elemEdge(m)
+			rem := make([]depEdge, 0, len(edges[m]))
+			rem = append(rem, edges[m][:k]...)
+			rem = append(rem, edges[m][k+1:]...)
+			ids := r.collapseFullArrayDeps(rem)
+			if !have {
+				deps, have = ids, true
+			} else if !sameDeps(deps, ids) {
+				return nil, nil, fmt.Errorf("array %q: aftercorr members have differing non-element-wise dependencies", g.name)
+			}
+		}
+		return deps, []string{base}, nil
+	}
+
+	// No element-wise pattern: one array submission carries one afterok directive,
+	// so every stale member must resolve to the same dependency set.
+	have := false
+	for _, m := range stale {
+		ids := r.collapseFullArrayDeps(edges[m])
+		if !have {
+			deps, have = ids, true
+		} else if !sameDeps(deps, ids) {
+			return nil, nil, fmt.Errorf("array %q has per-element dependencies (an element-wise array→array edge); "+
+				"that needs aftercorr with matching index sets, or submit one job per target (drop job.array on one rule)", g.name)
+		}
+	}
+	return deps, nil, nil
 }
 
 // outputsPresent reports whether every one of t's outputs is on disk.

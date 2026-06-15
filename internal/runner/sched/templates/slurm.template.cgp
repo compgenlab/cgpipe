@@ -21,7 +21,13 @@
 #SBATCH --gres=gpu:${job.gpu}
 % }
 % if job.depids {
+% if job.aftercorr {
+#SBATCH -d afterok:${job.depids},aftercorr:${job.aftercorr}
+% } else {
 #SBATCH -d afterok:${job.depids}
+% }
+% } elif job.aftercorr {
+#SBATCH -d aftercorr:${job.aftercorr}
 % }
 % if job.array {
 #SBATCH --array=${job.array}

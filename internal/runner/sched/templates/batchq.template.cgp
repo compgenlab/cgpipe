@@ -18,6 +18,9 @@
 % if job.depids {
 #BATCHQ -afterok ${job.depids}
 % }
+% if job.aftercorr {
+#BATCHQ -aftercorr ${job.aftercorr}
+% }
 % if job.array {
 #BATCHQ -array ${job.array}
 % }

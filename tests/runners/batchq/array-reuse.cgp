@@ -1,0 +1,17 @@
+# Cross-run reuse of an array: with a ledger, a restart that finds each element's
+# output still owned by an active job reuses it (polls `batchq status`) instead of
+# resubmitting the array. setup.sh performs the first (seeding) run; this is the
+# second run, where every element is reused and nothing is submitted.
+cgp.ledger = "led.db"
+chroms = ["chr1", "chr2", "chr3"]
+calls  = []
+for c in chroms with i {
+    calls += "calls.${c}.vcf"
+    calls.${c}.vcf: aligned.bam {{
+        job.array = i
+        job.name  = "call"
+        --
+        call_variants --region ${c} ${input} > ${output}
+    }}
+}
+@default: @{calls}
