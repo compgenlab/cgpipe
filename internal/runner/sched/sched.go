@@ -799,6 +799,7 @@ func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps, after
 				WorkingDir: b.wd, User: b.user, SubmitTime: time.Now().Unix(),
 				Outputs: e.t.Outputs, Temp: e.t.Temp, Inputs: e.t.Inputs, Deps: deps,
 				Script: e.body, Settings: jobSettings(vars),
+				ArrayID: baseID, TaskIndex: e.idx,
 			}); err != nil {
 				return nil, "", fmt.Errorf("ledger record: %w", err)
 			}
