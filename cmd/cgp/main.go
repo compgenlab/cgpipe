@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/compgen-io/cgp/internal/ast"
 	"github.com/compgen-io/cgp/internal/buildinfo"
+	"github.com/compgen-io/cgp/internal/debug"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
 	"github.com/compgen-io/cgp/internal/parser"
@@ -98,6 +100,8 @@ options (single hyphen):
     -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz, html
                  (graphviz=DOT to stdout; html=status report reading the ledger)
                  (also set via cgp.runner in the script/config)
+    -debug N     trace what the interpreter/runner is doing, to stderr; N=1..5
+                 (more detail as N grows; also via CGP_DEBUG=N)
 
 Script variables use a double hyphen: --name value (or --name=value). A bare
 --name (no value) sets name=true; hyphens in a name become underscores
@@ -152,6 +156,8 @@ func run(args []string) int {
 	force := false
 	showHelp := false
 	runnerName := ""
+	debugLevel := 0
+	debugFromFlag := false
 
 	rest := args
 	for i := 0; i < len(rest); i++ {
@@ -196,6 +202,19 @@ func run(args []string) int {
 				}
 				i++
 				runnerName = rest[i]
+			case "-debug":
+				if i+1 >= len(rest) {
+					fmt.Fprintln(os.Stderr, "cgp: option -debug needs a numeric level (1-5)")
+					return 2
+				}
+				i++
+				n, err := strconv.Atoi(rest[i])
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "cgp: -debug needs a numeric level, got %q\n", rest[i])
+					return 2
+				}
+				debugLevel = n
+				debugFromFlag = true
 			default:
 				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
 				return 2
@@ -225,6 +244,17 @@ func run(args []string) int {
 	if os.Getenv("CGP_DRYRUN") != "" {
 		dryRun = true
 	}
+
+	// Debug verbosity: an explicit -debug flag wins; otherwise CGP_DEBUG. Set it
+	// before configs/eval/run so every phase can trace.
+	if !debugFromFlag {
+		if v := strings.TrimSpace(os.Getenv("CGP_DEBUG")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				debugLevel = n
+			}
+		}
+	}
+	debug.SetLevel(debugLevel)
 
 	src, err := os.ReadFile(file)
 	if err != nil {

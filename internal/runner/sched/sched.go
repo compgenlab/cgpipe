@@ -6,6 +6,8 @@ package sched
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,12 +16,58 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/compgen-io/cgp/internal/debug"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/ledger"
 	"github.com/compgen-io/cgp/internal/runner"
 )
+
+// probeTimeout bounds how long a scheduler status probe may take; a hung or slow
+// scheduler must not stall the whole run. Default 30s, overridable via
+// CGP_PROBE_TIMEOUT (whole seconds); a value <= 0 disables the bound.
+func probeTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("CGP_PROBE_TIMEOUT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n <= 0 {
+				return 0
+			}
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 30 * time.Second
+}
+
+// probe runs a scheduler status command (read-only, no stdin) under the probe
+// timeout, returning its stdout and stderr. A timeout or failure is returned as
+// an error; callers already treat that as "unknown / not active". Each probe is
+// traced at debug level 3 so a flood or a hang is visible.
+func probe(name string, args ...string) (stdout, stderr []byte, err error) {
+	d := probeTimeout()
+	ctx := context.Background()
+	if d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+	debug.Logf(3, "probe: %s %s", name, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, name, args...)
+	// WaitDelay bounds Output() even when the probe spawned a child that still
+	// holds the stdout pipe open (e.g. a wrapper that exec's another tool): after
+	// the context kills the process, the pipes are force-closed after this grace.
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.Output()
+	if ee, ok := err.(*exec.ExitError); ok {
+		stderr = ee.Stderr
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		debug.Logf(3, "probe: %s timed out after %s — treating as unknown", name, d)
+		return nil, stderr, ctx.Err()
+	}
+	return out, stderr, err
+}
 
 // Scheduler describes one batch system.
 type Scheduler struct {
@@ -97,7 +145,7 @@ var schedulers = map[string]Scheduler{
 // slurmActive reports whether a SLURM job is still pending/running (and not
 // doomed by an unsatisfiable dependency), via `scontrol show job`.
 func slurmActive(id string) bool {
-	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	out, _, err := probe("scontrol", "-o", "show", "job", id)
 	if err != nil {
 		return false
 	}
@@ -121,7 +169,7 @@ func slurmActive(id string) bool {
 // slurmStatus returns the native SLURM JobState word (e.g. "PENDING", "RUNNING",
 // "COMPLETED") from `scontrol -o show job`, or "" if the job is unknown (aged out).
 func slurmStatus(id string) string {
-	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	out, _, err := probe("scontrol", "-o", "show", "job", id)
 	if err != nil {
 		return ""
 	}
@@ -154,7 +202,7 @@ func slurmState(id string) string {
 // absent, not yet known ("Unknown"/"None"), or unparseable. SLURM prints it as
 // a local-time "YYYY-MM-DDTHH:MM:SS" timestamp.
 func slurmEndTime(id string) (int64, bool) {
-	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	out, _, err := probe("scontrol", "-o", "show", "job", id)
 	if err != nil {
 		return 0, false
 	}
@@ -175,6 +223,10 @@ func slurmEndTime(id string) (int64, bool) {
 	return 0, false
 }
 
+// batchqPorcelainUnsupported records that this batchq build rejects the
+// --porcelain flag, so we stop paying for a doomed extra probe per status query.
+var batchqPorcelainUnsupported atomic.Bool
+
 // batchqStatus returns the status word BatchQ reports for a job (e.g. "RUNNING",
 // "SUCCESS"), or "" if the job is unknown or the query fails. The status word, not
 // the exit code, tells active from done (batchq exits 0 even for finished jobs).
@@ -182,13 +234,22 @@ func batchqStatus(id string) string {
 	// Prefer the stable machine-readable form: one "<queried-id>\t<STATUS>" line
 	// with the queried token echoed in field 0 — unambiguous for a task address
 	// "<arrayid>_<index>" or an array id (which the human format renders specially).
-	if out, err := exec.Command("batchq", "status", "--porcelain", id).Output(); err == nil {
-		if s := batchqPickStatus(id, string(out)); s != "" {
-			return s
+	// When the porcelain probe succeeds we trust its result and do NOT also run the
+	// plain query (no doubling). The plain fallback is only for a batchq that lacks
+	// --porcelain, detected once via its "unknown flag" error and cached.
+	if !batchqPorcelainUnsupported.Load() {
+		out, stderr, err := probe("batchq", "status", "--porcelain", id)
+		if err == nil {
+			return batchqPickStatus(id, string(out))
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "" // scheduler hung — a plain retry would only hang too
+		}
+		if bytes.Contains(stderr, []byte("unknown flag")) || bytes.Contains(stderr, []byte("unknown shorthand")) {
+			batchqPorcelainUnsupported.Store(true)
 		}
 	}
-	// Fallback for a batchq without --porcelain.
-	out, err := exec.Command("batchq", "status", id).Output()
+	out, _, err := probe("batchq", "status", id)
 	if err != nil {
 		return ""
 	}
@@ -252,7 +313,7 @@ func batchqState(id string) string {
 // unknown or has no end time yet (e.g. still running, where the field is absent or
 // not a valid timestamp).
 func batchqEndTime(id string) (int64, bool) {
-	out, err := exec.Command("batchq", "status", "-e", id).Output()
+	out, _, err := probe("batchq", "status", "-e", id)
 	if err != nil {
 		return 0, false
 	}
@@ -271,7 +332,7 @@ func batchqEndTime(id string) (int64, bool) {
 // if the job is no longer listed. `qstat` prints one row per job with the state
 // in the 5th whitespace-separated column; a finished job drops off the list.
 func sgeStatus(id string) string {
-	out, err := exec.Command("qstat").Output()
+	out, _, err := probe("qstat")
 	if err != nil {
 		return ""
 	}
@@ -312,7 +373,7 @@ func sgeState(id string) string {
 // or "" if the job is unknown. `qstat -f <id>` prints "job_state = <code>" among
 // its `key = value` lines; a finished job eventually drops off (qstat exits != 0).
 func pbsStatus(id string) string {
-	out, err := exec.Command("qstat", "-f", id).Output()
+	out, _, err := probe("qstat", "-f", id)
 	if err != nil {
 		return ""
 	}
@@ -401,7 +462,7 @@ func SubmitOne(p *eval.Program, sch Scheduler, t *eval.Target, explicitDeps, aft
 	if b.ledger != nil {
 		for _, out := range afterOutputs {
 			if owner, ok, err := b.ledger.OwnerOf(out); err == nil && ok && owner != "" {
-				if sch.IsActive == nil || sch.IsActive(owner) {
+				if b.isActive(owner) {
 					deps = append(deps, owner)
 				}
 			}
@@ -520,6 +581,27 @@ type backend struct {
 	dryN        int
 	ids         []string
 	held        []string
+	activeCache map[string]bool // memoized IsActive(owner) results, per run
+}
+
+// isActive reports whether the owning job id is still active in the scheduler,
+// memoized for the run so a job owning many outputs (or every task of a large
+// array) is probed at most once — avoiding a flood of scheduler shell-outs. A
+// scheduler with no IsActive probe is treated as active (the reuse default).
+func (b *backend) isActive(id string) bool {
+	if b.sch.IsActive == nil {
+		return true
+	}
+	if v, ok := b.activeCache[id]; ok {
+		return v
+	}
+	v := b.sch.IsActive(id)
+	if b.activeCache == nil {
+		b.activeCache = map[string]bool{}
+	}
+	b.activeCache[id] = v
+	debug.Logf(3, "active? %s = %v", id, v)
+	return v
 }
 
 func (b *backend) cfg(name string) string {
@@ -540,9 +622,10 @@ func (b *backend) ExternalDep(input string) (string, bool) {
 	if err != nil || !ok || owner == "" {
 		return "", false
 	}
-	if b.sch.IsActive != nil && !b.sch.IsActive(owner) {
+	if !b.isActive(owner) {
 		return "", false
 	}
+	debug.Logf(3, "external dep: %s owned by active job %s", input, owner)
 	return owner, true
 }
 
@@ -582,7 +665,7 @@ func (b *backend) reuseActiveOwner(t *eval.Target) (string, bool) {
 		if err != nil || !ok || owner == "" {
 			continue
 		}
-		if b.sch.IsActive == nil || b.sch.IsActive(owner) {
+		if b.isActive(owner) {
 			return owner, true
 		}
 	}

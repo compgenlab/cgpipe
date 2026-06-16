@@ -9,6 +9,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/compgen-io/cgp/internal/debug"
 	"github.com/compgen-io/cgp/internal/eval"
 	"github.com/compgen-io/cgp/internal/token"
 )
@@ -119,6 +120,7 @@ func Build(p *eval.Program, b Backend, opts Options) error {
 	if len(goals) == 0 {
 		return fmt.Errorf("no goal to build (no target requested and no @default or first target)")
 	}
+	debug.Logf(1, "build: %d goal(s): %s", len(goals), strings.Join(goals, " "))
 
 	if p.Setup != nil && p.Setup.HasBody {
 		if _, err := r.doSubmit(p.Setup, nil); err != nil {
@@ -194,8 +196,10 @@ func (r *driver) buildGoal(goal string) error {
 		if !r.statExists(goal) {
 			return fmt.Errorf("no rule to make %q and it does not exist", goal)
 		}
+		debug.Logf(2, "goal %s: already present, nothing to build", goal)
 		return nil
 	}
+	debug.Logf(2, "goal %s → %s", goal, Label(t))
 	res, err := r.resolve(t)
 	if err != nil {
 		return err
@@ -228,6 +232,7 @@ func (r *driver) submit(t *eval.Target) (string, error) {
 	if !t.HasBody {
 		return "", nil // bodyless aggregator
 	}
+	debug.Logf(3, "submit %s deps=%v", Label(t), deps)
 	id, err := r.doSubmit(t, deps)
 	if err != nil {
 		return "", err
@@ -397,6 +402,7 @@ func (r *driver) submitArrayGroup(g *arrayGroup) error {
 	if len(stale) == 0 {
 		return nil
 	}
+	debug.Logf(2, "array %s: %d/%d member(s) to submit (indices %v)", g.name, len(stale), len(g.members), idxs)
 
 	deps, aftercorr, err := r.arrayDepDirectives(g, stale, edges)
 	if err != nil {
@@ -637,6 +643,9 @@ func (r *driver) resolve(t *eval.Target) (resolved, error) {
 		}
 	}
 
+	if debug.On(2) {
+		debug.Logf(2, "resolve %s: willRun=%v (inputs-rebuilt=%v force=%v)", Label(t), willRun, anyInputRebuilt, r.opts.Force)
+	}
 	res := resolved{willRun: willRun}
 	if !willRun {
 		minOut := int64(math.MaxInt64)

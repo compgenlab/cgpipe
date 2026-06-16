@@ -543,6 +543,8 @@ Because staleness is mtime-based and cgp tracks ownership, **not** job success (
 ### 10.5 Cross-run and cross-stage reuse
 When a ledger is configured and a scheduler runner is in use, an input that has **no in-run producer** and **isn't on disk yet** is looked up in the ledger: if its owning job is still active (per `squeue`/`qstat`), the new work is wired as a scheduler dependency (`afterok:<id>`) of that in-flight job instead of being treated as a "no rule to make" error or duplicated. This is what makes re-running a pipeline before it has finished safe, and it is also how a later workflow [stage](#13-workflows-stage-and-export) waits on a file an earlier stage's jobs are still queued to produce. With the shell runner each job has already completed (the file exists), so the lookup is unnecessary.
 
+Each "is this owning job still active?" probe shells out to the scheduler and is **memoized per run** (a job owning many outputs, or every task of an array, is probed once) and **time-bounded** so a slow or hung scheduler cannot stall the run — a probe that exceeds the bound is treated as "not active" (the job is resubmitted). The bound defaults to 30s, overridable with `CGP_PROBE_TIMEOUT` (whole seconds; `0` disables it). `-debug 3` traces each probe and its result.
+
 ### 10.6 Concurrency
 The ledger takes **no lock**. Each process appends only to its own file, so concurrent runs sharing one ledger directory simply each write a separate file; reads fold them together (§10.2). A reader loads the directory once at open time, so a peer's records written during a run are seen on the next open, not mid-run — at worst this resubmits an already-queued job (a performance hiccup), never corruption. There is no `unlock` subcommand: with no lock there is never anything to clear.
 
@@ -777,6 +779,7 @@ The default runner is `shell`, which **assembles the stale targets into one runn
 | `-dr` | Dry run — render the scripts instead of executing/submitting. |
 | `-force` | Rebuild every target in the goal graph, ignoring staleness ([§10.4](#104-restart)). |
 | `-r NAME` | Runner: `shell` (default), `slurm`, `sge`, `pbs`, `batchq`, `graphviz`, `html` (also `cgp.runner`). |
+| `-debug N` | Trace what the interpreter and runner are doing, to stderr (off by default). `N` is 1–5 — higher prints more (phases → DAG resolution → submits and scheduler probes → interpreter detail). Also via `CGP_DEBUG=N`. |
 
 `-r graphviz` writes the dependency graph as Graphviz DOT to stdout (pipe to `dot -Tsvg`). `-r html` writes a **self-contained HTML status report** of the DAG to stdout: each output is colored by status — *done* (on disk), *running*/*queued* (its owning job is active in the scheduler, per the ledger), *failed* (owning job ended without producing it), or *pending* (not built). The report reads the ledger read-only, so it is safe to run while the pipeline is in flight.
 

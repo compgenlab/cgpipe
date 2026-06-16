@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/compgen-io/cgp/internal/debug"
 )
 
 // snapshotName is the compacted log written by Vacuum. It is read like any other
@@ -210,6 +212,7 @@ func load(dir string) (*state, error) {
 			return nil, err
 		}
 	}
+	debug.Logf(1, "ledger: %s folded %d file(s) → %d job(s), %d owned output(s)", dir, len(logs), len(st.jobs), len(st.owner))
 	return st, nil
 }
 
@@ -227,6 +230,7 @@ func foldFile(st *state, path string) error {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), maxLine)
+	var ok, bad int
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(bytes.TrimSpace(line)) == 0 {
@@ -234,10 +238,13 @@ func foldFile(st *state, path string) error {
 		}
 		var r record
 		if err := json.Unmarshal(line, &r); err != nil {
+			bad++
 			continue // tolerate a partial/corrupt line
 		}
 		st.apply(r)
+		ok++
 	}
+	debug.Logf(4, "ledger: %s — %d record(s), %d skipped", filepath.Base(path), ok, bad)
 	return nil // ignore scanner errors (an over-long final line is treated as torn)
 }
 

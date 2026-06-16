@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/compgen-io/cgp/internal/ast"
+	"github.com/compgen-io/cgp/internal/debug"
 	"github.com/compgen-io/cgp/internal/parser"
 	"github.com/compgen-io/cgp/internal/token"
 )
@@ -192,10 +193,12 @@ func Run(file *ast.File, opts Options) (*Program, error) {
 		ip.sc.set(k, v)
 	}
 	// 3. the pipeline script
+	debug.Logf(1, "eval: %s (%d config layer(s), %d cli var(s))", opts.File, len(opts.Configs), len(opts.Vars))
 	if err := ip.execStmts(file.Stmts); err != nil {
 		return ip.prog, err
 	}
 	ip.prog.Scope = ip.sc
+	debug.Logf(1, "eval done: %d target(s), %d stage(s)", len(ip.prog.Targets), len(ip.prog.Stages))
 	return ip.prog, nil
 }
 
@@ -604,6 +607,7 @@ func (ip *interp) execTarget(n *ast.Target) error {
 	}
 
 	ip.prog.Targets = append(ip.prog.Targets, t)
+	debug.Logf(4, "target: %v ← %v", t.Outputs, t.Inputs)
 	if ip.prog.FirstOutput == "" && len(t.Outputs) > 0 {
 		ip.prog.FirstOutput = t.Outputs[0]
 	}
