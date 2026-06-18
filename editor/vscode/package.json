@@ -3,7 +3,7 @@
   "displayName": "cgpipe",
   "description": "Language support for cgpipe pipeline scripts (syntax highlighting + language server).",
   "version": "0.1.0",
-  "publisher": "compgen-io",
+  "publisher": "compgenlab",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
