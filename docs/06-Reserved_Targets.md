@@ -1,7 +1,7 @@
 # Reserved Targets
 
 Some target names begin with `@`. **The rule: a target name beginning with `@` is
-a reserved cgp target and never names a file on disk.** That is what lets reserved
+a reserved cgpipe target and never names a file on disk.** That is what lets reserved
 names coexist with real filenames — a pipeline can still produce a file literally
 called `pre`; only `@pre` is reserved.
 
@@ -17,7 +17,7 @@ called `pre`; only `@pre` is reserved.
 | `@postsubmit {{ }}` | Once per submitted job, on the submit host, right after submission |
 | `@default: …` | The goals to build when none are named (no body) |
 
-All examples are rendered with `cgp -dr` and match fixtures under
+All examples are rendered with `cgpipe -dr` and match fixtures under
 [`tests/build/`](../tests/build/).
 
 ## `@pre` and `@post`
@@ -110,7 +110,7 @@ submitted b.bam as 1002
 
 ## The default goal: `@default`
 
-`@default` declares what cgp builds when invoked with no explicit target. Its
+`@default` declares what cgpipe builds when invoked with no explicit target. Its
 **inputs are the goals**; it has no body:
 
 ```
@@ -119,9 +119,9 @@ submitted b.bam as 1002
 
 - **No phony file** — `@default` is never stat-ed or expected on disk.
 - **Forces its goals to build**, exactly as if requested on the command line.
-- **Fallback:** with no `@default`, cgp builds the **first defined target**, so
+- **Fallback:** with no `@default`, cgpipe builds the **first defined target**, so
   trivial pipelines need nothing.
-- **CLI overrides:** `cgp p.cgp` builds the `@default` goals; `cgp p.cgp final.vcf`
+- **CLI overrides:** `cgpipe p.cgp` builds the `@default` goals; `cgpipe p.cgp final.vcf`
   builds the named target(s) instead.
 - **Accumulates:** multiple `@default:` lines (across the file, `include`s, or a
   loop) add to the goal set — so `@default: @{all_outputs}` after a `for` loop

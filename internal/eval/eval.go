@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/compgen-io/cgp/internal/ast"
-	"github.com/compgen-io/cgp/internal/debug"
-	"github.com/compgen-io/cgp/internal/parser"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/debug"
+	"github.com/compgenlab/cgpipe/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 // Target is a resolved build rule: concrete output/input filenames, the raw
@@ -62,7 +62,7 @@ func Stringify(v Value) string { return stringify(v) }
 // Truthy reports a value's truthiness (exported for runners).
 func Truthy(v Value) bool { return truthy(v) }
 
-// Get reads a variable from the program's final scope (e.g. a cgp.* setting).
+// Get reads a variable from the program's final scope (e.g. a cgpipe.* setting).
 func (p *Program) Get(name string) (Value, bool) {
 	if p.Scope == nil {
 		return nil, false
@@ -70,13 +70,13 @@ func (p *Program) Get(name string) (Value, bool) {
 	return p.Scope.get(name)
 }
 
-// JobSpec describes a one-off command to submit (used by `cgp sub`).
+// JobSpec describes a one-off command to submit (used by `cgpipe sub`).
 type JobSpec struct {
-	Command  string           // the shell command line (treated as a cgp body)
+	Command  string           // the shell command line (treated as a cgpipe body)
 	Name     string           // job name
 	Outputs  []string         // declared outputs (ledger ownership)
 	Inputs   []string         // declared inputs
-	Settings map[string]Value // job.* and cgp.* values (e.g. job.mem, cgp.ledger)
+	Settings map[string]Value // job.* and cgpipe.* values (e.g. job.mem, cgpipe.ledger)
 }
 
 // NewJob builds a single-target Program from a one-off command. The command is
@@ -111,7 +111,7 @@ type ExitError struct{ Code int }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("exit %d", e.Code) }
 
-// ConfigFile is a parsed config script (itself cgp), evaluated before the main
+// ConfigFile is a parsed config script (itself cgpipe), evaluated before the main
 // file. Dir is its directory, for resolving its `include`s.
 type ConfigFile struct {
 	Dir  string
@@ -147,7 +147,7 @@ type interp struct {
 // defaults, before any config layer or the pipeline runs. They are ordinary
 // globals: every config layer, target snapshot, and runner inherits them, and any
 // later assignment (global or directive) overrides them. Only static, universal
-// defaults belong here — `job.shell` is derived from the cgp.shell config and so is
+// defaults belong here — `job.shell` is derived from the cgpipe.shell config and so is
 // defaulted in the runner, and `job.name` defaults to a target's output and so is
 // defaulted per-target in renderTargetScope.
 func seedJobDefaults(sc *Scope) {
@@ -471,7 +471,7 @@ func (ip *interp) execAssignIndex(n *ast.Assign) error {
 	}
 	// Bind the (possibly freshly-vivified) map following the bare-assignment rule:
 	// an existing map is rebound where it already lives (a no-op for the shared
-	// reference); a new one lands in the current frame (or root for job.*/cgp.*).
+	// reference); a new one lands in the current frame (or root for job.*/cgpipe.*).
 	ip.sc.assign(recvIdent.Name, mv)
 	return nil
 }
@@ -769,7 +769,7 @@ func (ip *interp) openWrite(path, mode string) (Value, error) {
 	if ip.dryRun {
 		if !ip.warnedWrites[path] {
 			ip.warnedWrites[path] = true
-			fmt.Fprintf(ip.errOut, "cgp: dry-run: not writing to file %q\n", path)
+			fmt.Fprintf(ip.errOut, "cgpipe: dry-run: not writing to file %q\n", path)
 		}
 		h := &writeHandle{path: path, dryRun: true}
 		ip.openWrites = append(ip.openWrites, h)

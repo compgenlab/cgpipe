@@ -9,9 +9,9 @@ import (
 	"math"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/debug"
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/debug"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 // arrayBackend is an optional Backend capability: submit a group of array-member

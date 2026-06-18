@@ -1,9 +1,9 @@
 package lsp
 
 import (
-	"github.com/compgen-io/cgp/internal/ast"
-	"github.com/compgen-io/cgp/internal/lexer"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/lexer"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 // completions returns context-free completion items: the language keywords,

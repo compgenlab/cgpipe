@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/lexer"
-	"github.com/compgen-io/cgp/internal/parser"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/lexer"
+	"github.com/compgenlab/cgpipe/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
@@ -17,7 +17,7 @@ var identPathRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
 // tmplMode selects the escape policy for a template. The two template sources
 // have opposite expectations for the backslash:
 //
-//   - modeString — a cgp "…" string literal. C-style escapes apply: `\n \r \t \b
+//   - modeString — a cgpipe "…" string literal. C-style escapes apply: `\n \r \t \b
 //     \f \v \a \0` become their control byte; `\" \\ \'` are literal; any other
 //     `\X` resolves to `X` (the lexer kept escapes verbatim). A nested string's
 //     `\"` interior is unescaped one layer (see unescapeBackslashes) before parsing.
@@ -64,7 +64,7 @@ func (ip *interp) expandTemplate(raw string, mode tmplMode) ([]string, error) {
 		pieces = append(pieces, []string{buf.String()})
 		buf.Reset()
 	}
-	// unesc resolves the cgp escape layer of a ${…}/@{…} interior — a string
+	// unesc resolves the cgpipe escape layer of a ${…}/@{…} interior — a string
 	// literal had to escape any quote (\") to survive the outer "…", so the
 	// interior reaches the expression parser still escaped. A body's interior has
 	// real quotes already, so it is left verbatim.
@@ -254,12 +254,12 @@ func unescapeBackslashes(s string) string {
 }
 
 // parenSpan returns the byte offset in s of the `)` that closes a $( … ) whose
-// opening `$(` has already been consumed. The content is shell, not cgp, so it
+// opening `$(` has already been consumed. The content is shell, not cgpipe, so it
 // is scanned with shell quoting rules — single quotes are literal (no escapes),
 // double quotes honor \-escapes, and a backslash escapes the next byte outside
 // quotes — while nested `( )` are balanced. Returns -1 if unterminated. Exotic
 // shell that bash also parses (here-docs, # comments, ${…}) is not handled; for
-// those, use a cgp variable or \$(…) to defer to the runtime shell.
+// those, use a cgpipe variable or \$(…) to defer to the runtime shell.
 func parenSpan(s string) int {
 	depth := 0
 	for i := 0; i < len(s); i++ {

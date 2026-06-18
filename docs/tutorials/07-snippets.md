@@ -9,7 +9,7 @@ module-load block, a helper function. That's a **snippet**.
 `build.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 
 snippet common {{
     set -euo pipefail
@@ -29,7 +29,7 @@ lines in at that point.
 ## Render it
 
 ```console
-$ cgp -dr build.cgp
+$ cgpipe -dr build.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -51,7 +51,7 @@ Three ways to avoid repeating yourself, for three different scopes:
 |------|--------|------------|
 | `snippet` / `@name` | a **body fragment** (shell) | the bodies you splice it into |
 | `@pre` / `@post` | a **body wrapper** (shell) | *every* target automatically |
-| `include` | **targets and variables** (cgp) | the whole pipeline |
+| `include` | **targets and variables** (cgpipe) | the whole pipeline |
 
 Reach for a snippet when several jobs need the same shell lines but not *all* jobs
 do, and you'd rather name the fragment than opt individual jobs out of an `@pre`.

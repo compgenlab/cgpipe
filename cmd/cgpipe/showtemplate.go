@@ -5,23 +5,23 @@ import (
 	"os"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/runner/sched"
+	"github.com/compgenlab/cgpipe/internal/runner/sched"
 )
 
-const showTemplateUsage = `cgp show-template — print a scheduler's built-in submission template
+const showTemplateUsage = `cgpipe show-template — print a scheduler's built-in submission template
 
 usage:
-    cgp show-template -r <slurm|sge|pbs|batchq>
+    cgpipe show-template -r <slurm|sge|pbs|batchq>
 
 Writes the built-in template to stdout so you can use it as a starting point.
-Save it and point a runner at it (or drop it at ~/.cgp/custom_template.cgp) to
+Save it and point a runner at it (or drop it at ~/.cgpipe/custom_template.cgp) to
 override the built-in submission script while keeping the rest of the runner's
 config:
 
-    cgp show-template -r slurm > ~/.cgp/custom_template.cgp
+    cgpipe show-template -r slurm > ~/.cgpipe/custom_template.cgp
 `
 
-// runShowTemplate handles `cgp show-template -r <runner>`.
+// runShowTemplate handles `cgpipe show-template -r <runner>`.
 func runShowTemplate(args []string) int {
 	runnerName := ""
 	for i := 0; i < len(args); i++ {
@@ -32,13 +32,13 @@ func runShowTemplate(args []string) int {
 			return 0
 		case "-r":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cgp show-template: option -r needs a value")
+				fmt.Fprintln(os.Stderr, "cgpipe show-template: option -r needs a value")
 				return 2
 			}
 			i++
 			runnerName = args[i]
 		default:
-			fmt.Fprintf(os.Stderr, "cgp show-template: unknown option %s\n", a)
+			fmt.Fprintf(os.Stderr, "cgpipe show-template: unknown option %s\n", a)
 			return 2
 		}
 	}
@@ -48,7 +48,7 @@ func runShowTemplate(args []string) int {
 	}
 	tmpl, ok := sched.DefaultTemplate(runnerName)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "cgp show-template: unknown runner %q (have: %s)\n",
+		fmt.Fprintf(os.Stderr, "cgpipe show-template: unknown runner %q (have: %s)\n",
 			runnerName, strings.Join(sched.Names(), ", "))
 		return 2
 	}

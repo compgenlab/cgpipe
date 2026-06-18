@@ -1,8 +1,8 @@
 package lsp
 
 import (
-	"github.com/compgen-io/cgp/internal/lexer"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/lexer"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 // hoverAt returns hover documentation for the keyword, built-in, or reserved

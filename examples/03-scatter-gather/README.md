@@ -5,8 +5,8 @@ shape of per-chromosome variant calling, per-lane alignment, or any
 split-process-combine workflow.
 
 ```sh
-cgp -dr pipeline.cgp             # preview the generated jobs
-cgp pipeline.cgp | bash
+cgpipe -dr pipeline.cgp             # preview the generated jobs
+cgpipe pipeline.cgp | bash
 cat total.txt                    # 11 words total
 ```
 
@@ -20,7 +20,7 @@ Concepts:
   document) and consumes them as `${input}` (space-joined).
 
 On a scheduler the per-document jobs submit in parallel and the merge is wired to
-wait for all of them — cgp derives that from the `@{counts}` inputs.
+wait for all of them — cgpipe derives that from the `@{counts}` inputs.
 
 **Adapt it:** `wc -w` → `bcftools call` per chromosome; the merge `awk` →
 `bcftools concat`.

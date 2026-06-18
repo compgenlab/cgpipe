@@ -1,5 +1,5 @@
 // Package graphviz turns a pipeline's dependency graph into a structured Graph
-// and renders it as Graphviz DOT — `cgp -r graphviz pipeline.cgp` writes the DOT
+// and renders it as Graphviz DOT — `cgpipe -r graphviz pipeline.cgp` writes the DOT
 // to stdout, ready for `dot -Tsvg`. The same Graph backs the HTML status report.
 // Nodes are files (a target's outputs and inputs), edges point input → output;
 // temp outputs (^) are dashed, source files (produced by no target) are notes.
@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/runner"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/runner"
 )
 
 // Node is a file in the dependency graph.
@@ -147,7 +147,7 @@ func Run(p *eval.Program, goals []string, out io.Writer) error {
 // DOT renders a Graph as Graphviz DOT text.
 func DOT(g Graph) string {
 	var b strings.Builder
-	b.WriteString("digraph cgp {\n")
+	b.WriteString("digraph cgpipe {\n")
 	b.WriteString("  rankdir=LR;\n")
 	b.WriteString("  node [shape=box, style=rounded];\n")
 	writeNodes(&b, "  ", g.Nodes)

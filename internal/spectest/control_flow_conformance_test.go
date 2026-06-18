@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// cgp has two separate control-flow interpreters: the global statement evaluator
+// cgpipe has two separate control-flow interpreters: the global statement evaluator
 // (eval.execIf/execFor) and the shell-body renderer (body.renderNodes for
 // ifNode/forNode). The duplication is acknowledged and deferred (see
 // internal/eval/value.go), so this test guards against the two drifting apart:

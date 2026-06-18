@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/runner/graphviz"
-	"github.com/compgen-io/cgp/internal/runner/report"
+	"github.com/compgenlab/cgpipe/internal/runner/graphviz"
+	"github.com/compgenlab/cgpipe/internal/runner/report"
 )
 
 // The HTML status report is self-contained (inline SVG + CSS, no external refs)

@@ -1,7 +1,7 @@
 # Containers and GPUs
 
 A target's body can run **inside a container** without changing the body itself —
-you write ordinary shell, and cgp wraps it in `docker run` or `singularity exec`.
+you write ordinary shell, and cgpipe wraps it in `docker run` or `singularity exec`.
 GPUs are requested with a single setting that drives both the scheduler and the
 container engine.
 
@@ -9,13 +9,13 @@ container engine.
 
 Wrapping happens when **both** are set:
 
-- **`cgp.container.engine`** — `docker`, `singularity`, or `apptainer` (in config
+- **`cgpipe.container.engine`** — `docker`, `singularity`, or `apptainer` (in config
   or the script). Unset disables all wrapping.
 - **`job.container = "<image>"`** — a per-target directive naming the image. A
   target with no `job.container` runs unwrapped even when an engine is configured.
 
 ```
-cgp.container.engine = "docker"
+cgpipe.container.engine = "docker"
 
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
@@ -24,16 +24,16 @@ out.bam: in.bam {{
 }}
 ```
 
-cgp writes the rendered body to a temp file and runs it inside the image,
+cgpipe writes the rendered body to a temp file and runs it inside the image,
 **bind-mounting the working directory and the temp body, setting the working
 directory, and (for Docker) mapping the host user** automatically:
 
 ```bash
-__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
-trap 'rm -f "$__cgp_body"' EXIT
-cat > "$__cgp_body" <<'__CGP_BODY__'
+__cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
+trap 'rm -f "$__cgpipe_body"' EXIT
+cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
 samtools sort in.bam > out.bam
-__CGP_BODY__
+__CGPIPE_BODY__
 
 docker run --rm \
     -v /tmp:/tmp \
@@ -41,7 +41,7 @@ docker run --rm \
     -w __WORKDIR__ \
     -u $(id -u):$(id -g) \
     biocontainers/samtools:1.9 \
-    sh "$__cgp_body"
+    sh "$__cgpipe_body"
 ```
 
 The body never mentions Docker — you could drop the `job.container` line and run it
@@ -54,7 +54,7 @@ The same target with `engine = "singularity"` uses `singularity exec` with `-B`
 binds and `--pwd`:
 
 ```
-cgp.container.engine = "singularity"
+cgpipe.container.engine = "singularity"
 
 out.bam: in.bam {{
     job.container = "docker://biocontainers/bwa:0.7.17"
@@ -68,13 +68,13 @@ singularity exec \
     -B __WORKDIR__:__WORKDIR__ \
     --pwd __WORKDIR__ \
     docker://biocontainers/bwa:0.7.17 \
-    sh "$__cgp_body"
+    sh "$__cgpipe_body"
 ```
 
 ## Tuning the invocation
 
 Extra settings shape the engine command. Each is available globally as
-`cgp.container.<name>` and/or per target as `job.container.<name>`:
+`cgpipe.container.<name>` and/or per target as `job.container.<name>`:
 
 | Setting | Purpose |
 |---------|---------|
@@ -83,7 +83,7 @@ Extra settings shape the engine command. Each is available globally as
 | `job.container.opts` | Raw extra flags for the engine |
 | `job.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
 | `job.container.shell` | Shell used to run the body inside the image (default `sh`) |
-| `cgp.container.user_map` | Docker: add `-u $(id -u):$(id -g)` (default on) |
+| `cgpipe.container.user_map` | Docker: add `-u $(id -u):$(id -g)` (default on) |
 
 ```
 out.bam: in.bam {{
@@ -107,7 +107,7 @@ docker run --rm \
     -e SAMPLE \
     --shm-size=1g \
     img:1 \
-    bash "$__cgp_body"
+    bash "$__cgpipe_body"
 ```
 
 Each setting maps to its engine flag: `bind` → `-v`/`-B`, `env` → `-e`, `opts`
@@ -126,7 +126,7 @@ train.model: data.tfrecord {{
 ```
 
 - `job.gpu = true` → one GPU; `job.gpu = N` → N; `job.gpu = false`/unset → none.
-  Global default: `cgp.gpu`.
+  Global default: `cgpipe.gpu`.
 - On a scheduler it emits the resource request — on SLURM, `#SBATCH --gres=gpu:2`.
 - Inside a container it adds the engine's GPU flag (Docker `--gpus`,
   Singularity/Apptainer `--nv`).

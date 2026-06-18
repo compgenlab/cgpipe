@@ -1,41 +1,41 @@
 #!/usr/bin/env bash
 #
-# cgp language-spec fixture suite.
+# cgpipe language-spec fixture suite.
 #
-# Runs real .cgp scripts through the cgp binary and diffs the result against
+# Runs real .cgp scripts through the cgpipe binary and diffs the result against
 # checked-in golden files, so the language's surface syntax stays visible and
 # every feature has an executable example. There are two kinds of fixture:
 #
 #   stdout fixtures  (tests/lang/**.cgp, tests/build/**.cgp)
-#       Run `cgp [args] <file>`; compare combined behaviour against:
+#       Run `cgpipe [args] <file>`; compare combined behaviour against:
 #           <file>.out   expected stdout            (required)
 #           <file>.args  extra CLI args, one line   (optional; word-split)
 #           <file>.rc    expected exit code         (optional; default 0)
 #           <file>.err   expected stderr            (optional; exact)
-#           <file>.env   shell sourced before run   (optional; e.g. CGP_ENV=...)
+#           <file>.env   shell sourced before run   (optional; e.g. CGPIPE_ENV=...)
 #       lang/  fixtures end with `exit` and assert on print output.
 #       build/ fixtures pass `-dr` (in .args) and assert on the emitted script.
 #
 #   runner fixtures  (tests/runners/<scheduler>/**.cgp)
-#       Submit to a mock scheduler (sbatch/qsub/...) and compare what cgp sent.
+#       Submit to a mock scheduler (sbatch/qsub/...) and compare what cgpipe sent.
 #       <file>.expected/ holds the golden capture:
-#           stdout                  cgp's stdout (the job ids)            (required)
+#           stdout                  cgpipe's stdout (the job ids)            (required)
 #           rc                      exit code, only when non-zero        (optional)
 #           submit-N.argv           argv of the Nth submit call
 #           submit-N.stdin          rendered script piped to the Nth submit
 #           status-N.argv, release-N.argv, ...
 #       Optional siblings: <file>.args, <file>.env, <file>.responses/ (canned
-#       status responses, exposed as CGP_TEST_RESPONSES).
+#       status responses, exposed as CGPIPE_TEST_RESPONSES).
 #
 # Usage:
-#   tests/run.sh                 # build cgp, run every fixture
+#   tests/run.sh                 # build cgpipe, run every fixture
 #   tests/run.sh <file.cgp> ...  # run only the named fixture(s)
 #   tests/run.sh -v              # show a diff for every failure
 #   tests/run.sh -u              # update golden files from actual output
 #   tests/run.sh -k              # keep per-fixture temp dirs (debug)
 #
 # Env:
-#   CGP_BIN   use this prebuilt binary instead of `go build`ing one.
+#   CGPIPE_BIN   use this prebuilt binary instead of `go build`ing one.
 #
 set -u
 
@@ -60,14 +60,14 @@ for arg in "$@"; do
 done
 
 # ---- locate / build the binary -------------------------------------------
-if [ -n "${CGP_BIN:-}" ]; then
-    CGP="$CGP_BIN"
-    [ -x "$CGP" ] || { echo "run.sh: CGP_BIN=$CGP is not executable" >&2; exit 2; }
+if [ -n "${CGPIPE_BIN:-}" ]; then
+    CGPIPE="$CGPIPE_BIN"
+    [ -x "$CGPIPE" ] || { echo "run.sh: CGPIPE_BIN=$CGPIPE is not executable" >&2; exit 2; }
 else
-    CGP="$(mktemp -d)/cgp"
-    echo "building cgp ..."
+    CGPIPE="$(mktemp -d)/cgpipe"
+    echo "building cgpipe ..."
     if ! ( cd "$ROOT" && GOWORK=off GOTOOLCHAIN=auto CGO_ENABLED=0 \
-            go build -o "$CGP" ./cmd/cgp ); then
+            go build -o "$CGPIPE" ./cmd/cgpipe ); then
         echo "run.sh: build failed" >&2
         exit 2
     fi
@@ -113,7 +113,7 @@ read_args() {
 }
 
 # norm_paths <workdir> <file...> — replace the ephemeral temp workdir path with a
-# stable token. cgp embeds the absolute cwd in some output (container bind/-w
+# stable token. cgpipe embeds the absolute cwd in some output (container bind/-w
 # mounts, error messages), which would otherwise differ on every run.
 norm_paths() {
     local wd="$1"; shift
@@ -127,35 +127,35 @@ norm_paths() {
 }
 
 run_stdout_fixture() {
-    local cgp_file="$1"
+    local cgpipe_file="$1"
     # absolutize: sidecars are referenced from inside the per-fixture workdir
-    cgp_file="$(cd "$(dirname "$cgp_file")" && pwd)/$(basename "$cgp_file")"
-    local name; name="$(basename "$cgp_file")"
-    local out_golden="${cgp_file}.out"
-    local err_golden="${cgp_file}.err"
-    local rc_file="${cgp_file}.rc"
-    local env_file="${cgp_file}.env"
-    local setup_file="${cgp_file%.cgp}.setup.sh"
+    cgpipe_file="$(cd "$(dirname "$cgpipe_file")" && pwd)/$(basename "$cgpipe_file")"
+    local name; name="$(basename "$cgpipe_file")"
+    local out_golden="${cgpipe_file}.out"
+    local err_golden="${cgpipe_file}.err"
+    local rc_file="${cgpipe_file}.rc"
+    local env_file="${cgpipe_file}.env"
+    local setup_file="${cgpipe_file%.cgp}.setup.sh"
     local want_rc=0
     [ -f "$rc_file" ] && IFS= read -r want_rc < "$rc_file"
 
-    read_args "${cgp_file}.args"
+    read_args "${cgpipe_file}.args"
     local -a args=(${WORDS[@]+"${WORDS[@]}"})
 
     local work; work="$(mktemp -d)"
-    cp "$cgp_file" "$work/$name"
+    cp "$cgpipe_file" "$work/$name"
     # copy a <name>.files/ helper dir (includes, fixtures) if present
-    [ -d "${cgp_file%.cgp}.files" ] && cp -R "${cgp_file%.cgp}.files/." "$work/"
+    [ -d "${cgpipe_file%.cgp}.files" ] && cp -R "${cgpipe_file%.cgp}.files/." "$work/"
 
     local rc
     (
         cd "$work" || exit 99
-        export CGP
+        export CGPIPE
         # shellcheck disable=SC1090
         [ -f "$env_file" ] && . "$env_file"
         # optional prep (create inputs with set mtimes, seed a ledger, ...)
         [ -f "$setup_file" ] && bash "$setup_file"
-        "$CGP" ${args[@]+"${args[@]}"} "$name" >stdout.actual 2>stderr.actual
+        "$CGPIPE" ${args[@]+"${args[@]}"} "$name" >stdout.actual 2>stderr.actual
         echo $? >rc.actual
     )
     IFS= read -r rc < "$work/rc.actual"
@@ -179,22 +179,22 @@ run_stdout_fixture() {
 }
 
 run_runner_fixture() {
-    local cgp_file="$1"
+    local cgpipe_file="$1"
     # absolutize: sidecars are referenced from inside the per-fixture workdir
-    cgp_file="$(cd "$(dirname "$cgp_file")" && pwd)/$(basename "$cgp_file")"
-    local name; name="$(basename "$cgp_file")"
-    local sched; sched="$(basename "$(dirname "$cgp_file")")"
-    local exp="${cgp_file%.cgp}.expected"
-    local env_file="${cgp_file}.env"
-    local resp_dir="${cgp_file%.cgp}.responses"
-    local setup_file="${cgp_file%.cgp}.setup.sh"
+    cgpipe_file="$(cd "$(dirname "$cgpipe_file")" && pwd)/$(basename "$cgpipe_file")"
+    local name; name="$(basename "$cgpipe_file")"
+    local sched; sched="$(basename "$(dirname "$cgpipe_file")")"
+    local exp="${cgpipe_file%.cgp}.expected"
+    local env_file="${cgpipe_file}.env"
+    local resp_dir="${cgpipe_file%.cgp}.responses"
+    local setup_file="${cgpipe_file%.cgp}.setup.sh"
 
     if [ ! -d "$MOCKS/$sched" ]; then
         echo "  no mocks for scheduler '$sched'" >&2
         return 1
     fi
 
-    read_args "${cgp_file}.args"
+    read_args "${cgpipe_file}.args"
     local -a extra=(${WORDS[@]+"${WORDS[@]}"})
 
     local work; work="$(mktemp -d)"
@@ -202,25 +202,25 @@ run_runner_fixture() {
     mkdir -p "$capture" "$bindir"
     cp "$MOCKS/lib.sh" "$work/lib.sh"
     cp "$MOCKS/$sched"/* "$bindir/" && chmod +x "$bindir"/*
-    cp "$cgp_file" "$work/$name"
+    cp "$cgpipe_file" "$work/$name"
     # copy a <name>.files/ helper dir (e.g. a custom submission template) if present
-    [ -d "${cgp_file%.cgp}.files" ] && cp -R "${cgp_file%.cgp}.files/." "$work/"
+    [ -d "${cgpipe_file%.cgp}.files" ] && cp -R "${cgpipe_file%.cgp}.files/." "$work/"
 
     local rc
     (
         cd "$work" || exit 99
-        export CGP
+        export CGPIPE
         export PATH="$bindir:$PATH"
-        export CGP_TEST_CAPTURE="$capture"
-        export CGP_TEST_JOBID_BASE=1001
-        [ -d "$resp_dir" ] && export CGP_TEST_RESPONSES="$resp_dir"
+        export CGPIPE_TEST_CAPTURE="$capture"
+        export CGPIPE_TEST_JOBID_BASE=1001
+        [ -d "$resp_dir" ] && export CGPIPE_TEST_RESPONSES="$resp_dir"
         # shellcheck disable=SC1090
         [ -f "$env_file" ] && . "$env_file"
-        # optional prep — e.g. a first `cgp` run to seed the ledger, or files
+        # optional prep — e.g. a first `cgpipe` run to seed the ledger, or files
         # with set mtimes. Its scheduler calls go to a scratch capture dir so
         # they don't pollute the captures under test.
-        [ -f "$setup_file" ] && CGP_TEST_CAPTURE="$work/setup-capture" bash "$setup_file"
-        "$CGP" -r "$sched" ${extra[@]+"${extra[@]}"} "$name" >stdout.actual 2>stderr.actual
+        [ -f "$setup_file" ] && CGPIPE_TEST_CAPTURE="$work/setup-capture" bash "$setup_file"
+        "$CGPIPE" -r "$sched" ${extra[@]+"${extra[@]}"} "$name" >stdout.actual 2>stderr.actual
         echo $? >rc.actual
     )
     IFS= read -r rc < "$work/rc.actual"

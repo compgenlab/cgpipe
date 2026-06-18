@@ -1,25 +1,25 @@
-# cgp in one page (LLM / quick reference)
+# cgpipe in one page (LLM / quick reference)
 
-A dense, complete reference for writing **cgp** pipelines. cgp is a small language
+A dense, complete reference for writing **cgpipe** pipelines. cgpipe is a small language
 that generates and submits job scripts: you declare `output: inputs` rules with
-shell bodies, and cgp builds a dependency graph and runs the stale parts locally
+shell bodies, and cgpipe builds a dependency graph and runs the stale parts locally
 or on a scheduler (SLURM/SGE/PBS/BatchQ). If you can read `make` and bash, you can
-read cgp. This file is self-contained — read it top to bottom and you can author
-valid cgp. The normative reference is [`language-spec.md`](language-spec.md); when
+read cgpipe. This file is self-contained — read it top to bottom and you can author
+valid cgpipe. The normative reference is [`language-spec.md`](language-spec.md); when
 in doubt, that and the `tests/` fixtures win.
 
 ## Mental model
-- A `.cgp` file is read top-to-bottom as **cgp code** (global context).
-- `{ ... }` = a block of cgp code (`if`/`for`). `{{ ... }}` = a **shell body**
+- A `.cgp` file is read top-to-bottom as **cgpipe code** (global context).
+- `{ ... }` = a block of cgpipe code (`if`/`for`). `{{ ... }}` = a **shell body**
   (raw shell, captured verbatim, rendered at job time).
 - A **target** declares `outputs : inputs {{ body }}`. Requesting an output runs
   the body if the output is missing or older than an input.
 
 ## Hello
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
-# Help text: this comment block is shown by `cgp file.cgp -h`.
+# Help text: this comment block is shown by `cgpipe file.cgp -h`.
 
 greeting ?= "world"
 
@@ -28,9 +28,9 @@ hello.txt: {{
 }}
 @default: hello.txt
 ```
-Run: `cgp hello.cgp` prints the assembled bash to stdout (pipe to `bash` to run);
-`cgp hello.cgp --greeting Sam` overrides the variable; `cgp -dr ...` previews;
-`cgp -r slurm ...` submits to SLURM instead.
+Run: `cgpipe hello.cgp` prints the assembled bash to stdout (pipe to `bash` to run);
+`cgpipe hello.cgp --greeting Sam` overrides the variable; `cgpipe -dr ...` previews;
+`cgpipe -r slurm ...` submits to SLURM instead.
 
 ## Types
 `bool` (`true`/`false`), `int`, `float`, `string` (always `"..."`),
@@ -52,15 +52,15 @@ Lexically block-scoped: every `{ }` (if/for body, target body) is a scope. A bar
 `x =` writes through to an enclosing binding if one exists, else makes a block-local
 that dies with the block — so a loop variable and a name first used inside a loop do
 NOT persist after it. Declare with `var` in an outer scope to keep a value:
-`var last` then `for s in xs { last = s }`. `job.*`/`cgp.*` settings assigned inside a
+`var last` then `for s in xs { last = s }`. `job.*`/`cgpipe.*` settings assigned inside a
 block still take effect outside it. Write handles auto-close on scope exit.
 
 ## Command-line variables (double hyphen)
-`cgp p.cgp --sample s1 --threads 16` sets `sample`, `threads`. Rules:
+`cgpipe p.cgp --sample s1 --threads 16` sets `sample`, `threads`. Rules:
 `--flag` (bare) → `flag = true`; `--hp-dist` → `hp_dist` (hyphens→underscores);
 repeat → list (`--x a --x b` → `["a","b"]`). Put the file before a trailing bare
 flag. Guard required vars: `if !sample { print "ERROR: --sample required"; exit 1 }`.
-(Single-hyphen args like `-dr`, `-r`, `-force` are cgp's own options.)
+(Single-hyphen args like `-dr`, `-r`, `-force` are cgpipe's own options.)
 
 ## Operators & expressions
 Arithmetic `+ - * / % **` (`**` power, right-assoc; `/` is int division unless a
@@ -75,7 +75,7 @@ ${var?}    # like ${var} but "" when unset
 ${expr}    # any expression: ${input[0]}, ${name.basename()}
 ${if c; a; b}   # inline conditional; else optional (empty when false)
 @{list}    # list expansion -> one copy per element (in declarations/strings)
-${{var}}   # double-eval: substitute, then evaluate result as cgp source
+${{var}}   # double-eval: substitute, then evaluate result as cgpipe source
 $(cmd)     # run cmd in shell AT PARSE/RENDER TIME; substitute stdout
 ```
 Escaping in a string literal: C-style `\n \r \t \b \f \v \a \0`; `\" \\ \'` literal;
@@ -91,8 +91,8 @@ for s in xs with i { ... }     # `with i` = 1-based loop counter (alongside the 
 for cond { ... }               # while-style
 print a, b            # stdout (comma args space-joined); inside a body, appends to the script
 include "other.cgp"   # inline another file (global context) — shared defaults/targets
-eval "x = 6*7"        # evaluate a string as cgp source
-exit 1                # stop; code becomes cgp's exit status
+eval "x = 6*7"        # evaluate a string as cgpipe source
+exit 1                # stop; code becomes cgpipe's exit status
 ```
 
 ## Methods
@@ -123,13 +123,13 @@ out1 out2 : in1 in2 {{
   defaults to 1; a setting is the default for targets defined after it.
   **No `--` ⇒ no directive block; the whole body is shell.**
 - **Array jobs**: set `job.array = <int>` (the element's task index, e.g. `with i`)
-  on a fan-out rule and cgp submits all its elements as ONE scheduler array
+  on a fan-out rule and cgpipe submits all its elements as ONE scheduler array
   (slurm/batchq; sge/pbs → one job per element). Elements must be
   submission-compatible (same `job.*` but the index) with unique indices, else error.
   A gather depends on the exact tasks (`afterok:<id>_<i>`); restarts submit only the
   stale indices. Element-wise array→array (needs aftercorr) isn't supported yet.
 - Body is raw shell: only `\$`/`\@` are special. `\$(cmd)` and `\${VAR}` defer to
-  the job's shell (vs `$(cmd)`/`${var}` which cgp evaluates at render time).
+  the job's shell (vs `$(cmd)`/`${var}` which cgpipe evaluates at render time).
 - **Inline conditional** for optional flags: `bwa ${if rg; "-R " + rg} ...`.
 - **`%`-control lines** in a body emit shell per iteration:
   `out: {{ \n% for p in parts {\n echo ${p}\n% }\n}}`.
@@ -142,7 +142,7 @@ out1 out2 : in1 in2 {{
   `@{samples}.bam: @{samples}.fq {{ ... }}`. (Contrast `${input}` which joins in a body.)
 - **Multiple defs**: same output defined twice → first whose inputs are satisfiable wins.
 - **Temp output** `^out`: intermediate; when ABSENT, staleness looks through it to
-  its inputs; cgp never auto-deletes it.
+  its inputs; cgpipe never auto-deletes it.
 - **Opportunistic** `: in1 in2 {{ ... }}` (no outputs): runs only if all inputs
   already exist; never forces them. Use for guarded cleanup of temps.
 - **Bodyless aggregator**: `all: a.txt b.txt` (no body) — phony grouping target.
@@ -159,12 +159,12 @@ out1 out2 : in1 in2 {{
 
 ## Runners & scheduling
 `-r shell` (default; prints bash) | `slurm` `sge` `pbs` `batchq` (submit) |
-`graphviz` (DOT) | `html` (status page). Set via `-r` or `cgp.runner`. Directives
+`graphviz` (DOT) | `html` (status page). Set via `-r` or `cgpipe.runner`. Directives
 map per scheduler (`mem="8G"` → SLURM `--mem=8000`, `procs=4` → `-c 4`).
 Dependencies are derived from `output: input` edges (SLURM `afterok:<id>`).
-One-off: `cgp sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
-Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgp sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
-Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
+One-off: `cgpipe sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
+Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgpipe sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
+Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgpipe sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
 
 ## Reading files (sample sheets, scatter + gather)
 Read a data file at **eval time** and build targets from its rows — scatter and
@@ -209,7 +209,7 @@ f = open("params.txt", "w")
 f.writeln("ref=hg38")
 f.close()
 ```
-Writes run at **eval time** (like `$(…)`/reads). **Under `-dr` they are no-ops** (cgp
+Writes run at **eval time** (like `$(…)`/reads). **Under `-dr` they are no-ops** (cgpipe
 warns `not writing to file "…"`). A file a *job consumes* should instead be a target
 body (`params.txt: {{ printf … > ${output} }}`) so it is graph-tracked and `-dr`-safe;
 use `open(…,"w")` for files outside the graph (logs, sidecar metadata).
@@ -220,16 +220,16 @@ mix (positional first). Used by the file readers above (and any method that docu
 named parameters).
 
 ## Ledger (optional), workflows
-- **Ledger** (`cgp.ledger = "jobs.ledger"`, a directory): records which job owns which output;
+- **Ledger** (`cgpipe.ledger = "jobs.ledger"`, a directory): records which job owns which output;
   enables cross-run reuse of still-queued jobs (scheduler runners). Restart is
-  mtime-based regardless; `-force` rebuilds all. Inspect: `cgp ledger dump/search/status/vacuum`
+  mtime-based regardless; `-force` rebuilds all. Inspect: `cgpipe ledger dump/search/status/vacuum`
   (`status [-r RUNNER] [-output]` shows live scheduler status per job/output).
 - **Workflow** (chain pipelines): `stage NAME FILE --arg ...`; a stage exposes a
   value with top-level `export name = expr`, used as `${NAME.name}` in later stages.
 
 ## Worked example (per-chromosome calling + merge + cleanup)
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Options: --bam FILE  --ref FILE  --out PREFIX
 if !bam { print "ERROR: --bam required"; exit 1 }
@@ -274,4 +274,4 @@ ${out}.vcf.gz: @{parts} {{
 - Reserved/`@`-names never name files; `%` wildcards only in the declaration line.
 - Write atomically: a killed job can leave a half-written `${output}` that looks
   fresh and won't rebuild. Prefer `cmd > ${output}.tmp && mv ${output}.tmp ${output}`
-  (cgp tracks mtime, not exit status).
+  (cgpipe tracks mtime, not exit status).

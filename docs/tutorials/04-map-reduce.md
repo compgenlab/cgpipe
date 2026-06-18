@@ -10,7 +10,7 @@ introduces **dynamic target generation** (a `for` loop that emits targets), an
 `call.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Per-chromosome variant calling with a merge.
 #
@@ -46,7 +46,7 @@ ${out}.vcf.gz: @{parts} {{
 
 How it works:
 
-- **The `for` loop is cgp code at the top level**, so it runs at evaluation time
+- **The `for` loop is cgpipe code at the top level**, so it runs at evaluation time
   and *emits one target per chromosome*. This is dynamic generation — the number of
   jobs follows the data, not the script.
 - **`parts += …`** accumulates the per-chromosome output names into a list as we
@@ -60,7 +60,7 @@ How it works:
 ## Render it
 
 ```console
-$ cgp -dr call.cgp --bam sample.bam --ref ref.fa --out sample
+$ cgpipe -dr call.cgp --bam sample.bam --ref ref.fa --out sample
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -82,7 +82,7 @@ bcftools concat -O z -o sample.vcf.gz sample.1.vcf.gz sample.2.vcf.gz sample.3.v
 
 Three independent calling jobs, then one merge that depends on all of them. On a
 scheduler (`-r slurm`) the three would submit in parallel and the merge would be
-wired to wait for them — cgp derives the dependency from the `@{parts}` inputs.
+wired to wait for them — cgpipe derives the dependency from the `@{parts}` inputs.
 
 ## `${...}` vs `@{...}` — the key distinction
 

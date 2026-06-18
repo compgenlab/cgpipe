@@ -1,7 +1,7 @@
 {
-  "name": "cgp",
-  "displayName": "cgp",
-  "description": "Language support for cgp pipeline scripts (syntax highlighting + language server).",
+  "name": "cgpipe",
+  "displayName": "cgpipe",
+  "description": "Language support for cgpipe pipeline scripts (syntax highlighting + language server).",
   "version": "0.1.0",
   "publisher": "compgen-io",
   "license": "MIT",
@@ -13,19 +13,19 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/compgen-io/cgp"
+    "url": "https://github.com/compgenlab/cgpipe"
   },
   "main": "./out/extension.js",
   "activationEvents": [
-    "onLanguage:cgp"
+    "onLanguage:cgpipe"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "cgp",
+        "id": "cgpipe",
         "aliases": [
-          "cgp",
-          "CGP"
+          "cgpipe",
+          "CGPIPE"
         ],
         "extensions": [
           ".cgp",
@@ -36,23 +36,23 @@
     ],
     "grammars": [
       {
-        "language": "cgp",
+        "language": "cgpipe",
         "scopeName": "source.cgp",
-        "path": "./syntaxes/cgp.tmLanguage.json",
+        "path": "./syntaxes/cgpipe.tmLanguage.json",
         "embeddedLanguages": {
           "meta.embedded.block.shell.cgp": "shellscript"
         }
       }
     ],
     "configuration": {
-      "title": "cgp",
+      "title": "cgpipe",
       "properties": {
-        "cgp.serverPath": {
+        "cgpipe.serverPath": {
           "type": "string",
-          "default": "cgp",
-          "markdownDescription": "Path to the `cgp` binary used to run the language server (`cgp lsp`). Defaults to `cgp` on your PATH."
+          "default": "cgpipe",
+          "markdownDescription": "Path to the `cgpipe` binary used to run the language server (`cgpipe lsp`). Defaults to `cgpipe` on your PATH."
         },
-        "cgp.trace.server": {
+        "cgpipe.trace.server": {
           "type": "string",
           "enum": [
             "off",
@@ -60,7 +60,7 @@
             "verbose"
           ],
           "default": "off",
-          "description": "Trace the communication between VSCode and the cgp language server."
+          "description": "Trace the communication between VSCode and the cgpipe language server."
         }
       }
     }

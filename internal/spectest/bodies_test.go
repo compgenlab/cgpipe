@@ -50,7 +50,7 @@ out: in {{
 	}
 }
 
-// §6.4 In-body `%` control lines: a line starting with `%` is cgp; it wraps the
+// §6.4 In-body `%` control lines: a line starting with `%` is cgpipe; it wraps the
 // surrounding shell, which is emitted once per iteration.
 func TestPercentControlLines(t *testing.T) {
 	got := render(t, `xs = ["a", "b", "c"]
@@ -150,7 +150,7 @@ out: in {{
 	}
 }
 
-// §6.2 The directive block is ordinary cgp code: control flow there sets job
+// §6.2 The directive block is ordinary cgpipe code: control flow there sets job
 // settings conditionally, which the shell can then read.
 func TestDirectiveBlockControlFlow(t *testing.T) {
 	mk := func(flag string) string {

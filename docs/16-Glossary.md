@@ -1,6 +1,6 @@
 # Glossary
 
-Terms used throughout the cgp documentation. Each links to where it's covered in
+Terms used throughout the cgpipe documentation. Each links to where it's covered in
 depth.
 
 **Aggregator (bodyless target).** A target with no `{{ }}` body — a phony grouping
@@ -24,7 +24,7 @@ in a body's **directive block**, before the `--` separator.
 [Build Targets](05-Build_Targets.md#directives-and-the----separator).
 
 **Directive block.** The optional leading section of a body, before `--`, written
-in cgp code. No `--` means no directive block — the whole body is shell.
+in cgpipe code. No `--` means no directive block — the whole body is shell.
 
 **Dry run.** `-dr` — render the scripts a real run would produce, without executing
 or submitting. [Running Jobs](08-Running_Jobs.md#dry-runs).
@@ -34,7 +34,7 @@ workflow as `${stage.name}`; a no-op when the pipeline runs standalone.
 [Workflows](12-Workflows.md#exposing-values-with-export).
 
 **Fan-out.** Emitting many independent targets from a loop — e.g. one per row of a
-sample sheet, or `cgp sub` over a list of files. Pairs with a **gather** target that
+sample sheet, or `cgpipe sub` over a list of files. Pairs with a **gather** target that
 depends on `@{…}` of the fanned-out outputs.
 [Sample Sheets](13-Sample_Sheets.md).
 
@@ -69,10 +69,10 @@ inputs already exist, never forcing them — the pattern for guarded cleanup.
 `stage` statements is a *workflow* instead.)
 
 **Reserved target.** A target whose name begins with `@` (`@pre`, `@default`, …) —
-built into cgp and never a file on disk. [Reserved Targets](06-Reserved_Targets.md).
+built into cgpipe and never a file on disk. [Reserved Targets](06-Reserved_Targets.md).
 
 **Runner.** The backend that carries out a pipeline: `shell`, `slurm`, `sge`, `pbs`,
-`batchq`, `graphviz`, or `html`. Chosen with `-r` or `cgp.runner`.
+`batchq`, `graphviz`, or `html`. Chosen with `-r` or `cgpipe.runner`.
 [Running Jobs](08-Running_Jobs.md#runners).
 
 **Shexec.** `job.shexec = true` — run a body directly on the submit host instead of
@@ -96,7 +96,7 @@ than an input. Decided by file timestamps, not the ledger.
 that builds them. [Build Targets](05-Build_Targets.md).
 
 **Temporary output (`^`).** An intermediate output marked `^` — when absent,
-staleness looks *through* it to its inputs. cgp never auto-deletes it.
+staleness looks *through* it to its inputs. cgpipe never auto-deletes it.
 [Build Targets](05-Build_Targets.md#temporary-outputs-).
 
 **Wildcard.** `%` in a declaration, matching a stem reused on the input side.

@@ -1,5 +1,5 @@
-// Package debug is cgp's tiny leveled trace facility. It is off by default
-// (level 0); the CLI raises the level from -debug N / CGP_DEBUG. Higher levels
+// Package debug is cgpipe's tiny leveled trace facility. It is off by default
+// (level 0); the CLI raises the level from -debug N / CGPIPE_DEBUG. Higher levels
 // print progressively more detail about what the interpreter and runner are
 // doing — useful when a pipeline won't resolve, stalls, or behaves unexpectedly.
 //
@@ -60,7 +60,7 @@ func SetWriter(w io.Writer) io.Writer {
 	return prev
 }
 
-// Logf emits one trace line at verbosity n, prefixed "cgp[dN] ", when the
+// Logf emits one trace line at verbosity n, prefixed "cgpipe[dN] ", when the
 // current level is >= n. A trailing newline is added.
 func Logf(n int, format string, args ...any) {
 	mu.Lock()
@@ -68,7 +68,7 @@ func Logf(n int, format string, args ...any) {
 	if level < n || out == nil {
 		return
 	}
-	fmt.Fprintf(out, "cgp[d%d] ", n)
+	fmt.Fprintf(out, "cgpipe[d%d] ", n)
 	fmt.Fprintf(out, format, args...)
 	fmt.Fprintln(out)
 }

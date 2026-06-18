@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/parser"
-	"github.com/compgen-io/cgp/internal/runner"
-	"github.com/compgen-io/cgp/internal/runner/shell"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/runner"
+	"github.com/compgenlab/cgpipe/internal/runner/shell"
 )
 
 // build parses and evaluates src (capturing global `print` output), failing the

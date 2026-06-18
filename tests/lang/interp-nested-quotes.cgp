@@ -1,4 +1,4 @@
-# A cgp string literal is one escape domain: its escapes (incl. \") are resolved
+# A cgpipe string literal is one escape domain: its escapes (incl. \") are resolved
 # before the ${...} interior is parsed, so a nested string argument works.
 name = "reads.bam"
 print "stem=${name.sub(\".bam\", \"\")}"            # stem=reads

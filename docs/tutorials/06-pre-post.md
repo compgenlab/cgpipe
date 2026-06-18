@@ -9,7 +9,7 @@ once with the `@pre` and `@post` reserved targets.
 `wrapped.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 
 @pre {{
     echo "==> ${output}"
@@ -30,7 +30,7 @@ out.txt: {{
 ## Render it
 
 ```console
-$ cgp -dr wrapped.cgp
+$ cgpipe -dr wrapped.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -101,7 +101,7 @@ submit host (so a `mkdir` happens before any jobs are queued).
 ## Deferring evaluation
 
 A subtlety with `@pre`: if you want a command to run *when the job runs* rather than
-when cgp renders the script, defer it with `\$(…)`:
+when cgpipe renders the script, defer it with `\$(…)`:
 
 ```
 @pre {{

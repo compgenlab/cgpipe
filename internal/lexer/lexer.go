@@ -3,16 +3,16 @@ package lexer
 import (
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
-// Lexer turns cgp source into a stream of tokens via repeated Next() calls,
+// Lexer turns cgpipe source into a stream of tokens via repeated Next() calls,
 // ending with a token.EOF.
 //
-// cgp is line-oriented: NEWLINE (and ';') separate statements, so the lexer
+// cgpipe is line-oriented: NEWLINE (and ';') separate statements, so the lexer
 // emits NEWLINE tokens. The defining behavior is the mode flip on `{{`: the
 // lexer captures the shell body verbatim until a lone `}}` line and returns it
-// as a single token.BODY, rather than tokenizing it as cgp.
+// as a single token.BODY, rather than tokenizing it as cgpipe.
 type Lexer struct {
 	src  string
 	file string

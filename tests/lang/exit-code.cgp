@@ -1,4 +1,4 @@
-# §5.2 exit <code> stops the pipeline and propagates the code as cgp's exit
+# §5.2 exit <code> stops the pipeline and propagates the code as cgpipe's exit
 # status; statements after exit do not run. (Expected rc is in exit-code.cgp.rc.)
 print "before exit"
 exit 3

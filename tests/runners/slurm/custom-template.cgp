@@ -1,8 +1,8 @@
-# §11.3 cgp.runner.<name>.template points the runner at a custom submission
+# §11.3 cgpipe.runner.<name>.template points the runner at a custom submission
 # template, replacing the built-in script while keeping the rest of the slurm
 # wiring (sbatch, status probes). The site template here is recognizably
 # different — a SITE marker and no `set -eo pipefail` / JOB_ID boilerplate.
-cgp.runner.slurm.template = "my.template.cgp"
+cgpipe.runner.slurm.template = "my.template.cgp"
 out.bam: {{
     job.name   = "j"
     job.custom = ["--exclusive"]

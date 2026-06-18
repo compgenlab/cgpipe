@@ -17,7 +17,7 @@ twice = 2 * 21
 Then pull them in:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 
 include "defs.cgp"
 
@@ -27,14 +27,14 @@ exit
 ```
 
 ```console
-$ cgp pipeline.cgp
+$ cgpipe pipeline.cgp
 hello from defs
 42
 ```
 
 The included file's statements run as if they were typed at the `include` point —
 its variables and targets become part of your pipeline. A common use is a
-`defaults.cgp` that sets `cgp.runner`, a scheduler account, and `?=` defaults, so
+`defaults.cgp` that sets `cgpipe.runner`, a scheduler account, and `?=` defaults, so
 each pipeline starts with `include "defaults.cgp"` and stays free of cluster
 specifics.
 
@@ -61,13 +61,13 @@ c = "leaf"
 Including `top.cgp` brings in all three:
 
 ```console
-$ cgp run.cgp           # run.cgp does: include "top.cgp"; print a, b, c
+$ cgpipe run.cgp           # run.cgp does: include "top.cgp"; print a, b, c
 top mid leaf
 ```
 
 ## include vs. snippet
 
-- **`include`** shares **cgp code** — variables, `?=` defaults, target definitions,
+- **`include`** shares **cgpipe code** — variables, `?=` defaults, target definitions,
   even `@pre`/`@post`. It runs in global context.
 - **`snippet`/`@name`** ([Tutorial 7](07-snippets.md)) shares **shell body text**,
   spliced into specific bodies.
@@ -80,6 +80,6 @@ shell fragment inside bodies.
 - **[Tutorial 9: Containerized jobs](09-containers.md)** — run bodies inside Docker
   or Singularity.
 - **[Configuration Reference](../14-Configuration_Reference.md)** — what to put in a
-  shared `defaults.cgp` vs. `~/.cgp/config`.
+  shared `defaults.cgp` vs. `~/.cgpipe/config`.
 
 Reference → [language-spec.md §5.2](../language-spec.md#52-statement-keywords).

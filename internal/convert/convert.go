@@ -1,11 +1,11 @@
 // Package convert is a best-effort migrator from legacy (JVM-cgpipe-era)
-// scripts to the cgp language. It rewrites the mechanical, line-level
+// scripts to the cgpipe language. It rewrites the mechanical, line-level
 // differences and annotates anything it cannot safely convert with a
-// "# cgp-convert:" comment so a human can finish the job.
+// "# cgpipe-convert:" comment so a human can finish the job.
 //
 // What it handles:
-//   - shebang  #!.../cgpipe        -> #!/usr/bin/env cgp
-//   - settings cgpipe.*            -> cgp.*  (and cgpipe.joblog -> cgp.ledger)
+//   - shebang  #!.../cgpipe        -> #!/usr/bin/env cgpipe
+//   - settings cgpipe.joblog       -> cgpipe.ledger  (renamed keys only)
 //   - control  if/elif/else/endif  -> brace blocks; for/done -> brace blocks
 //   - targets  out: in  + indented body  -> out: in {{ ... }}
 //   - special  __pre__:: etc.      -> @pre { ... } (and post/setup/teardown/postsubmit)
@@ -17,7 +17,7 @@
 //
 // What it flags (inline "<% ... %>" mixed into a shell line, unknown special
 // targets, job.* settings appearing after the shell starts) is passed through
-// with a "# cgp-convert:" note rather than being silently mis-translated.
+// with a "# cgpipe-convert:" note rather than being silently mis-translated.
 package convert
 
 import (
@@ -28,7 +28,7 @@ import (
 )
 
 // Convert returns the converted source plus a list of human-readable warnings
-// (also emitted inline as "# cgp-convert:" comments in the output).
+// (also emitted inline as "# cgpipe-convert:" comments in the output).
 func Convert(src string) (string, []string) {
 	c := &converter{}
 	lines := strings.Split(src, "\n")
@@ -65,7 +65,7 @@ var specialTargets = map[string]string{
 	"teardown": "@teardown", "postsubmit": "@postsubmit",
 }
 
-// global processes lines in the top-level (cgp-code) context.
+// global processes lines in the top-level (cgpipe-code) context.
 func (c *converter) global(lines []string) {
 	i := 0
 	for i < len(lines) {
@@ -75,7 +75,7 @@ func (c *converter) global(lines []string) {
 
 		// shebang
 		if i == 0 && shebangRe.MatchString(line) {
-			c.emit("#!/usr/bin/env cgp")
+			c.emit("#!/usr/bin/env cgpipe")
 			i++
 			continue
 		}
@@ -88,8 +88,8 @@ func (c *converter) global(lines []string) {
 		// control flow -> braces
 		if controlRe.MatchString(trimmed) {
 			if multiVarForRe.MatchString(trimmed) {
-				c.warn("multi-variable for loop %q — cgp's for takes a single variable; rewrite by hand (e.g. index with a counter)", trimmed)
-				c.emit(indentOf(line) + "# cgp-convert: rewrite this multi-variable for loop")
+				c.warn("multi-variable for loop %q — cgpipe's for takes a single variable; rewrite by hand (e.g. index with a counter)", trimmed)
+				c.emit(indentOf(line) + "# cgpipe-convert: rewrite this multi-variable for loop")
 			}
 			c.emit(indentOf(line) + wrapBareCmdSubst(convertControl(trimmed)))
 			i++
@@ -115,7 +115,7 @@ func (c *converter) global(lines []string) {
 			c.emit("}}")
 			continue
 		}
-		// assignment / statement (rewrite cgpipe.* -> cgp.*)
+		// assignment / statement (rewrite cgpipe.* -> cgpipe.*)
 		if assignRe.MatchString(line) || keywordRe.MatchString(trimmed) {
 			c.emit(wrapBareCmdSubst(rewriteSettings(line)))
 			i++
@@ -225,7 +225,7 @@ func indentWidth(line string) int {
 type item struct {
 	kind  string   // "shell" | "blank" | "region" | "inline"
 	text  string   // shell/inline text
-	inner []string // region: the cgp lines between <% and %>
+	inner []string // region: the cgpipe lines between <% and %>
 	line  int      // 0-based index within the raw body
 }
 
@@ -273,7 +273,7 @@ func (c *converter) emitBody(raw []string, base int) {
 			c.emit(makeVars(it.text))
 		case "inline":
 			c.warn("inline <%% ... %%> on a shell line — convert by hand (e.g. ${if cond; ...})")
-			c.emit("    # cgp-convert: review inline <% %> below")
+			c.emit("    # cgpipe-convert: review inline <% %> below")
 			c.emit(makeVars(it.text))
 		case "region":
 			c.emitRegion(it.inner)
@@ -281,7 +281,7 @@ func (c *converter) emitBody(raw []string, base int) {
 	}
 }
 
-// emitRegion converts the cgp lines of a non-leading <% %> region into
+// emitRegion converts the cgpipe lines of a non-leading <% %> region into
 // %-control lines (control flow), @name (import), or %-assignments.
 func (c *converter) emitRegion(inner []string) {
 	for _, l := range inner {
@@ -421,10 +421,11 @@ func convertControl(t string) string {
 	return t
 }
 
-// rewriteSettings maps legacy setting names to cgp.* names.
+// rewriteSettings maps legacy setting names that were renamed in the Go
+// rewrite. The cgpipe.* prefix is unchanged from the JVM era, so only keys
+// whose name actually changed are rewritten.
 func rewriteSettings(line string) string {
-	line = strings.ReplaceAll(line, "cgpipe.joblog", "cgp.ledger")
-	line = strings.ReplaceAll(line, "cgpipe.", "cgp.")
+	line = strings.ReplaceAll(line, "cgpipe.joblog", "cgpipe.ledger")
 	return line
 }
 
@@ -445,11 +446,11 @@ func makeVars(s string) string {
 }
 
 // wrapBareCmdSubst wraps any bare $(...) command substitution that appears
-// outside a double-quoted string in double quotes, so it becomes a valid cgp
+// outside a double-quoted string in double quotes, so it becomes a valid cgpipe
 // string-valued expression (legacy scripts use bare $(cmd) in conditions and
-// assignments; cgp's $(cmd) lives inside a string literal). Internal `\` and `"`
-// are escaped so the command text survives cgp string parsing intact. This is
-// only applied in cgp-code contexts — never to shell body lines, where $(...)
+// assignments; cgpipe's $(cmd) lives inside a string literal). Internal `\` and `"`
+// are escaped so the command text survives cgpipe string parsing intact. This is
+// only applied in cgpipe-code contexts — never to shell body lines, where $(...)
 // is real shell command substitution and must stay bare.
 func wrapBareCmdSubst(s string) string {
 	var b strings.Builder

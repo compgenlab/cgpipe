@@ -1,11 +1,11 @@
-# cgp for VSCode
+# cgpipe for VSCode
 
-Language support for [cgp](https://github.com/compgen-io/cgp) pipeline scripts
+Language support for [cgpipe](https://github.com/compgenlab/cgpipe) pipeline scripts
 (`.cgp`, `.cgp2`).
 
 ## Features
 
-- **Syntax highlighting** for the cgp language: comments, strings with `${…}`
+- **Syntax highlighting** for the cgpipe language: comments, strings with `${…}`
   interpolation, numbers, keywords (`if`/`elif`/`else`/`for`/`in`), booleans,
   built-in statements (`print`, `exit`, `include`, …), `output : input` target
   rules, reserved targets (`@pre`, `@post`, `@default`, …), operators, and
@@ -15,9 +15,9 @@ Language support for [cgp](https://github.com/compgen-io/cgp) pipeline scripts
   Highlighting is provided by a TextMate grammar and works on its own — no
   language server required.
 
-- **Language server** (optional): when the `cgp` binary is on your `PATH`, the
-  extension starts `cgp lsp` to add diagnostics (parse errors), semantic
-  tokens, hover, and completion. See the `cgp.serverPath` setting to point at a
+- **Language server** (optional): when the `cgpipe` binary is on your `PATH`, the
+  extension starts `cgpipe lsp` to add diagnostics (parse errors), semantic
+  tokens, hover, and completion. See the `cgpipe.serverPath` setting to point at a
   specific binary.
 
 ## Installing (local)
@@ -28,7 +28,7 @@ Build a `.vsix` and install it into VSCode:
 cd editor/vscode
 npm install
 npx @vscode/vsce package
-code --install-extension cgp-*.vsix
+code --install-extension cgpipe-*.vsix
 ```
 
 Then open any `.cgp` / `.cgp2` file.

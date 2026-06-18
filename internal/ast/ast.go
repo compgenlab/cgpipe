@@ -1,11 +1,11 @@
 package ast
 
-import "github.com/compgen-io/cgp/internal/token"
+import "github.com/compgenlab/cgpipe/internal/token"
 
 // Node is any AST node.
 type Node interface{ Pos() token.Pos }
 
-// File is a parsed cgp source file: a sequence of top-level statements plus the
+// File is a parsed cgpipe source file: a sequence of top-level statements plus the
 // leading comment block (help text).
 type File struct {
 	Stmts []Stmt
@@ -204,7 +204,7 @@ type (
 		Name string
 		Body string
 	}
-	// EvalStmt evaluates a string-valued expression as cgp source at run time.
+	// EvalStmt evaluates a string-valued expression as cgpipe source at run time.
 	EvalStmt struct {
 		PosV token.Pos
 		Code Expr

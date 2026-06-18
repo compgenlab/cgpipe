@@ -20,7 +20,7 @@ import (
 // For now they share this constant plus the value helpers (asList, truthy).
 const maxLoopIterations = 1_000_000
 
-// Value is a cgp runtime value.
+// Value is a cgpipe runtime value.
 type Value interface{ typeName() string }
 
 type (
@@ -132,7 +132,7 @@ func stringify(v Value) string {
 	return ""
 }
 
-// truthy implements cgp's notion of truth (used by if/for-cond and !).
+// truthy implements cgpipe's notion of truth (used by if/for-cond and !).
 func truthy(v Value) bool {
 	switch x := v.(type) {
 	case BoolVal:
@@ -221,7 +221,7 @@ func newScope() *Scope { return &Scope{vars: map[string]Value{}} }
 func (s *Scope) child() *Scope { return &Scope{vars: map[string]Value{}, parent: s} }
 
 // root returns the bottom-most frame of the chain (the run/render root). Used as
-// the implicit home of the reserved job.*/cgp.* setting namespaces.
+// the implicit home of the reserved job.*/cgpipe.* setting namespaces.
 func (s *Scope) root() *Scope {
 	for s.parent != nil {
 		s = s.parent
@@ -258,8 +258,8 @@ func (s *Scope) frameOf(name string) *Scope {
 
 // assign implements a bare `name = v`: write to the nearest enclosing frame that
 // already binds name; if it is bound nowhere, create it in the current frame —
-// except reserved settings (job.* / cgp.*), which are implicitly declared at the
-// root so a conditional `job.mem`/`cgp.runner` inside a block still reaches the
+// except reserved settings (job.* / cgpipe.*), which are implicitly declared at the
+// root so a conditional `job.mem`/`cgpipe.runner` inside a block still reaches the
 // engine. It returns the frame the binding landed in (for write-handle ownership).
 func (s *Scope) assign(name string, v Value) *Scope {
 	if f := s.frameOf(name); f != nil {
@@ -274,9 +274,9 @@ func (s *Scope) assign(name string, v Value) *Scope {
 	return target
 }
 
-// isReservedSetting reports whether name is in the job.*/cgp.* setting namespace.
+// isReservedSetting reports whether name is in the job.*/cgpipe.* setting namespace.
 func isReservedSetting(name string) bool {
-	return strings.HasPrefix(name, "job.") || strings.HasPrefix(name, "cgp.")
+	return strings.HasPrefix(name, "job.") || strings.HasPrefix(name, "cgpipe.")
 }
 
 // del removes name from the nearest frame that binds it.

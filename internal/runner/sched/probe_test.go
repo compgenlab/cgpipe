@@ -32,7 +32,7 @@ func TestIsActiveMemoized(t *testing.T) {
 	}
 }
 
-// A scheduler probe is bounded by CGP_PROBE_TIMEOUT, so a hung/slow scheduler
+// A scheduler probe is bounded by CGPIPE_PROBE_TIMEOUT, so a hung/slow scheduler
 // cannot stall the run indefinitely.
 func TestProbeTimeout(t *testing.T) {
 	dir := t.TempDir()
@@ -40,7 +40,7 @@ func TestProbeTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGP_PROBE_TIMEOUT", "1")
+	t.Setenv("CGPIPE_PROBE_TIMEOUT", "1")
 
 	start := time.Now()
 	_, _, err := probe("sleepytool")

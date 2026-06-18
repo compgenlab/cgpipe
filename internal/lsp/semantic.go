@@ -3,9 +3,9 @@ package lsp
 import (
 	"sort"
 
-	"github.com/compgen-io/cgp/internal/ast"
-	"github.com/compgen-io/cgp/internal/lexer"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/lexer"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 // Semantic token legend. The index of each name is the token type id used in

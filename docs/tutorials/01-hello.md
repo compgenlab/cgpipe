@@ -2,14 +2,14 @@
 
 The smallest useful pipeline: one target, a command-line variable, and a help
 block. By the end you will have written a `.cgp` file, rendered it, run it, and
-seen cgp skip work that is already done.
+seen cgpipe skip work that is already done.
 
 ## The script
 
 Create `hello.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Greet someone.
 #
@@ -27,7 +27,7 @@ hello.txt: {{
 
 Line by line:
 
-- `#!/usr/bin/env cgp` — the shebang. With it (and `chmod +x`) you can run the
+- `#!/usr/bin/env cgpipe` — the shebang. With it (and `chmod +x`) you can run the
   file directly as `./hello.cgp`.
 - The comment block under the shebang is the **help text**. The first blank or
   non-comment line ends it.
@@ -43,7 +43,7 @@ Line by line:
 The default runner assembles a bash script and prints it (it does not run it):
 
 ```console
-$ cgp hello.cgp
+$ cgpipe hello.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -54,7 +54,7 @@ echo "Hello, world!" > hello.txt
 Pass `--name` to override the default:
 
 ```console
-$ cgp hello.cgp --name Marcus
+$ cgpipe hello.cgp --name Marcus
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -67,18 +67,18 @@ echo "Hello, Marcus!" > hello.txt
 Pipe the rendered script to a shell:
 
 ```console
-$ cgp hello.cgp --name Marcus | bash
+$ cgpipe hello.cgp --name Marcus | bash
 $ cat hello.txt
 Hello, Marcus!
 ```
 
-## cgp skips work that is already done
+## cgpipe skips work that is already done
 
 Run the same command again. Because `hello.txt` already exists and nothing it
-depends on has changed, cgp emits **no work** — just the empty bash preamble:
+depends on has changed, cgpipe emits **no work** — just the empty bash preamble:
 
 ```console
-$ cgp hello.cgp --name Marcus
+$ cgpipe hello.cgp --name Marcus
 #!/usr/bin/env bash
 set -euo pipefail
 ```
@@ -86,7 +86,7 @@ set -euo pipefail
 To rebuild regardless, force it:
 
 ```console
-$ cgp -force hello.cgp --name Marcus
+$ cgpipe -force hello.cgp --name Marcus
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -94,7 +94,7 @@ set -euo pipefail
 echo "Hello, Marcus!" > hello.txt
 ```
 
-This is the heart of cgp: you describe outputs, and it only does the work that is
+This is the heart of cgpipe: you describe outputs, and it only does the work that is
 actually needed. (For real inputs, "needed" means *the output is missing or older
 than an input* — see [The Ledger](../11-The_Ledger.md) for the full staleness
 story.)
@@ -102,7 +102,7 @@ story.)
 ## See the help text
 
 ```console
-$ cgp hello.cgp -h
+$ cgpipe hello.cgp -h
 Greet someone.
 
 Options:
@@ -110,7 +110,7 @@ Options:
 ```
 
 The help block you wrote at the top is what `-h` prints (when it comes *after* the
-filename — `cgp -h` alone prints cgp's own usage).
+filename — `cgpipe -h` alone prints cgpipe's own usage).
 
 ## Next
 

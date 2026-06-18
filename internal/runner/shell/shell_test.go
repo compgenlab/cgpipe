@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 func build(t *testing.T, dir, src string, goals ...string) error {

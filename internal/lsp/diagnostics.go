@@ -3,7 +3,7 @@ package lsp
 import (
 	"errors"
 
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 // diagnostics parses src and returns LSP diagnostics: an empty slice when the
@@ -43,7 +43,7 @@ func errorToDiagnostic(src string, err error) Diagnostic {
 				End:   Position{Line: line0, Character: endChar},
 			},
 			Severity: 1, // Error
-			Source:   "cgp",
+			Source:   "cgpipe",
 			Message:  pe.Msg,
 		}
 	}
@@ -52,7 +52,7 @@ func errorToDiagnostic(src string, err error) Diagnostic {
 	return Diagnostic{
 		Range:    Range{Start: Position{0, 0}, End: Position{0, 1}},
 		Severity: 1,
-		Source:   "cgp",
+		Source:   "cgpipe",
 		Message:  err.Error(),
 	}
 }

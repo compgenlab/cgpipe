@@ -8,12 +8,12 @@ whole cohort.
 > Requires: `fastp`, `fastqc`.
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Read QC and adapter/quality trimming for a whole cohort. Reads a sample sheet
 # and emits one fastp + FastQC chain per row:
 #
-#     cgp fastq-qc-trim.cgp --sheet samples.tsv
+#     cgpipe fastq-qc-trim.cgp --sheet samples.tsv
 #
 # samples.tsv has columns: sample, r1, r2
 
@@ -71,7 +71,7 @@ s1	fq/s1_R1.fq.gz	fq/s1_R2.fq.gz
 s2	fq/s2_R1.fq.gz	fq/s2_R2.fq.gz
 ```
 ```sh
-cgp -r slurm fastq-qc-trim.cgp --sheet samples.tsv
+cgpipe -r slurm fastq-qc-trim.cgp --sheet samples.tsv
 ```
 
 ## Adapt it

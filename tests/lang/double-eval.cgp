@@ -1,5 +1,5 @@
 # §4.3 ${{var}} double evaluation: substitute, then evaluate the result as
-# cgp source. Here the content of `tmpl` is itself a template referencing name.
+# cgpipe source. Here the content of `tmpl` is itself a template referencing name.
 name = "patient_42"
 tmpl = "sample is ${name}"
 print "${{tmpl}}"        # sample is patient_42

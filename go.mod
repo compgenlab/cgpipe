@@ -1,3 +1,3 @@
-module github.com/compgen-io/cgp
+module github.com/compgenlab/cgpipe
 
 go 1.25.0

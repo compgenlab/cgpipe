@@ -1,6 +1,6 @@
 # Build Targets
 
-A **target** is the unit of work in cgp. It declares the outputs it produces, the
+A **target** is the unit of work in cgpipe. It declares the outputs it produces, the
 inputs they depend on, and the shell that builds them:
 
 ```
@@ -9,7 +9,7 @@ output1 [output2 …] : [input1 input2 …] {{
 }}
 ```
 
-When you request an output, cgp checks whether it is missing or older than its
+When you request an output, cgpipe checks whether it is missing or older than its
 inputs and, if so, runs the body. Multiple outputs and inputs are allowed;
 requesting any one output runs the rule once and produces all of them.
 
@@ -19,23 +19,23 @@ sorted.bam: input.bam {{
 }}
 ```
 
-Every example here is rendered with `cgp -dr` (dry run), which shows the assembled
+Every example here is rendered with `cgpipe -dr` (dry run), which shows the assembled
 script without running it. The outputs shown are real fixture output from
 [`tests/build/`](../tests/build/).
 
 ## The body is a shell template
 
 Inside `{{ }}` the content is **raw shell**, captured verbatim and rendered at
-job time. cgp does not parse the shell. Only three things are recognized during
+job time. cgpipe does not parse the shell. Only three things are recognized during
 the render pass:
 
 1. `${…}` substitution (and `${if …}`, `@{…}`),
 2. an optional leading **directive block** (see below),
-3. `%`-prefixed cgp control lines (see below).
+3. `%`-prefixed cgpipe control lines (see below).
 
-Everything else passes through. Because the body is shell — not a cgp string —
+Everything else passes through. Because the body is shell — not a cgpipe string —
 its escaping is different from string literals: **only `\$` and `\@` are special**
-(they suppress the cgp sigils). Every other backslash is shell text, verbatim:
+(they suppress the cgpipe sigils). Every other backslash is shell text, verbatim:
 
 ```
 out.txt: {{
@@ -93,7 +93,7 @@ echo "outputs: sampleA.sorted.bam sampleA.flagstat"
 ## Directives and the `--` separator
 
 A body may begin with a **directive block** that sets per-job settings, separated
-from the shell by a line containing only `--`. Before `--` is cgp code; after `--`
+from the shell by a line containing only `--`. Before `--` is cgpipe code; after `--`
 is shell:
 
 ```
@@ -115,7 +115,7 @@ sort --parallel=8 in.txt > out.txt
 
 Per-job settings always carry the `job.` prefix — `job.mem`, `job.procs`,
 `job.name`, and so on — both here in a directive block and when set globally before
-your targets. Ordinary cgp control flow is allowed in the block too (it's cgp
+your targets. Ordinary cgpipe control flow is allowed in the block too (it's cgpipe
 mode). A setting captured here applies to *this* target; set it globally and it
 becomes the default for every target defined after it (`job.procs` itself defaults
 to 1).
@@ -145,7 +145,7 @@ With `basic = "BRCA1"` this renders `annotate --tab BASIC_GENE:BRCA1,4 out.txt`.
 
 ## In-body control flow (`%` lines)
 
-A line whose first non-space character is `%` is **cgp control flow inside the
+A line whose first non-space character is `%` is **cgpipe control flow inside the
 body**. The shell lines between `% for … {` and `% }` are emitted once per
 iteration, with `${…}` resolved each time:
 
@@ -227,7 +227,7 @@ touch s1.done s2.done s3.done
 
 ## Multiple definitions for one output
 
-The same output may be defined more than once with different inputs. cgp tries
+The same output may be defined more than once with different inputs. cgpipe tries
 each in source order and uses the **first whose inputs are all satisfiable**:
 
 ```
@@ -261,16 +261,16 @@ A temp is special **only in how its absence is handled**:
 | A, B, C | B newer than C | B present → C stale → rebuild C |
 | A, C (B deleted) | A older than C | look through missing B → C current → skip all |
 
-**cgp never auto-deletes temp files.** `^` documents *why* a file was made, not
+**cgpipe never auto-deletes temp files.** `^` documents *why* a file was made, not
 permission to remove it — deletion is always explicit (next section).
 
 ## Write atomically: temp file, then rename
 
-cgp decides staleness from the filesystem — an output is current when it exists
+cgpipe decides staleness from the filesystem — an output is current when it exists
 and is newer than its inputs. It does **not** know whether the job that wrote it
 *succeeded*; only the scheduler knows that. So if a job is killed, runs out of
 disk, or crashes halfway, it can leave a **half-written output** that is newer
-than its inputs. On the next run cgp sees a present, fresh-looking file and skips
+than its inputs. On the next run cgpipe sees a present, fresh-looking file and skips
 the rebuild — silently propagating a truncated, corrupt result downstream.
 
 The fix is a one-line discipline that costs nothing: **never write the final
@@ -288,7 +288,7 @@ not at all:
 The `&&` is load-bearing: if `md5sum` fails, the `mv` never runs, so `${output}`
 stays absent and the target is correctly seen as still needing to be built.
 
-This is a recommended idiom, **not** a built-in: cgp doesn't wrap your command in
+This is a recommended idiom, **not** a built-in: cgpipe doesn't wrap your command in
 an implicit temp-and-rename because correctness depends on details only you know —
 that the tmp and final paths share a filesystem (a cross-device `mv` is a
 non-atomic copy), and that a partial write is even meaningful for the format. Apply

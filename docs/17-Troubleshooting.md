@@ -10,8 +10,8 @@ would do — the assembled shell script, or the scheduler submission scripts —
 running anything:
 
 ```sh
-cgp -dr pipeline.cgp
-cgp -dr -r slurm pipeline.cgp
+cgpipe -dr pipeline.cgp
+cgpipe -dr -r slurm pipeline.cgp
 ```
 
 If a variable resolved wrong, a path came out malformed, or a directive didn't take
@@ -19,7 +19,7 @@ effect, you'll see it in the rendered output. Reach for `-dr` before guessing.
 
 ## `$(cmd)` runs at render time — even under `-dr`
 
-The single most surprising behavior. cgp's own `$(cmd)` command substitution is
+The single most surprising behavior. cgpipe's own `$(cmd)` command substitution is
 evaluated *while the body is rendered* — which means it runs during a dry run too,
 because rendering is what evaluates it. So:
 
@@ -39,7 +39,7 @@ out.txt: {{
 ```
 
 `\$(date)` is emitted verbatim and runs when the job runs. The same applies to
-`\${VAR}` for shell variables you don't want cgp to interpret.
+`\${VAR}` for shell variables you don't want cgpipe to interpret.
 
 ## Common errors
 
@@ -93,13 +93,13 @@ out.bam: in.bam {{
 
 ### A boolean flag swallowed the filename
 
-`cgp --adaptive pipeline.cgp` reads `pipeline.cgp` as the value of `--adaptive`.
-Put the pipeline file first (`cgp pipeline.cgp --adaptive`), or write
+`cgpipe --adaptive pipeline.cgp` reads `pipeline.cgp` as the value of `--adaptive`.
+Put the pipeline file first (`cgpipe pipeline.cgp --adaptive`), or write
 `--adaptive=true`.
 
 ### A failed job left a corrupt output that won't rebuild
 
-cgp judges staleness by mtime, not by exit status — only the scheduler knows if a
+cgpipe judges staleness by mtime, not by exit status — only the scheduler knows if a
 job succeeded. A job killed mid-write can leave a **half-written output** that
 looks newer than its inputs, so the next run skips it. Write atomically to avoid
 this: send output to `${output}.tmp` and `mv` it into place only on success
@@ -109,13 +109,13 @@ To force a rebuild now, delete the bad file (or run with `-force`).
 
 ## Inspecting state
 
-- **`cgp ledger dump <dir>`** — the full provenance of every recorded job; grep it
+- **`cgpipe ledger dump <dir>`** — the full provenance of every recorded job; grep it
   for an output to see who produced it and with what command.
-  [The Ledger](11-The_Ledger.md#inspecting-the-ledger-cgp-ledger).
-- **`cgp ledger status [-r RUNNER] [-output] <dir>`** — ask the scheduler what is
+  [The Ledger](11-The_Ledger.md#inspecting-the-ledger-cgpipe-ledger).
+- **`cgpipe ledger status [-r RUNNER] [-output] <dir>`** — ask the scheduler what is
   happening with the recorded jobs right now (native status per job, or per output
   reconciled against the file on disk).
-- **`cgp ledger vacuum <dir>`** — compact the ledger to a single `snapshot.jsonl`,
+- **`cgpipe ledger vacuum <dir>`** — compact the ledger to a single `snapshot.jsonl`,
   dropping jobs that no longer own a current output.
 - **`-r graphviz` / `-r html`** — visualize the dependency graph and (with a ledger)
   each output's live state. [Tutorial 14](tutorials/14-status-report.md).
@@ -125,7 +125,7 @@ To force a rebuild now, delete the bad file (or run with `-force`).
 ## Containers: a bind-mount surprise
 
 If a containerized job can't see a file, it's usually outside the auto-mounted
-working directory. cgp mounts the workdir (and `/tmp`) but not arbitrary paths — add
+working directory. cgpipe mounts the workdir (and `/tmp`) but not arbitrary paths — add
 the others explicitly:
 
 ```

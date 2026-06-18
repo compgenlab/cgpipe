@@ -1,8 +1,8 @@
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Stage 1: clean raw text (lowercase, squeeze blanks). Runnable on its own:
-#   cgp normalize.cgp --raw data/raw.txt
-cgp.runner.shell.autoexec = true
+#   cgpipe normalize.cgp --raw data/raw.txt
+cgpipe.runner.shell.autoexec = true
 
 clean.txt: ${raw} {{
     tr 'A-Z' 'a-z' < ${input} | tr -s ' ' | sed '/^ *$/d;s/^ //;s/ $//' > ${output}

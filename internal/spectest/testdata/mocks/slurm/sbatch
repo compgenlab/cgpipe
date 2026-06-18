@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mock SLURM sbatch. cgp runs `sbatch --parsable` and reads the bare numeric
+# Mock SLURM sbatch. cgpipe runs `sbatch --parsable` and reads the bare numeric
 # job id from stdout; the rendered script arrives on stdin.
 MOCK_NAME=sbatch
 . "$(dirname "$0")/../lib.sh"

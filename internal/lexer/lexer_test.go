@@ -3,7 +3,7 @@ package lexer
 import (
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
 // kinds lexes src and returns the token kinds (dropping the trailing EOF).
@@ -100,7 +100,7 @@ func TestStringRawInner(t *testing.T) {
 
 func TestComments(t *testing.T) {
 	// shebang + comment lines are skipped; only the assignment survives
-	eq(t, kinds("#!/usr/bin/env cgp\n# a comment\nx = 1 # trailing\n"), []token.Kind{
+	eq(t, kinds("#!/usr/bin/env cgpipe\n# a comment\nx = 1 # trailing\n"), []token.Kind{
 		token.NEWLINE, token.NEWLINE,
 		token.IDENT, token.ASSIGN, token.INT, token.NEWLINE,
 	})
@@ -170,7 +170,7 @@ func TestEmptyBody(t *testing.T) {
 }
 
 // A body's inner braces, %-control lines, and -- separator are captured raw and
-// must NOT terminate the body or be tokenized as cgp.
+// must NOT terminate the body or be tokenized as cgpipe.
 func TestBodyKeepsShellAndControlRaw(t *testing.T) {
 	body := "  name = \"j\"\n  --\n  awk '{print $1}'\n% for o in xs {\n  rm ${o}\n% }\n"
 	src := "t: a {{\n" + body + "}}\n"

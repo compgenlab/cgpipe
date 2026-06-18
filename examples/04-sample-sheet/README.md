@@ -5,7 +5,7 @@ per-sample job for each row, then gather every sample's output into a single
 cohort summary.
 
 ```sh
-cgp pipeline.cgp | bash
+cgpipe pipeline.cgp | bash
 cat cohort.txt
 #   s1: 25
 #   s2: 20
@@ -16,7 +16,7 @@ cat cohort.txt
 one ordered **map** per row; read a column with `row["sample"]` (or by position,
 `row[0]`). The `for` loop emits a `${name}.sum` target per row and accumulates the
 output names into `sums`; the final `cohort.txt` target depends on `@{sums}`, so it
-runs once every sample is done. Because it is all one dependency graph, `cgp -dr`
+runs once every sample is done. Because it is all one dependency graph, `cgpipe -dr`
 shows the scatter and the gather together, and a re-run rebuilds only what changed.
 
 **Group by a column:** build a map of lists and emit one gather per group —

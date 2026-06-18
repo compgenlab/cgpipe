@@ -37,7 +37,7 @@ Add this to `call.cgp`:
 }}
 ```
 
-The job lists the merged VCF *and* every temp as inputs, so cgp only schedules it
+The job lists the merged VCF *and* every temp as inputs, so cgpipe only schedules it
 once those exist. The `% for` loop ([in-body control
 flow](../05-Build_Targets.md#in-body-control-flow--lines)) emits one `rm` per part,
 and the `if [ -e … ]` guard is belt-and-suspenders: the file is deleted only if the
@@ -46,7 +46,7 @@ merge really produced its output.
 ## Render it
 
 ```console
-$ cgp -dr call.cgp --bam sample.bam --ref ref.fa --out sample
+$ cgpipe -dr call.cgp --bam sample.bam --ref ref.fa --out sample
 ...
 # ---- sample.vcf.gz ----
 bcftools concat -O z -o sample.vcf.gz sample.1.vcf.gz sample.2.vcf.gz sample.3.vcf.gz
@@ -60,14 +60,14 @@ fi
 ```
 
 The cleanup is labeled `(opportunistic)` and comes last. If you re-run after the
-temps are already gone, the job's inputs aren't all available, so cgp skips it
+temps are already gone, the job's inputs aren't all available, so cgpipe skips it
 entirely — no error.
 
 ## A note on temp files and deletion
 
-Marking an output `^` (temporary) documents *intent* — it tells cgp's staleness
-logic to look through the file when it's absent. It does **not** give cgp
-permission to delete anything; cgp never auto-removes files. Deletion is always
+Marking an output `^` (temporary) documents *intent* — it tells cgpipe's staleness
+logic to look through the file when it's absent. It does **not** give cgpipe
+permission to delete anything; cgpipe never auto-removes files. Deletion is always
 explicit and user-written, which is exactly this pattern. The two features work
 together: `^` keeps restarts correct after you delete, and the opportunistic job
 does the deleting.

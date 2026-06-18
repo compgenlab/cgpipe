@@ -1,4 +1,4 @@
-# §6.2 A directive block (before --) sets per-job settings in cgp mode; the
+# §6.2 A directive block (before --) sets per-job settings in cgpipe mode; the
 # shell template after -- may read them. Directive assignments don't emit shell.
 threads = 8
 out.txt: in.txt {{

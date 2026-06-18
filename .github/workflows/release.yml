@@ -32,12 +32,12 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           version="${GITHUB_REF_NAME}"
-          ldflags="-s -w -X github.com/compgen-io/cgp/internal/buildinfo.Version=${version}"
-          bin="cgp-${version}-${GOOS}-${GOARCH}"
+          ldflags="-s -w -X github.com/compgenlab/cgpipe/internal/buildinfo.Version=${version}"
+          bin="cgpipe-${version}-${GOOS}-${GOARCH}"
           mkdir -p dist
-          go build -trimpath -ldflags "${ldflags}" -o "dist/${bin}" ./cmd/cgp
+          go build -trimpath -ldflags "${ldflags}" -o "dist/${bin}" ./cmd/cgpipe
 
       - name: Attach to release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/cgp-*
+          files: dist/cgpipe-*

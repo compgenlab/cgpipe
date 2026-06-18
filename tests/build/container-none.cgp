@@ -1,5 +1,5 @@
 # §12 An engine is set but this target declares no image, so it runs unwrapped.
-cgp.container.engine = "docker"
+cgpipe.container.engine = "docker"
 out.txt: in.txt {{
     cp ${input} ${output}
 }}

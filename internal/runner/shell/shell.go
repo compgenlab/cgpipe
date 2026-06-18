@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/runner"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/runner"
 )
 
 // Options configures a shell run.
@@ -25,7 +25,7 @@ type Options struct {
 
 // Run builds the program's goals with the local shell. By default it assembles
 // the stale targets into one runnable bash script (in dependency order) and
-// writes it to Out — it does NOT execute. Set AutoExec (cgp.runner.shell.autoexec)
+// writes it to Out — it does NOT execute. Set AutoExec (cgpipe.runner.shell.autoexec)
 // to run the bodies instead. -dr (DryRun) always emits, never executes.
 func Run(p *eval.Program, opts Options) error {
 	defaults(&opts)
@@ -36,8 +36,8 @@ func Run(p *eval.Program, opts Options) error {
 	return runner.Build(p, b, runner.Options{Goals: opts.Goals, Dir: opts.Dir, Cache: opts.Cache, Force: opts.Force})
 }
 
-// SubmitOne renders a single target (used by `cgp sub`). Unlike the pipeline
-// runner it executes by default — `cgp sub` is an explicit one-off — emitting
+// SubmitOne renders a single target (used by `cgpipe sub`). Unlike the pipeline
+// runner it executes by default — `cgpipe sub` is an explicit one-off — emitting
 // only under -dr.
 func SubmitOne(p *eval.Program, t *eval.Target, opts Options) error {
 	defaults(&opts)

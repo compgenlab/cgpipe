@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 // runSrcOpts runs src with explicit Options (for dry-run / ErrOut capture) and

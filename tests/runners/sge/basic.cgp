@@ -1,5 +1,5 @@
 # Submit one job with per-job directives; each scheduler translates name/mem/
-# procs/walltime into its own header lines, and cgp prints the assigned job id.
+# procs/walltime into its own header lines, and cgpipe prints the assigned job id.
 out.bam: {{
     job.name     = "align"
     job.mem      = "8G"

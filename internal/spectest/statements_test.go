@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 // §5.1 if / elif / else.
@@ -82,7 +82,7 @@ func TestExitHalts(t *testing.T) {
 	}
 }
 
-// §5.2 eval evaluates a string as cgp source at run time.
+// §5.2 eval evaluates a string as cgpipe source at run time.
 func TestEvalStatement(t *testing.T) {
 	if got := printed(t, "eval \"x = 41\"\nprint x + 1"); got != "42\n" {
 		t.Errorf("eval: %q", got)

@@ -1,9 +1,9 @@
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # A two-stage workflow: normalize, then summarize. The cleaned-file name flows
 # from stage 1's `export` into stage 2 via ${normalize.cleaned}.
 #
-# Run:  cgp workflow.cgp --raw data/raw.txt
+# Run:  cgpipe workflow.cgp --raw data/raw.txt
 
 if !raw { print "ERROR: --raw required"; exit 1 }
 

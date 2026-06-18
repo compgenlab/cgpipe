@@ -3,7 +3,7 @@ package lsp
 import (
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/ast"
 )
 
 // TestDocKeysMatchCanonicalLists guards against drift: every canonical built-in

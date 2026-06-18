@@ -8,7 +8,7 @@ once. This introduces wildcards and the `all:` convention.
 `gzip.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Compress FASTQ files with gzip.
 
@@ -26,12 +26,12 @@ the input side. One rule covers every file.
 
 `all:` is a [bodyless aggregator](../05-Build_Targets.md#bodyless-aggregator-targets):
 it has no recipe of its own; requesting it just builds its inputs. `@default: all`
-makes that the thing built when you run `cgp gzip.cgp` with no target.
+makes that the thing built when you run `cgpipe gzip.cgp` with no target.
 
 ## Render it
 
 ```console
-$ cgp -dr gzip.cgp
+$ cgpipe -dr gzip.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -46,7 +46,7 @@ gzip -c c.fastq > c.fastq.gz
 ```
 
 The single wildcard rule expanded into one job per file, each with its own stem
-substituted. cgp emits only the jobs whose outputs are missing or out of date, so
+substituted. cgpipe emits only the jobs whose outputs are missing or out of date, so
 re-running after `a.fastq.gz` exists skips that one.
 
 ## Using the stem

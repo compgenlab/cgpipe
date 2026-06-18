@@ -21,7 +21,7 @@ wc -w < data/s2.txt > s2.sum
 wc -w < data/s3.txt > s3.sum
 
 ;;
-*) echo "cgp: no array task $SLURM_ARRAY_TASK_ID" >&2; exit 1 ;;
+*) echo "cgpipe: no array task $SLURM_ARRAY_TASK_ID" >&2; exit 1 ;;
 esac
 
 
