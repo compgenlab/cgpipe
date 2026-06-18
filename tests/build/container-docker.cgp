@@ -1,6 +1,6 @@
 # §12 With an engine + a per-target image, the body is wrapped to run in the
 # container; input/output paths and the working dir are bind-mounted.
-cgp.container.engine = "docker"
+cgpipe.container.engine = "docker"
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
     --

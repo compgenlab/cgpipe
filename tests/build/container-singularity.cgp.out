@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # ---- out.bam ----
-__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
-trap 'rm -f "$__cgp_body"' EXIT
-cat > "$__cgp_body" <<'__CGP_BODY__'
+__cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
+trap 'rm -f "$__cgpipe_body"' EXIT
+cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
 bwa in.bam > out.bam
-__CGP_BODY__
+__CGPIPE_BODY__
 
 singularity exec \
     -B /tmp:/tmp \
@@ -14,6 +14,6 @@ singularity exec \
     --pwd __WORKDIR__ \
     --nv \
     docker://biocontainers/bwa:0.7.17 \
-    sh "$__cgp_body"
+    sh "$__cgpipe_body"
 
 

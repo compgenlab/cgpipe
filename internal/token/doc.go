@@ -1,4 +1,4 @@
-// Package token defines the lexical tokens of the cgp language and the source
+// Package token defines the lexical tokens of the cgpipe language and the source
 // positions attached to them. Positions carry file/line/column so the parser
 // can emit compiler-style errors (source line + caret).
 //

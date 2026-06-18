@@ -1,4 +1,4 @@
-# §7.2 An output may be defined more than once; cgp uses the first definition
+# §7.2 An output may be defined more than once; cgpipe uses the first definition
 # whose inputs are all satisfiable. Only reads.sam exists, so the second wins.
 out.bam: reads.fastq {{
     align ${input} > ${output}

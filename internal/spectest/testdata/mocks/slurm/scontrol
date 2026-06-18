@@ -1,6 +1,6 @@
 #!/bin/bash
 # Mock SLURM scontrol:
-#   scontrol -o show job <id>  -> cgp's IsActive parses JobState= / Reason=
+#   scontrol -o show job <id>  -> cgpipe's IsActive parses JobState= / Reason=
 #   scontrol release <id>      -> hold release
 MOCK_NAME=scontrol
 . "$(dirname "$0")/../lib.sh"

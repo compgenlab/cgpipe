@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/ast"
-	"github.com/compgen-io/cgp/internal/container"
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/container"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 // snippetRe matches a body line that is a lone @name snippet invocation.
@@ -147,32 +147,32 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 }
 
 // defaultJobName is the job name used when a target sets no job.name. It mirrors
-// the scheduler's fallback: the primary output, else cgp.<special>, else cgp.job.
+// the scheduler's fallback: the primary output, else cgpipe.<special>, else cgpipe.job.
 func defaultJobName(t *Target) string {
 	if len(t.Outputs) > 0 {
 		return t.Outputs[0]
 	}
 	if t.Special != "" {
-		return "cgp." + t.Special
+		return "cgpipe." + t.Special
 	}
-	return "cgp.job"
+	return "cgpipe.job"
 }
 
-// wrapContainer wraps the body to run inside a container when cgp.container.engine
+// wrapContainer wraps the body to run inside a container when cgpipe.container.engine
 // and a per-target image (job.container = …) are both set.
 func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
-	engine := p.settingStr("cgp.container.engine")
+	engine := p.settingStr("cgpipe.container.engine")
 	image := scopeStr(sc, "job.container")
 	if engine == "" || image == "" {
 		return body
 	}
-	optsKey := "cgp.container.docker_opts"
+	optsKey := "cgpipe.container.docker_opts"
 	if e := strings.ToLower(engine); e == "singularity" || e == "apptainer" {
-		optsKey = "cgp.container.singularity_opts"
+		optsKey = "cgpipe.container.singularity_opts"
 	}
 	gpu := scopeStr(sc, "job.gpu")
 	if gpu == "" {
-		gpu = p.settingStr("cgp.gpu")
+		gpu = p.settingStr("cgpipe.gpu")
 	}
 	if gpu == "true" {
 		gpu = "1"
@@ -180,21 +180,21 @@ func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
 		gpu = ""
 	}
 	userMap := true
-	if v, ok := p.Get("cgp.container.user_map"); ok {
+	if v, ok := p.Get("cgpipe.container.user_map"); ok {
 		userMap = truthy(v)
 	}
 	return container.Wrap(body, container.Spec{
 		Engine:     engine,
 		Image:      image,
 		WorkingDir: scopeStr(sc, "job.wd"),
-		BodyDir:    firstNonEmpty(scopeStr(sc, "job.container.body_dir"), p.settingStr("cgp.container.body_dir")),
-		Shell:      firstNonEmpty(scopeStr(sc, "job.container.shell"), p.settingStr("cgp.container.shell")),
+		BodyDir:    firstNonEmpty(scopeStr(sc, "job.container.body_dir"), p.settingStr("cgpipe.container.body_dir")),
+		Shell:      firstNonEmpty(scopeStr(sc, "job.container.shell"), p.settingStr("cgpipe.container.shell")),
 		GPU:        gpu,
 		UserMap:    userMap,
-		Binds:      append(scopeList(sc, "job.container.bind"), p.settingList("cgp.container.bind")...),
+		Binds:      append(scopeList(sc, "job.container.bind"), p.settingList("cgpipe.container.bind")...),
 		Inputs:     t.Inputs,
 		Outputs:    t.Outputs,
-		Env:        append(scopeList(sc, "job.container.env"), p.settingList("cgp.container.env")...),
+		Env:        append(scopeList(sc, "job.container.env"), p.settingList("cgpipe.container.env")...),
 		Opts:       append(scopeList(sc, "job.container.opts"), p.settingList(optsKey)...),
 	})
 }
@@ -260,8 +260,8 @@ func firstNonEmpty(a, b string) string {
 }
 
 // renderBodyText resolves one raw {{ }} body into shell text: directives before
-// '--' are evaluated as cgp statements; the remainder is the shell template,
-// where %-prefixed lines are cgp control flow and other lines are shell with
+// '--' are evaluated as cgpipe statements; the remainder is the shell template,
+// where %-prefixed lines are cgpipe control flow and other lines are shell with
 // ${…} substitution.
 func (ip *interp) renderBodyText(raw string) (string, error) {
 	lines := strings.Split(raw, "\n")
@@ -279,7 +279,7 @@ func (ip *interp) renderBodyText(raw string) (string, error) {
 		shell = lines[sep+1:]
 	}
 
-	// Parse the directive block as one cgp program (not line by line) so ordinary
+	// Parse the directive block as one cgpipe program (not line by line) so ordinary
 	// multi-line control flow — if/for setting job settings — is allowed (§6.2),
 	// not just one assignment per line.
 	if dirSrc := strings.Join(directives, "\n"); strings.TrimSpace(dirSrc) != "" {
@@ -308,7 +308,7 @@ func (ip *interp) renderBodyText(raw string) (string, error) {
 type bodyNode interface{ bodyNode() }
 
 type shellNode struct{ line string }
-type stmtNode struct{ src string } // a bare cgp statement on a % line
+type stmtNode struct{ src string } // a bare cgpipe statement on a % line
 type forNode struct {
 	varName string
 	iter    ast.Expr // nil for while-form
@@ -453,7 +453,7 @@ func parseBlockNodes(lines []string, idx *int) (nodes []bodyNode, stop string, e
 				break
 			}
 		default:
-			// A cgp statement on a % line. It may span several % lines when an
+			// A cgpipe statement on a % line. It may span several % lines when an
 			// expression has an open ( or [ — the open bracket is the continuation
 			// signal (no escape needed), so we gather following % lines until the
 			// brackets balance and parse the whole thing together. A balanced line

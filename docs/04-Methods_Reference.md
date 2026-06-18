@@ -46,7 +46,7 @@ print "/data/reads/x.bam".dirname()    # /data/reads
 
 ### Regex with `sub`
 
-`sub` uses Go's `regexp` (RE2). The pattern is a cgp string literal, so backslashes
+`sub` uses Go's `regexp` (RE2). The pattern is a cgpipe string literal, so backslashes
 are escaped: a literal `.` is `\\.`. Capture groups are `$1`, `$2`, …:
 
 ```

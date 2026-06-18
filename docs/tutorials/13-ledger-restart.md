@@ -7,14 +7,14 @@ adds.
 
 ## Restart is automatic
 
-cgp rebuilds an output only if it is **missing or older than an input** — the
+cgpipe rebuilds an output only if it is **missing or older than an input** — the
 make-style rule. So if a pipeline dies halfway, just run it again: finished outputs
 are skipped, and only the missing or stale ones rebuild. No flags, no state file,
 no "resume mode."
 
 ```console
-$ cgp pipeline.cgp | bash      # dies after producing trimmed.fq
-$ cgp pipeline.cgp | bash      # re-run: trimmed.fq is reused, only aligned.bam runs
+$ cgpipe pipeline.cgp | bash      # dies after producing trimmed.fq
+$ cgpipe pipeline.cgp | bash      # re-run: trimmed.fq is reused, only aligned.bam runs
 ```
 
 `-force` overrides this and rebuilds the whole goal graph when you want a clean
@@ -24,13 +24,13 @@ redo.
 
 On a cluster there's a second hazard: you submit a pipeline, the jobs are still
 *queued*, and you re-run the command. Without coordination you'd resubmit
-duplicates. Configure a ledger and a scheduler runner, and cgp instead reuses the
+duplicates. Configure a ledger and a scheduler runner, and cgpipe instead reuses the
 in-flight jobs:
 
 ```
-#!/usr/bin/env cgp
-cgp.ledger = "jobs.ledger"
-cgp.runner = "slurm"
+#!/usr/bin/env cgpipe
+cgpipe.ledger = "jobs.ledger"
+cgpipe.runner = "slurm"
 
 trimmed.fq: a.fastq {{
     job.name = "trim"
@@ -49,10 +49,10 @@ aligned.bam: trimmed.fq {{
 The first submission records ownership and the dependency edge:
 
 ```console
-$ cgp pipeline.cgp
+$ cgpipe pipeline.cgp
 1001
 1002
-$ cgp ledger dump jobs.ledger
+$ cgpipe ledger dump jobs.ledger
 1001	NAME	trim
 1001	OUTPUT	trimmed.fq
 1002	NAME	align
@@ -61,7 +61,7 @@ $ cgp ledger dump jobs.ledger
 1002	SETTING	mem	8000
 ```
 
-`1002 DEP 1001` — cgp derived the `afterok` from the `output: input` edge. If you
+`1002 DEP 1001` — cgpipe derived the `afterok` from the `output: input` edge. If you
 re-run before the queue drains, an output still owned by an active job is reused
 rather than resubmitted:
 
@@ -75,10 +75,10 @@ earlier stage's jobs are still queued to produce.
 ## Inspecting and maintaining the ledger
 
 ```sh
-cgp ledger dump jobs.ledger                  # everything, as TSV
-cgp ledger search -o aligned.bam jobs.ledger # just jobs producing aligned.bam
-cgp ledger status -r slurm jobs.ledger       # live scheduler status per job
-cgp ledger vacuum jobs.ledger                # compact, dropping jobs that own no current output
+cgpipe ledger dump jobs.ledger                  # everything, as TSV
+cgpipe ledger search -o aligned.bam jobs.ledger # just jobs producing aligned.bam
+cgpipe ledger status -r slurm jobs.ledger       # live scheduler status per job
+cgpipe ledger vacuum jobs.ledger                # compact, dropping jobs that own no current output
 ```
 
 ## Next

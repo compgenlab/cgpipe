@@ -1,12 +1,12 @@
-# cgp cookbook
+# cgpipe cookbook
 
 Real, end-to-end pipeline recipes for common bioinformatics workflows. Unlike the
 [`examples/`](../../examples/) (which run anywhere with just coreutils), these use
 actual tools — **bwa, STAR, GATK, MACS2, …** — so they're **templates to adapt**,
-not run as-is. Every recipe is valid cgp that renders cleanly with `cgp -dr`; drop
+not run as-is. Every recipe is valid cgpipe that renders cleanly with `cgpipe -dr`; drop
 in your reference and reads and they're ready to run.
 
-| Recipe | Workflow | cgp patterns it shows |
+| Recipe | Workflow | cgpipe patterns it shows |
 |--------|----------|-----------------------|
 | [Reference preparation](reference-preparation.md) | build bwa / faidx / dict indexes | prerequisite targets, an `all` aggregator |
 | [FASTQ QC & trimming](fastq-qc-trim.md) | fastp + FastQC | multi-output targets, sample-sheet scatter |
@@ -18,14 +18,14 @@ in your reference and reads and they're ready to run.
 ## How to use a recipe
 
 1. Copy the `.cgp` block into a file.
-2. Make sure the tools it lists are on your `PATH` (or set `cgp.container.engine`
+2. Make sure the tools it lists are on your `PATH` (or set `cgpipe.container.engine`
    and add `job.container = "..."` directives — see
    [Containers & GPUs](../10-Containers_and_GPUs.md)).
-3. Preview it with `cgp -dr recipe.cgp <args>` — this renders the exact commands
+3. Preview it with `cgpipe -dr recipe.cgp <args>` — this renders the exact commands
    without running them.
-4. Run locally (`cgp recipe.cgp <args> | bash`) or submit to your scheduler
-   (`cgp -r slurm recipe.cgp <args>`). Configure your cluster once in
-   `~/.cgp/config` (see the [Configuration Reference](../14-Configuration_Reference.md)).
+4. Run locally (`cgpipe recipe.cgp <args> | bash`) or submit to your scheduler
+   (`cgpipe -r slurm recipe.cgp <args>`). Configure your cluster once in
+   `~/.cgpipe/config` (see the [Configuration Reference](../14-Configuration_Reference.md)).
 
 The resource directives (`job.mem`, `job.procs`, `job.walltime`) are starting points
 — tune them for your data and cluster.
@@ -41,5 +41,5 @@ Apply it as you adapt these templates; see
 
 ## See also
 
-- The [tutorials](../07-Pipeline_Tutorials.md) teach each cgp pattern in isolation.
+- The [tutorials](../07-Pipeline_Tutorials.md) teach each cgpipe pattern in isolation.
 - The [examples](../../examples/) are runnable (coreutils) versions of the same shapes.

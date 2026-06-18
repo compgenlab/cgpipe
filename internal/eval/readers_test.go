@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 func tmpFile(t *testing.T, name, content string) string {

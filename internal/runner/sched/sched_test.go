@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/ledger"
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/ledger"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 func program(t *testing.T, src string) *eval.Program {
@@ -270,7 +270,7 @@ func TestSlurmStatusAndEndTime(t *testing.T) {
 	}
 }
 
-// Every scheduler must wire a native Status probe (cgp ledger status relies on it).
+// Every scheduler must wire a native Status probe (cgpipe ledger status relies on it).
 func TestSchedulersWireStatus(t *testing.T) {
 	for _, name := range Names() {
 		s, _ := For(name)
@@ -403,8 +403,8 @@ func TestLedgerReuse(t *testing.T) {
 	counter := filepath.Join(dir, "counter")
 
 	sbatch := "#!/bin/bash\n" +
-		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n" +
-		"cat > \"$CGP_SCRIPTS/job.$n\"\n" +
+		"n=$(cat \"$CGPIPE_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGPIPE_COUNTER\"\n" +
+		"cat > \"$CGPIPE_SCRIPTS/job.$n\"\n" +
 		"echo $n\n"
 	if err := os.WriteFile(filepath.Join(bin, "sbatch"), []byte(sbatch), 0o755); err != nil {
 		t.Fatal(err)
@@ -415,11 +415,11 @@ func TestLedgerReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGP_COUNTER", counter)
-	t.Setenv("CGP_SCRIPTS", scripts)
+	t.Setenv("CGPIPE_COUNTER", counter)
+	t.Setenv("CGPIPE_SCRIPTS", scripts)
 
 	ledgerPath := filepath.Join(dir, "ledger.db")
-	src := "cgp.ledger = \"" + ledgerPath + "\"\n" +
+	src := "cgpipe.ledger = \"" + ledgerPath + "\"\n" +
 		"a.bam: {{\n    job.name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
 	sch, _ := For("slurm")
 
@@ -446,7 +446,7 @@ func TestLedgerReuse(t *testing.T) {
 	}
 }
 
-// TestSubmitOneAfterDep checks that `cgp sub`-style submission resolves an
+// TestSubmitOneAfterDep checks that `cgpipe sub`-style submission resolves an
 // -after output to the active owning job in the ledger and wires it as afterok.
 func TestSubmitOneAfterDep(t *testing.T) {
 	dir := t.TempDir()
@@ -456,14 +456,14 @@ func TestSubmitOneAfterDep(t *testing.T) {
 	os.MkdirAll(scripts, 0o755)
 	counter := filepath.Join(dir, "counter")
 	sbatch := "#!/bin/bash\n" +
-		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n" +
-		"cat > \"$CGP_SCRIPTS/job.$n\"\n" +
+		"n=$(cat \"$CGPIPE_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGPIPE_COUNTER\"\n" +
+		"cat > \"$CGPIPE_SCRIPTS/job.$n\"\n" +
 		"echo $n\n"
 	os.WriteFile(filepath.Join(bin, "sbatch"), []byte(sbatch), 0o755)
 	os.WriteFile(filepath.Join(bin, "scontrol"), []byte("#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGP_COUNTER", counter)
-	t.Setenv("CGP_SCRIPTS", scripts)
+	t.Setenv("CGPIPE_COUNTER", counter)
+	t.Setenv("CGPIPE_SCRIPTS", scripts)
 
 	ledgerPath := filepath.Join(dir, "ledger.db")
 	// Pre-record an existing job that owns dep.bam.
@@ -478,7 +478,7 @@ func TestSubmitOneAfterDep(t *testing.T) {
 		Command:  "echo > ${output}",
 		Name:     "j",
 		Outputs:  []string{"out.bam"},
-		Settings: map[string]eval.Value{"cgp.ledger": eval.StrVal(ledgerPath)},
+		Settings: map[string]eval.Value{"cgpipe.ledger": eval.StrVal(ledgerPath)},
 	})
 	sch, _ := For("slurm")
 	var out bytes.Buffer
@@ -508,12 +508,12 @@ func TestExternalDepWiresAfterok(t *testing.T) {
 	os.MkdirAll(scripts, 0o755)
 	counter := filepath.Join(dir, "counter")
 	os.WriteFile(filepath.Join(bin, "sbatch"), []byte("#!/bin/bash\n"+
-		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n"+
-		"cat > \"$CGP_SCRIPTS/job.$n\"\necho $n\n"), 0o755)
+		"n=$(cat \"$CGPIPE_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGPIPE_COUNTER\"\n"+
+		"cat > \"$CGPIPE_SCRIPTS/job.$n\"\necho $n\n"), 0o755)
 	os.WriteFile(filepath.Join(bin, "scontrol"), []byte("#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGP_COUNTER", counter)
-	t.Setenv("CGP_SCRIPTS", scripts)
+	t.Setenv("CGPIPE_COUNTER", counter)
+	t.Setenv("CGPIPE_SCRIPTS", scripts)
 
 	ledgerPath := filepath.Join(dir, "ledger.db")
 	lg, err := ledger.Open(ledgerPath)
@@ -528,7 +528,7 @@ func TestExternalDepWiresAfterok(t *testing.T) {
 		Command:  "process ${input} > ${output}",
 		Outputs:  []string{"out.bam"},
 		Inputs:   []string{"dep.bam"},
-		Settings: map[string]eval.Value{"cgp.ledger": eval.StrVal(ledgerPath)},
+		Settings: map[string]eval.Value{"cgpipe.ledger": eval.StrVal(ledgerPath)},
 	})
 	sch, _ := For("slurm")
 	var out bytes.Buffer
@@ -555,10 +555,10 @@ func TestLedgerReuseChecksAllOutputs(t *testing.T) {
 	// sbatch records a submit by creating/bumping the counter; if reuse works it
 	// is never called, so the counter file stays absent.
 	os.WriteFile(filepath.Join(bin, "sbatch"), []byte("#!/bin/bash\n"+
-		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\necho $n\n"), 0o755)
+		"n=$(cat \"$CGPIPE_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGPIPE_COUNTER\"\necho $n\n"), 0o755)
 	os.WriteFile(filepath.Join(bin, "scontrol"), []byte("#!/bin/bash\necho 'JobState=RUNNING Reason=None'\n"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGP_COUNTER", counter)
+	t.Setenv("CGPIPE_COUNTER", counter)
 
 	ledgerPath := filepath.Join(dir, "ledger.db")
 	lg, err := ledger.Open(ledgerPath)
@@ -571,7 +571,7 @@ func TestLedgerReuseChecksAllOutputs(t *testing.T) {
 	prog := eval.NewJob(eval.JobSpec{
 		Command:  "echo > ${output}",
 		Outputs:  []string{"first.bam", "second.bam"},
-		Settings: map[string]eval.Value{"cgp.ledger": eval.StrVal(ledgerPath)},
+		Settings: map[string]eval.Value{"cgpipe.ledger": eval.StrVal(ledgerPath)},
 	})
 	sch, _ := For("slurm")
 	var out bytes.Buffer
@@ -613,15 +613,15 @@ func TestSubmitWithMock(t *testing.T) {
 	}
 	counter := filepath.Join(dir, "counter")
 	mock := "#!/bin/bash\n" +
-		"n=$(cat \"$CGP_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGP_COUNTER\"\n" +
-		"cat > \"$CGP_SCRIPTS/job.$n\"\n" +
+		"n=$(cat \"$CGPIPE_COUNTER\" 2>/dev/null || echo 1000); n=$((n+1)); echo $n > \"$CGPIPE_COUNTER\"\n" +
+		"cat > \"$CGPIPE_SCRIPTS/job.$n\"\n" +
 		"echo $n\n"
 	if err := os.WriteFile(filepath.Join(bin, "sbatch"), []byte(mock), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGP_COUNTER", counter)
-	t.Setenv("CGP_SCRIPTS", scripts)
+	t.Setenv("CGPIPE_COUNTER", counter)
+	t.Setenv("CGPIPE_SCRIPTS", scripts)
 
 	src := `a.bam: {{
     job.name = "a"
@@ -668,11 +668,11 @@ func writeTmpl(t *testing.T, dir, content string) string {
 	return path
 }
 
-// TestCustomTemplateExplicitKey: cgp.runner.<name>.template overrides the
+// TestCustomTemplateExplicitKey: cgpipe.runner.<name>.template overrides the
 // built-in submission script while keeping the rest of the runner wiring.
 func TestCustomTemplateExplicitKey(t *testing.T) {
 	tmpl := writeTmpl(t, t.TempDir(), customTmpl)
-	src := "cgp.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
+	src := "cgpipe.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
 	got := renderDry(t, "slurm", src)
 	mustContainAll(t, got, "# SITE TEMPLATE", "#SBATCH -J align", "echo hi > out.bam")
 	if strings.Contains(got, "set -eo pipefail") {
@@ -680,15 +680,15 @@ func TestCustomTemplateExplicitKey(t *testing.T) {
 	}
 }
 
-// TestCustomTemplateConventionFile: ~/.cgp/custom_template.cgp is honored with no
+// TestCustomTemplateConventionFile: ~/.cgpipe/custom_template.cgp is honored with no
 // config key, applied to whichever scheduler runner is active.
 func TestCustomTemplateConventionFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.MkdirAll(filepath.Join(home, ".cgp"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".cgpipe"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".cgp", "custom_template.cgp"), []byte(customTmpl), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".cgpipe", "custom_template.cgp"), []byte(customTmpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got := renderDry(t, "slurm", oneTarget)
@@ -700,11 +700,11 @@ func TestCustomTemplateConventionFile(t *testing.T) {
 func TestCustomTemplatePrecedence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	os.MkdirAll(filepath.Join(home, ".cgp"), 0o755)
-	os.WriteFile(filepath.Join(home, ".cgp", "custom_template.cgp"),
+	os.MkdirAll(filepath.Join(home, ".cgpipe"), 0o755)
+	os.WriteFile(filepath.Join(home, ".cgpipe", "custom_template.cgp"),
 		[]byte("#!${job.shell}\n# CONVENTION\n${_body}\n"), 0o644)
 	tmpl := writeTmpl(t, t.TempDir(), "#!${job.shell}\n# EXPLICIT\n${_body}\n")
-	src := "cgp.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
+	src := "cgpipe.runner.slurm.template = \"" + tmpl + "\"\n" + oneTarget
 	got := renderDry(t, "slurm", src)
 	if !strings.Contains(got, "# EXPLICIT") || strings.Contains(got, "# CONVENTION") {
 		t.Errorf("explicit key should win over the convention file, rendered:\n%s", got)
@@ -714,7 +714,7 @@ func TestCustomTemplatePrecedence(t *testing.T) {
 // TestCustomTemplateMissingFileErrors: a config key pointing at a missing file is
 // a loud error naming the path and scheduler.
 func TestCustomTemplateMissingFileErrors(t *testing.T) {
-	src := "cgp.runner.slurm.template = \"/no/such/template.cgp\"\n" + oneTarget
+	src := "cgpipe.runner.slurm.template = \"/no/such/template.cgp\"\n" + oneTarget
 	sch, _ := For("slurm")
 	err := Run(program(t, src), sch, Options{DryRun: true, Dir: t.TempDir(), Out: io.Discard})
 	if err == nil {
@@ -725,7 +725,7 @@ func TestCustomTemplateMissingFileErrors(t *testing.T) {
 	}
 }
 
-// TestDefaultTemplateAccessor backs `cgp show-template`.
+// TestDefaultTemplateAccessor backs `cgpipe show-template`.
 func TestDefaultTemplateAccessor(t *testing.T) {
 	if tmpl, ok := DefaultTemplate("slurm"); !ok || !strings.Contains(tmpl, "#SBATCH") {
 		t.Errorf("DefaultTemplate(slurm) = %q, %v; want a non-empty slurm template", tmpl, ok)

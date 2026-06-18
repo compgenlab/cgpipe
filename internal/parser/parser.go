@@ -5,12 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/ast"
-	"github.com/compgen-io/cgp/internal/lexer"
-	"github.com/compgen-io/cgp/internal/token"
+	"github.com/compgenlab/cgpipe/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/lexer"
+	"github.com/compgenlab/cgpipe/internal/token"
 )
 
-// Parse lexes and parses cgp source into an *ast.File. file is used for
+// Parse lexes and parses cgpipe source into an *ast.File. file is used for
 // positions in error messages.
 func Parse(src, file string) (*ast.File, error) {
 	p := &parser{src: src, toks: lexer.Tokenize(src, file)}
@@ -40,7 +40,7 @@ func extractHelp(src string) string {
 	return strings.Join(help, "\n")
 }
 
-// ParseExpr parses a single cgp expression (used for ${…}/@{…} interpolation and
+// ParseExpr parses a single cgpipe expression (used for ${…}/@{…} interpolation and
 // %-control headers in bodies).
 func ParseExpr(src string) (e ast.Expr, err error) {
 	p := &parser{src: src, toks: lexer.Tokenize(src, "<expr>")}
@@ -653,7 +653,7 @@ func (p *parser) parsePostfix() ast.Expr {
 			pos := p.advance().Pos
 			name := p.expect(token.IDENT).Lit
 			if p.cur().Kind != token.LPAREN {
-				// dotted variable name (e.g. job.stdout, cgp.runner) — extend the
+				// dotted variable name (e.g. job.stdout, cgpipe.runner) — extend the
 				// identifier rather than treating '.' as a method call.
 				if id, ok := x.(*ast.Ident); ok {
 					id.Name += "." + name

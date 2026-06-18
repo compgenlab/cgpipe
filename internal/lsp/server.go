@@ -1,6 +1,6 @@
-// Package lsp implements a minimal Language Server Protocol server for the cgp
-// language, exposed as `cgp lsp`. It speaks JSON-RPC 2.0 over stdio and reuses
-// cgp's own lexer and parser to provide semantic tokens, parse diagnostics,
+// Package lsp implements a minimal Language Server Protocol server for the cgpipe
+// language, exposed as `cgpipe lsp`. It speaks JSON-RPC 2.0 over stdio and reuses
+// cgpipe's own lexer and parser to provide semantic tokens, parse diagnostics,
 // hover, and completion.
 //
 // The protocol layer is hand-written against encoding/json rather than built on
@@ -16,7 +16,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/compgen-io/cgp/internal/buildinfo"
+	"github.com/compgenlab/cgpipe/internal/buildinfo"
 )
 
 // Server holds the open-document state and serializes writes to the client.
@@ -131,7 +131,7 @@ func (s *Server) initializeResult() initializeResult {
 			HoverProvider:      true,
 			CompletionProvider: completionOptions{},
 		},
-		ServerInfo: serverInfo{Name: "cgp", Version: buildinfo.Version},
+		ServerInfo: serverInfo{Name: "cgpipe", Version: buildinfo.Version},
 	}
 }
 

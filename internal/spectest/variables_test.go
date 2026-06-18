@@ -3,7 +3,7 @@ package spectest
 import (
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/eval"
 )
 
 // §3 Variables.

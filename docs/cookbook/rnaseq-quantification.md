@@ -8,12 +8,12 @@ in one run.
 > annotation.
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # RNA-seq quantification: align with STAR, then count reads per gene with
 # ngsutilsj. Reads a sample sheet and emits an align+count chain per row:
 #
-#     cgp rnaseq-quantification.cgp --sheet samples.tsv \
+#     cgpipe rnaseq-quantification.cgp --sheet samples.tsv \
 #                    --index star_index --gtf genes.gtf
 #
 # samples.tsv has columns: sample, r1, r2
@@ -63,7 +63,7 @@ for row in samples {
 - **Sample-sheet scatter.** `open(sheet).read_tsv(header=true)` reads the sheet at
   eval time into one map per row; the `for` loop emits an align+count chain per
   sample. Per-sample columns come from `row["r1"]`/`row["r2"]`, while `--index` and
-  `--gtf` are shared across every row — cgp's stat cache checks the shared index once,
+  `--gtf` are shared across every row — cgpipe's stat cache checks the shared index once,
   not once per sample.
 
 ## Run it
@@ -71,7 +71,7 @@ for row in samples {
 A cohort — `samples.tsv` with columns `sample`, `r1`, `r2`:
 
 ```sh
-cgp -r slurm rnaseq-quantification.cgp --sheet samples.tsv \
+cgpipe -r slurm rnaseq-quantification.cgp --sheet samples.tsv \
     --index star_index --gtf genes.gtf
 ```
 

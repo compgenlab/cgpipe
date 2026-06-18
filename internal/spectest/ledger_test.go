@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/compgen-io/cgp/internal/ledger"
+	"github.com/compgenlab/cgpipe/internal/ledger"
 )
 
 // §10.3 Ownership is last-job-wins (UPSERT), and vacuum keeps every job that

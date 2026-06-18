@@ -59,7 +59,7 @@ func TestDiagnosticsCleanVsError(t *testing.T) {
 	if len(d) != 1 {
 		t.Fatalf("expected one diagnostic, got %d: %v", len(d), d)
 	}
-	if d[0].Severity != 1 || d[0].Source != "cgp" {
+	if d[0].Severity != 1 || d[0].Source != "cgpipe" {
 		t.Fatalf("unexpected diagnostic shape: %+v", d[0])
 	}
 	if d[0].Range.Start.Line != 0 {

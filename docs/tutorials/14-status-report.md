@@ -7,7 +7,7 @@ colored by each output's state. Neither runs any jobs.
 ## The pipeline
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 trimmed.fq: a.fastq {{
     cutadapt ${input} > ${output}
 }}
@@ -22,8 +22,8 @@ aligned.bam: trimmed.fq {{
 `-r graphviz` writes a DOT description to stdout — pipe it to Graphviz to render:
 
 ```console
-$ cgp -r graphviz pipeline.cgp
-digraph cgp {
+$ cgpipe -r graphviz pipeline.cgp
+digraph cgpipe {
   rankdir=LR;
   node [shape=box, style=rounded];
   "a.fastq" [shape=note];
@@ -35,7 +35,7 @@ digraph cgp {
 ```
 
 ```sh
-cgp -r graphviz pipeline.cgp | dot -Tsvg > pipeline.svg
+cgpipe -r graphviz pipeline.cgp | dot -Tsvg > pipeline.svg
 ```
 
 Source files (`a.fastq`) are drawn as notes; targets as boxes; edges follow the
@@ -47,7 +47,7 @@ Source files (`a.fastq`) are drawn as notes; targets as boxes; edges follow the
 graph drawn as inline SVG and a legend, each node colored by status:
 
 ```sh
-cgp -r html pipeline.cgp > status.html
+cgpipe -r html pipeline.cgp > status.html
 ```
 
 The legend covers the five states — **done**, **running**, **queued**, **failed**,
@@ -62,7 +62,7 @@ A sample-sheet pipeline that scatters over rows and gathers
 the whole cohort as one page — a single cohort-wide status view:
 
 ```sh
-cgp -r html align.cgp > cohort.html
+cgpipe -r html align.cgp > cohort.html
 ```
 
 ## When to use which

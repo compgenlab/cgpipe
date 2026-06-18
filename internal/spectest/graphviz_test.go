@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/runner/graphviz"
+	"github.com/compgenlab/cgpipe/internal/runner/graphviz"
 )
 
 // dot renders a program's dependency graph as Graphviz DOT.
@@ -32,7 +32,7 @@ final.txt: sorted.bam {{
 }}
 @default: final.txt`)
 	mustContain(t, got,
-		"digraph cgp {",
+		"digraph cgpipe {",
 		`"reads.fq" -> "raw.bam"`,
 		`"raw.bam" -> "sorted.bam"`,
 		`"sorted.bam" -> "final.txt"`,

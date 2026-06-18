@@ -1,4 +1,4 @@
-// Package spectest is the spec-driven conformance suite for the cgp language.
+// Package spectest is the spec-driven conformance suite for the cgpipe language.
 //
 // Where the per-package tests (lexer, parser, eval, …) verify that each
 // component works in isolation, the tests here drive the whole stack —

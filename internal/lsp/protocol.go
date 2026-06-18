@@ -3,8 +3,8 @@ package lsp
 import "encoding/json"
 
 // This file defines the minimal subset of the Language Server Protocol types
-// that the cgp server actually uses. It is intentionally hand-written (rather
-// than pulling a protocol library) to keep cgp's dependency set to one direct
+// that the cgpipe server actually uses. It is intentionally hand-written (rather
+// than pulling a protocol library) to keep cgpipe's dependency set to one direct
 // module. See package doc for the rationale.
 
 // request is an incoming JSON-RPC message. Requests carry an ID and expect a

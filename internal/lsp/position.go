@@ -2,10 +2,10 @@ package lsp
 
 import "unicode/utf8"
 
-// Position conversions between cgp's token.Pos (1-based line/col, 0-based byte
+// Position conversions between cgpipe's token.Pos (1-based line/col, 0-based byte
 // offset) and LSP positions (0-based line, UTF-16 code-unit character offset).
 //
-// The two coordinate systems disagree on two axes: cgp counts from 1 and
+// The two coordinate systems disagree on two axes: cgpipe counts from 1 and
 // measures columns in bytes, LSP counts from 0 and measures characters in
 // UTF-16 code units. We always recompute the LSP character from the byte offset
 // (never from token.Pos.Col) so multi-byte runes are handled correctly.

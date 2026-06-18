@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # ---- out.bam ----
-__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
-trap 'rm -f "$__cgp_body"' EXIT
-cat > "$__cgp_body" <<'__CGP_BODY__'
+__cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
+trap 'rm -f "$__cgpipe_body"' EXIT
+cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
 samtools sort in.bam > out.bam
-__CGP_BODY__
+__CGPIPE_BODY__
 
 docker run --rm \
     -v /tmp:/tmp \
@@ -14,6 +14,6 @@ docker run --rm \
     -w __WORKDIR__ \
     -u $(id -u):$(id -g) \
     biocontainers/samtools:1.9 \
-    sh "$__cgp_body"
+    sh "$__cgpipe_body"
 
 

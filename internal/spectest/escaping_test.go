@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// §4.3 A cgp string literal is one escape domain: every `\X` resolves to `X`,
+// §4.3 A cgpipe string literal is one escape domain: every `\X` resolves to `X`,
 // including inside a ${…}. So an escaped nested string argument parses — the
 // outer quotes are escaped (\") only so they survive the enclosing "…".
 func TestStringEscapesIncludingInsideSubstitution(t *testing.T) {
@@ -28,7 +28,7 @@ func TestStringEscapesIncludingInsideSubstitution(t *testing.T) {
 	}
 }
 
-// §6.1 A {{ }} body is raw shell, not a cgp string literal: only `\$` and `\@`
+// §6.1 A {{ }} body is raw shell, not a cgpipe string literal: only `\$` and `\@`
 // are special (they suppress ${…}/@{…}/$(…)); every other backslash passes
 // through verbatim so valid shell is not corrupted.
 func TestBodyKeepsShellBackslashesVerbatim(t *testing.T) {
@@ -41,12 +41,12 @@ func TestBodyKeepsShellBackslashesVerbatim(t *testing.T) {
 	mustContain(t, got,
 		`echo "x\"y"`,            // \" stays — valid shell
 		`echo back \\ slash`,     // \\ stays
-		`echo "v ${HOME} $HOME"`, // cgp ${h}=v; \${ -> shell ${; $HOME passthrough
+		`echo "v ${HOME} $HOME"`, // cgpipe ${h}=v; \${ -> shell ${; $HOME passthrough
 		`echo run $(date)`,       // \$( -> shell command substitution, deferred
 	)
 }
 
-// §4.3 cgp's own $(cmd) runs while the body is rendered, so it is substituted
+// §4.3 cgpipe's own $(cmd) runs while the body is rendered, so it is substituted
 // even under a dry run; \$(cmd) is deferred to the job shell verbatim. This pins
 // the (intentional) "-dr still runs $(…)" behavior against silent regression.
 func TestDryRunEvaluatesCommandSubstitution(t *testing.T) {

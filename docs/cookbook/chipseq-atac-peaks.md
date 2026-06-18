@@ -7,7 +7,7 @@ recipe shows off.
 > Requires: `bowtie2`, `samtools`, `macs2`. Needs a bowtie2 index.
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # ChIP-seq / ATAC-seq peak calling: align the treatment and the input control,
 # then call peaks. The peak-calling job depends on BOTH BAMs — a multi-input
@@ -49,10 +49,10 @@ ${sample}_peaks.narrowPeak: ${treat.sub("\\.fq\\.gz$", "")}.bam ${control.sub("\
 
 - **Multi-input targets.** The peak-calling rule lists two inputs — the treatment
   BAM and the control BAM — and refers to them positionally as `${input[0]}` and
-  `${input[1]}`. cgp builds both before the job runs (and on a scheduler, makes the
+  `${input[1]}`. cgpipe builds both before the job runs (and on a scheduler, makes the
   job depend on both).
 - **One wildcard rule, reused.** A single `%.bam: %.fq.gz` rule aligns *both* the
-  treatment and the control; cgp instantiates it once per requested BAM. The
+  treatment and the control; cgpipe instantiates it once per requested BAM. The
   `${treat.sub(...)}` / `${control.sub(...)}` expressions derive each BAM name from
   its FASTQ.
 - **Job settings live under `job.`** Per-job knobs are namespaced — `job.name`,
@@ -64,7 +64,7 @@ ${sample}_peaks.narrowPeak: ${treat.sub("\\.fq\\.gz$", "")}.bam ${control.sub("\
 ## Run it
 
 ```sh
-cgp -r slurm chipseq-atac-peaks.cgp --sample H3K27ac \
+cgpipe -r slurm chipseq-atac-peaks.cgp --sample H3K27ac \
     --treat h3k27ac.fq.gz --control input.fq.gz --index bowtie2/hg38
 ```
 

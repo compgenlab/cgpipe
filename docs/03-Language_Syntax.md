@@ -1,6 +1,6 @@
 # Language Syntax
 
-A `.cgp` file is read top to bottom as cgp code. Every uncommented line at the top
+A `.cgp` file is read top to bottom as cgpipe code. Every uncommented line at the top
 level is a statement: a variable assignment, a control-flow block, a target
 declaration, or a built-in like `print` or `include`. Inside a target's `{{ }}`,
 the rules change — that text is a shell template, covered in
@@ -8,9 +8,9 @@ the rules change — that text is a shell template, covered in
 
 ## The two kinds of braces
 
-The single most important lexical rule in cgp:
+The single most important lexical rule in cgpipe:
 
-- `{ ... }` delimits a block of **cgp code** — the body of an `if` or `for`.
+- `{ ... }` delimits a block of **cgpipe code** — the body of an `if` or `for`.
 - `{{ ... }}` delimits a **shell body** — a target's recipe, captured verbatim.
 
 Keep them straight and the rest follows.
@@ -19,10 +19,10 @@ Keep them straight and the rest follows.
 
 `#` begins a comment to end of line. The leading run of comment lines at the top
 of a file (after an optional `#!` shebang) is the script's **help text**, printed
-by `cgp script.cgp -h`:
+by `cgpipe script.cgp -h`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Align reads and call variants.
 #
@@ -66,7 +66,7 @@ selects the i-th key). Assign with `m["k"] = v`; `m["k"] += v` accumulates a lis
 row is a map (see below).
 
 A **file** is a handle returned by `open(path[, mode])`; with the default `"r"` its
-reader methods turn a file on disk into cgp values: `read_tsv(...)`/`read_csv(...)`
+reader methods turn a file on disk into cgpipe values: `read_tsv(...)`/`read_csv(...)`
 and `read_json()` return a list of maps, `read_lines(...)` a list of strings, and
 `read()` the whole file as one string. This is how a pipeline reads a sample sheet at
 evaluation time — see [Sample Sheets](13-Sample_Sheets.md). Opened with `"w"`
@@ -75,7 +75,7 @@ evaluation time — see [Sample Sheets](13-Sample_Sheets.md). Opened with `"w"`
 
 ## Variables
 
-cgp is lexically **block-scoped**: each `{ }` block (an `if`/`for` body, a per-target
+cgpipe is lexically **block-scoped**: each `{ }` block (an `if`/`for` body, a per-target
 body) is a scope nested in the one around it. A bare `foo = …` assigns the existing
 `foo` if one is in scope, otherwise creates `foo` in the *current* block; `var foo`
 declares a new binding in the current scope. See [scoping](language-spec.md#65-scoping).
@@ -103,11 +103,11 @@ it the right tool for defaults.
 ### Command-line variables
 
 A **double-hyphen** `--name value` sets the script variable `name` before the
-script runs. (Single-hyphen arguments like `-dr` are cgp's own options;
+script runs. (Single-hyphen arguments like `-dr` are cgpipe's own options;
 double-hyphen are always script variables.)
 
 ```sh
-cgp pipeline.cgp --sample patient_42 --threads 16
+cgpipe pipeline.cgp --sample patient_42 --threads 16
 ```
 
 Values are typed like literals (`16` → int, `0.5` → float, `true`/`false` → bool,
@@ -120,7 +120,7 @@ else string). Three conventions:
 
 Two edge cases: a value starting with `-` needs the explicit form
 (`--offset=-5`); and put the pipeline file *before* a trailing boolean flag
-(`cgp p.cgp --adaptive`) so the filename isn't swallowed as the flag's value.
+(`cgpipe p.cgp --adaptive`) so the filename isn't swallowed as the flag's value.
 
 Because CLI values are applied first, `?=` defaults never override them. Guard the
 required ones:
@@ -180,7 +180,7 @@ Inside a `"…"` string literal:
 | `${expr}`  | Any expression: `${input[0]}`, `${name.basename()}` |
 | `${if c; a; b}` | Inline conditional (see [Build Targets](05-Build_Targets.md)) |
 | `@{list}`  | List expansion — one copy per element |
-| `${{var}}` | Double evaluation — substitute, then evaluate the result as cgp source |
+| `${{var}}` | Double evaluation — substitute, then evaluate the result as cgpipe source |
 | `$(cmd)`   | Run `cmd` in the shell **at parse time**; substitute its stdout |
 
 ```
@@ -274,9 +274,9 @@ assign through it: `var last`, then `for s in xs { last = s }`.
 | `print expr [, expr …]` | Write to stdout (comma-separated args, space-joined). Inside a body, appends to the rendered script instead. |
 | `include "path"` | Inline another `.cgp` file in global context — the composition mechanism (see [Tutorial 8](tutorials/08-include.md)) |
 | `export name = expr` | Expose a value to a calling [workflow](12-Workflows.md); a no-op standalone |
-| `eval expr` | Evaluate a string-valued expression as cgp source at run time |
+| `eval expr` | Evaluate a string-valued expression as cgpipe source at run time |
 | `unset name` | Remove a variable |
-| `exit [code]` | Stop the pipeline (`exit` ⇒ `exit 0`); the code becomes cgp's exit status |
+| `exit [code]` | Stop the pipeline (`exit` ⇒ `exit 0`); the code becomes cgpipe's exit status |
 | `dumpvars` | Print all in-scope variables (debug) |
 | `showhelp` | Print the help-text block |
 | *call* (e.g. `f.write("x")`) | A bare call on its own line runs for its side effect (how file writes are invoked) |

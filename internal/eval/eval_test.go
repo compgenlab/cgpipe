@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/parser"
+	"github.com/compgenlab/cgpipe/internal/parser"
 )
 
 func runSrc(t *testing.T, src string, vars map[string]Value) (*Program, string) {
@@ -82,7 +82,7 @@ func TestStringAndListOps(t *testing.T) {
 }
 
 func TestStringEscapes(t *testing.T) {
-	// keys are cgp source (raw backslashes); values are the expected resolved bytes.
+	// keys are cgpipe source (raw backslashes); values are the expected resolved bytes.
 	cases := map[string]string{
 		`"a\tb"`:        "a\tb",
 		`"a\nb"`:        "a\nb",

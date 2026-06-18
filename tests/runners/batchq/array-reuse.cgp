@@ -2,7 +2,7 @@
 # output still owned by an active job reuses it (polls `batchq status`) instead of
 # resubmitting the array. setup.sh performs the first (seeding) run; this is the
 # second run, where every element is reused and nothing is submitted.
-cgp.ledger = "led.db"
+cgpipe.ledger = "led.db"
 chroms = ["chr1", "chr2", "chr3"]
 calls  = []
 for c in chroms with i {

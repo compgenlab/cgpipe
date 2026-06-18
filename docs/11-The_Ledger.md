@@ -9,7 +9,7 @@ queued without resubmitting or colliding.
 Enable it with a path — the ledger is a **directory**, created if it doesn't exist:
 
 ```
-cgp.ledger = "/scratch/me/jobs.ledger"
+cgpipe.ledger = "/scratch/me/jobs.ledger"
 ```
 
 ## What it does and doesn't track
@@ -54,7 +54,7 @@ sample-sheet rows is checked once, not a thousand times.
 
 This is what the ledger is *for*. With a ledger configured **and a scheduler
 runner**, when a job needs an input that has no producer in this run and isn't on
-disk yet, cgp looks the path up in the ledger. If its owning job is still active
+disk yet, cgpipe looks the path up in the ledger. If its owning job is still active
 (per `squeue`/`qstat`), the new work is wired as a scheduler dependency
 (`afterok:<id>`) of that in-flight job — instead of erroring with "no rule to make"
 or submitting a duplicate.
@@ -72,19 +72,19 @@ rather than resubmitting:
 # reuse: a.bam already owned by active job 1001
 ```
 
-## Inspecting the ledger: `cgp ledger`
+## Inspecting the ledger: `cgpipe ledger`
 
 ```
-cgp ledger dump <dir>                   dump all jobs as key/value TSV
-cgp ledger search [filters] <dir>       dump jobs matching the filters
-cgp ledger status [-r RUNNER] [-output] <dir>   live scheduler status per job (or output)
-cgp ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
+cgpipe ledger dump <dir>                   dump all jobs as key/value TSV
+cgpipe ledger search [filters] <dir>       dump jobs matching the filters
+cgpipe ledger status [-r RUNNER] [-output] <dir>   live scheduler status per job (or output)
+cgpipe ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
 ```
 
 `dump` prints every job as key/value TSV — provenance you can grep:
 
 ```console
-$ cgp ledger dump jobs.ledger
+$ cgpipe ledger dump jobs.ledger
 1001	PIPELINE	led.cgp
 1001	NAME	trim
 1001	OUTPUT	trimmed.fq
@@ -111,7 +111,7 @@ Note `1002 DEP 1001` — the recorded dependency edge. `search` narrows by filte
 | `-id JOBID` | the job id (exact) |
 
 ```console
-$ cgp ledger search -o aligned.bam jobs.ledger
+$ cgpipe ledger search -o aligned.bam jobs.ledger
 1002	NAME	align
 1002	OUTPUT	aligned.bam
 ...
@@ -121,15 +121,15 @@ $ cgp ledger search -o aligned.bam jobs.ledger
 
 `status` asks the scheduler what is happening with the recorded jobs right now —
 a pipeline-free view of the queue. It needs a scheduler runner to query: pass
-`-r <runner>` or let it pick up `cgp.runner` (and, if you omit `<dir>`,
-`cgp.ledger`) from your config.
+`-r <runner>` or let it pick up `cgpipe.runner` (and, if you omit `<dir>`,
+`cgpipe.ledger`) from your config.
 
 The status word shown is the scheduler's **native** one, so cluster-specific
 states stay visible (SLURM `PENDING`/`COMPLETED`, batchq `PROXYQUEUED`, SGE `qw`,
 …). A job the scheduler no longer knows about reads `UNKNOWN`.
 
 ```console
-$ cgp ledger status -r batchq jobs.ledger
+$ cgpipe ledger status -r batchq jobs.ledger
 1001	SUCCESS	trim
 1002	RUNNING	align
 1003	PROXYQUEUED	merge
@@ -139,7 +139,7 @@ With `-output`, each row is an **output file** mapped to the most recent job tha
 claims it, and the status is reconciled against the file on disk:
 
 ```console
-$ cgp ledger status -r batchq -output jobs.ledger
+$ cgpipe ledger status -r batchq -output jobs.ledger
 trimmed.fq	1001	SUCCESS
 aligned.bam	1002	RUNNING
 old.bam	1009	COMPLETE
@@ -178,4 +178,4 @@ so there is no `unlock` subcommand and never a stale lock to clear.
 - **[Workflows](12-Workflows.md)** — where cross-stage reuse comes in.
 
 Reference → [language-spec.md §10](language-spec.md#10-the-ledger-job-tracking),
-[§15.2](language-spec.md#152-cgp-ledger).
+[§15.2](language-spec.md#152-cgpipe-ledger).

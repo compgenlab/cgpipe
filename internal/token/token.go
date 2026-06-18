@@ -2,7 +2,7 @@ package token
 
 import "fmt"
 
-// Kind enumerates the lexical token kinds of the cgp language.
+// Kind enumerates the lexical token kinds of the cgpipe language.
 type Kind int
 
 const (

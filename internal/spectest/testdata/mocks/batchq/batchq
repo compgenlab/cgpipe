@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mock BatchQ multi-tool. cgp invokes `batchq submit` (script on stdin),
+# Mock BatchQ multi-tool. cgpipe invokes `batchq submit` (script on stdin),
 # `batchq status <id>`, and `batchq release <id>`.
 MOCK_NAME=batchq
 . "$(dirname "$0")/../lib.sh"
@@ -12,7 +12,7 @@ case "${1:-}" in
     status)
         capture_call status "$@"
         # Supports `status <id>` and `status --porcelain <id>`. A canned response
-        # (or, absent CGP_TEST_RESPONSES, the default) reports the job active.
+        # (or, absent CGPIPE_TEST_RESPONSES, the default) reports the job active.
         id="${2:-}"; porc=
         [ "${2:-}" = --porcelain ] && { porc=1; id="${3:-}"; }
         if out=$(serve_response batchq "$id"); then

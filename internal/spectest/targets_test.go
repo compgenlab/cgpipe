@@ -280,7 +280,7 @@ C.txt: B.txt {{
 	})
 }
 
-// §7.5 A ^ temp file is never auto-deleted by cgp.
+// §7.5 A ^ temp file is never auto-deleted by cgpipe.
 func TestTempNotAutoDeleted(t *testing.T) {
 	chdirTmp(t)
 	writeFile(t, "A.txt", "A1")
@@ -293,6 +293,6 @@ C.txt: B.txt {{
 @default: C.txt`
 	runReal(t, src)
 	if !exists("B.txt") {
-		t.Error("temp B.txt should remain after the run (cgp never auto-deletes temps)")
+		t.Error("temp B.txt should remain after the run (cgpipe never auto-deletes temps)")
 	}
 }

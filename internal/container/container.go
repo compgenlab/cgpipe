@@ -45,9 +45,9 @@ func Wrap(body string, s Spec) string {
 	marker := pickMarker(body)
 
 	var b strings.Builder
-	b.WriteString("__cgp_body=$(mktemp \"" + bodyDir + "/cgp-body.XXXXXX\")\n")
-	b.WriteString("trap 'rm -f \"$__cgp_body\"' EXIT\n")
-	b.WriteString("cat > \"$__cgp_body\" <<'" + marker + "'\n")
+	b.WriteString("__cgpipe_body=$(mktemp \"" + bodyDir + "/cgpipe-body.XXXXXX\")\n")
+	b.WriteString("trap 'rm -f \"$__cgpipe_body\"' EXIT\n")
+	b.WriteString("cat > \"$__cgpipe_body\" <<'" + marker + "'\n")
 	b.WriteString(body)
 	if !strings.HasSuffix(body, "\n") {
 		b.WriteByte('\n')
@@ -88,7 +88,7 @@ func renderDocker(s Spec, mounts []string, wd, shell string) string {
 		b.WriteString(" \\\n    " + o)
 	}
 	b.WriteString(" \\\n    " + s.Image)
-	b.WriteString(" \\\n    " + shell + " \"$__cgp_body\"")
+	b.WriteString(" \\\n    " + shell + " \"$__cgpipe_body\"")
 	return b.String()
 }
 
@@ -109,7 +109,7 @@ func renderSingularity(s Spec, mounts []string, wd, shell string) string {
 		b.WriteString(" \\\n    " + o)
 	}
 	b.WriteString(" \\\n    " + normalizeSingularityImage(s.Image))
-	b.WriteString(" \\\n    " + shell + " \"$__cgp_body\"")
+	b.WriteString(" \\\n    " + shell + " \"$__cgpipe_body\"")
 	return b.String()
 }
 
@@ -154,9 +154,9 @@ func absDir(p string) string {
 }
 
 func pickMarker(body string) string {
-	marker := "__CGP_BODY__"
+	marker := "__CGPIPE_BODY__"
 	for i := 0; strings.Contains(body, marker); i++ {
-		marker = "__CGP_BODY_" + string(rune('A'+i)) + "__"
+		marker = "__CGPIPE_BODY_" + string(rune('A'+i)) + "__"
 	}
 	return marker
 }

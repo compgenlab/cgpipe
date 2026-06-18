@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/runner/graphviz"
+	"github.com/compgenlab/cgpipe/internal/runner/graphviz"
 )
 
 // State is a node's status in the report.

@@ -24,6 +24,6 @@ call_variants --region chr2 aligned.bam > calls.chr2.vcf
 call_variants --region chr3 aligned.bam > calls.chr3.vcf
 
 ;;
-*) echo "cgp: no array task $BATCHQ_ARRAY_TASK_ID" >&2; exit 1 ;;
+*) echo "cgpipe: no array task $BATCHQ_ARRAY_TASK_ID" >&2; exit 1 ;;
 esac
 

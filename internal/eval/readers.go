@@ -273,7 +273,7 @@ func readWhole(path string) (Value, error) {
 	return StrVal(string(b)), nil
 }
 
-// jsonValue maps a decoded JSON scalar to a cgp value (whole floats become ints).
+// jsonValue maps a decoded JSON scalar to a cgpipe value (whole floats become ints).
 func jsonValue(v any) Value {
 	switch x := v.(type) {
 	case string:

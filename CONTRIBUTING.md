@@ -1,6 +1,6 @@
-# Contributing to cgp
+# Contributing to cgpipe
 
-cgp is in early development. Contributions are welcome, but the language is
+cgpipe is in early development. Contributions are welcome, but the language is
 still settling — open an issue to discuss anything substantial before sending a
 large PR.
 

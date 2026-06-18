@@ -7,7 +7,7 @@ all three; the other recipes depend on them existing.
 > Requires: `bwa`, `samtools`, `gatk`.
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Build the indexes that downstream alignment/calling need from a reference FASTA.
 #
@@ -47,7 +47,7 @@ all: ${ref}.bwt ${ref}.fai ${ref.sub("\\.fa(sta)?$", "")}.dict
 
 - **Independent prerequisite targets.** The three indexes don't depend on each
   other, so on a scheduler they submit in parallel. Each downstream recipe can
-  depend on the one it needs (e.g. an aligner on `${ref}.bwt`) and cgp will build
+  depend on the one it needs (e.g. an aligner on `${ref}.bwt`) and cgpipe will build
   it first.
 - **An `all` aggregator** as the [`@default`](../06-Reserved_Targets.md#the-default-goal-default):
   requesting nothing builds all three.
@@ -57,8 +57,8 @@ all: ${ref}.bwt ${ref}.fai ${ref.sub("\\.fa(sta)?$", "")}.dict
 ## Run it
 
 ```sh
-cgp reference-preparation.cgp --ref genome.fa | bash    # local
-cgp -r slurm reference-preparation.cgp --ref genome.fa  # on a cluster
+cgpipe reference-preparation.cgp --ref genome.fa | bash    # local
+cgpipe -r slurm reference-preparation.cgp --ref genome.fa  # on a cluster
 ```
 
 ## Adapt it

@@ -9,8 +9,8 @@ import {
 let client: LanguageClient | undefined;
 
 export function activate(_context: ExtensionContext): void {
-  const config = workspace.getConfiguration("cgp");
-  const serverPath = config.get<string>("serverPath") || "cgp";
+  const config = workspace.getConfiguration("cgpipe");
+  const serverPath = config.get<string>("serverPath") || "cgpipe";
 
   const serverOptions: ServerOptions = {
     command: serverPath,
@@ -19,13 +19,13 @@ export function activate(_context: ExtensionContext): void {
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ scheme: "file", language: "cgp" }],
-    outputChannelName: "cgp",
+    documentSelector: [{ scheme: "file", language: "cgpipe" }],
+    outputChannelName: "cgpipe",
   };
 
   client = new LanguageClient(
-    "cgp",
-    "cgp Language Server",
+    "cgpipe",
+    "cgpipe Language Server",
     serverOptions,
     clientOptions,
   );
@@ -35,9 +35,9 @@ export function activate(_context: ExtensionContext): void {
   // gracefully to "highlighting only" with a hint rather than a hard failure.
   client.start().catch((err) => {
     window.showWarningMessage(
-      `cgp: could not start the language server ("${serverPath} lsp"). ` +
+      `cgpipe: could not start the language server ("${serverPath} lsp"). ` +
         `Syntax highlighting still works; diagnostics/hover/completion are disabled. ` +
-        `Set "cgp.serverPath" to your cgp binary. (${err})`,
+        `Set "cgpipe.serverPath" to your cgpipe binary. (${err})`,
     );
   });
 }

@@ -9,7 +9,7 @@ the inline `${if}` conditional, and the atomic-write idiom.
 `align.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # Align reads, with tunable resources and an optional read-group.
 #
@@ -48,7 +48,7 @@ Four things to notice:
 Under the shell runner, resources don't apply — you just get the command:
 
 ```console
-$ cgp -dr align.cgp --reads reads.fq --ref ref.fa
+$ cgpipe -dr align.cgp --reads reads.fq --ref ref.fa
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -66,7 +66,7 @@ The *same target*, submitted to SLURM with overrides, turns the directives into
 `job.walltime` becomes `-t`:
 
 ```console
-$ cgp -dr -r slurm align.cgp --reads reads.fq --ref ref.fa --threads 16 --rg "@RG\tID:lib1"
+$ cgpipe -dr -r slurm align.cgp --reads reads.fq --ref ref.fa --threads 16 --rg "@RG\tID:lib1"
 # [dryrun.1] aligned.bam
 #!/bin/bash
 #SBATCH -J aligned.bam
@@ -82,7 +82,7 @@ bwa mem -t 16 -R @RG\tID:lib1 ref.fa reads.fq \
 
 `--threads 16` flowed through `job.procs = threads` to `-c 16`, and the read-group
 appeared because `--rg` was set. You wrote the resources once; the scheduler
-mapping is cgp's job.
+mapping is cgpipe's job.
 
 ## Next
 

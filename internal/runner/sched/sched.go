@@ -6,6 +6,8 @@ package sched
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,12 +16,58 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/ledger"
-	"github.com/compgen-io/cgp/internal/runner"
+	"github.com/compgenlab/cgpipe/internal/debug"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/ledger"
+	"github.com/compgenlab/cgpipe/internal/runner"
 )
+
+// probeTimeout bounds how long a scheduler status probe may take; a hung or slow
+// scheduler must not stall the whole run. Default 30s, overridable via
+// CGPIPE_PROBE_TIMEOUT (whole seconds); a value <= 0 disables the bound.
+func probeTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("CGPIPE_PROBE_TIMEOUT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n <= 0 {
+				return 0
+			}
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 30 * time.Second
+}
+
+// probe runs a scheduler status command (read-only, no stdin) under the probe
+// timeout, returning its stdout and stderr. A timeout or failure is returned as
+// an error; callers already treat that as "unknown / not active". Each probe is
+// traced at debug level 3 so a flood or a hang is visible.
+func probe(name string, args ...string) (stdout, stderr []byte, err error) {
+	d := probeTimeout()
+	ctx := context.Background()
+	if d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+	debug.Logf(3, "probe: %s %s", name, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, name, args...)
+	// WaitDelay bounds Output() even when the probe spawned a child that still
+	// holds the stdout pipe open (e.g. a wrapper that exec's another tool): after
+	// the context kills the process, the pipes are force-closed after this grace.
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.Output()
+	if ee, ok := err.(*exec.ExitError); ok {
+		stderr = ee.Stderr
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		debug.Logf(3, "probe: %s timed out after %s — treating as unknown", name, d)
+		return nil, stderr, ctx.Err()
+	}
+	return out, stderr, err
+}
 
 // Scheduler describes one batch system.
 type Scheduler struct {
@@ -35,10 +83,10 @@ type Scheduler struct {
 	State      func(string) string   // normalized live state for reports: queued|running|done|failed|"" (unknown); optional
 	// Status returns the scheduler's native status word for a job (e.g. SLURM
 	// "PENDING", batchq "PROXYQUEUED"), or "" if the job is unknown/aged out. Used
-	// by `cgp ledger status` to show scheduler-specific states verbatim.
+	// by `cgpipe ledger status` to show scheduler-specific states verbatim.
 	Status func(string) string
 	// EndTime returns the job's completion time (Unix seconds) when the scheduler
-	// exposes one, with ok=false otherwise. Best-effort: used by `cgp ledger status`
+	// exposes one, with ok=false otherwise. Best-effort: used by `cgpipe ledger status`
 	// as the upper bound of the output-mtime window. Only some schedulers implement it.
 	EndTime func(string) (int64, bool)
 	// ArrayTaskVar is the run-time environment variable carrying a job array's task
@@ -78,7 +126,7 @@ var schedulers = map[string]Scheduler{
 		Status:     pbsStatus,
 		// No ArrayTaskVar: pipeline-array task ids on PBS use a different subjob
 		// format (12345[i]) than SLURM/BatchQ's <base>_<i>, so pipeline arrays fall
-		// back to per-element submission on PBS. (cgp sub --array has no downstream
+		// back to per-element submission on PBS. (cgpipe sub --array has no downstream
 		// task-id deps and still renders #PBS -J.)
 	},
 	"batchq": {
@@ -97,7 +145,7 @@ var schedulers = map[string]Scheduler{
 // slurmActive reports whether a SLURM job is still pending/running (and not
 // doomed by an unsatisfiable dependency), via `scontrol show job`.
 func slurmActive(id string) bool {
-	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	out, _, err := probe("scontrol", "-o", "show", "job", id)
 	if err != nil {
 		return false
 	}
@@ -121,7 +169,7 @@ func slurmActive(id string) bool {
 // slurmStatus returns the native SLURM JobState word (e.g. "PENDING", "RUNNING",
 // "COMPLETED") from `scontrol -o show job`, or "" if the job is unknown (aged out).
 func slurmStatus(id string) string {
-	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	out, _, err := probe("scontrol", "-o", "show", "job", id)
 	if err != nil {
 		return ""
 	}
@@ -154,7 +202,7 @@ func slurmState(id string) string {
 // absent, not yet known ("Unknown"/"None"), or unparseable. SLURM prints it as
 // a local-time "YYYY-MM-DDTHH:MM:SS" timestamp.
 func slurmEndTime(id string) (int64, bool) {
-	out, err := exec.Command("scontrol", "-o", "show", "job", id).Output()
+	out, _, err := probe("scontrol", "-o", "show", "job", id)
 	if err != nil {
 		return 0, false
 	}
@@ -175,6 +223,10 @@ func slurmEndTime(id string) (int64, bool) {
 	return 0, false
 }
 
+// batchqPorcelainUnsupported records that this batchq build rejects the
+// --porcelain flag, so we stop paying for a doomed extra probe per status query.
+var batchqPorcelainUnsupported atomic.Bool
+
 // batchqStatus returns the status word BatchQ reports for a job (e.g. "RUNNING",
 // "SUCCESS"), or "" if the job is unknown or the query fails. The status word, not
 // the exit code, tells active from done (batchq exits 0 even for finished jobs).
@@ -182,13 +234,22 @@ func batchqStatus(id string) string {
 	// Prefer the stable machine-readable form: one "<queried-id>\t<STATUS>" line
 	// with the queried token echoed in field 0 — unambiguous for a task address
 	// "<arrayid>_<index>" or an array id (which the human format renders specially).
-	if out, err := exec.Command("batchq", "status", "--porcelain", id).Output(); err == nil {
-		if s := batchqPickStatus(id, string(out)); s != "" {
-			return s
+	// When the porcelain probe succeeds we trust its result and do NOT also run the
+	// plain query (no doubling). The plain fallback is only for a batchq that lacks
+	// --porcelain, detected once via its "unknown flag" error and cached.
+	if !batchqPorcelainUnsupported.Load() {
+		out, stderr, err := probe("batchq", "status", "--porcelain", id)
+		if err == nil {
+			return batchqPickStatus(id, string(out))
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "" // scheduler hung — a plain retry would only hang too
+		}
+		if bytes.Contains(stderr, []byte("unknown flag")) || bytes.Contains(stderr, []byte("unknown shorthand")) {
+			batchqPorcelainUnsupported.Store(true)
 		}
 	}
-	// Fallback for a batchq without --porcelain.
-	out, err := exec.Command("batchq", "status", id).Output()
+	out, _, err := probe("batchq", "status", id)
 	if err != nil {
 		return ""
 	}
@@ -252,7 +313,7 @@ func batchqState(id string) string {
 // unknown or has no end time yet (e.g. still running, where the field is absent or
 // not a valid timestamp).
 func batchqEndTime(id string) (int64, bool) {
-	out, err := exec.Command("batchq", "status", "-e", id).Output()
+	out, _, err := probe("batchq", "status", "-e", id)
 	if err != nil {
 		return 0, false
 	}
@@ -271,7 +332,7 @@ func batchqEndTime(id string) (int64, bool) {
 // if the job is no longer listed. `qstat` prints one row per job with the state
 // in the 5th whitespace-separated column; a finished job drops off the list.
 func sgeStatus(id string) string {
-	out, err := exec.Command("qstat").Output()
+	out, _, err := probe("qstat")
 	if err != nil {
 		return ""
 	}
@@ -312,7 +373,7 @@ func sgeState(id string) string {
 // or "" if the job is unknown. `qstat -f <id>` prints "job_state = <code>" among
 // its `key = value` lines; a finished job eventually drops off (qstat exits != 0).
 func pbsStatus(id string) string {
-	out, err := exec.Command("qstat", "-f", id).Output()
+	out, _, err := probe("qstat", "-f", id)
 	if err != nil {
 		return ""
 	}
@@ -389,7 +450,7 @@ func Run(p *eval.Program, sch Scheduler, opts Options) error {
 
 // SubmitOne submits a single target with the given explicit dependency job ids,
 // plus dependencies derived from afterOutputs (the active ledger owner of each).
-// Used by `cgp sub`.
+// Used by `cgpipe sub`.
 func SubmitOne(p *eval.Program, sch Scheduler, t *eval.Target, explicitDeps, afterOutputs []string, opts Options) (string, error) {
 	b, err := newBackend(p, sch, opts)
 	if err != nil {
@@ -401,7 +462,7 @@ func SubmitOne(p *eval.Program, sch Scheduler, t *eval.Target, explicitDeps, aft
 	if b.ledger != nil {
 		for _, out := range afterOutputs {
 			if owner, ok, err := b.ledger.OwnerOf(out); err == nil && ok && owner != "" {
-				if sch.IsActive == nil || sch.IsActive(owner) {
+				if b.isActive(owner) {
 					deps = append(deps, owner)
 				}
 			}
@@ -419,27 +480,27 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 		opts.Out = os.Stdout
 	}
 	shell := "/bin/bash"
-	if v, ok := p.Get("cgp.shell"); ok {
+	if v, ok := p.Get("cgpipe.shell"); ok {
 		shell = eval.Stringify(v)
 	}
 	gh := false
-	if v, ok := p.Get("cgp.runner." + sch.Name + ".global_hold"); ok {
+	if v, ok := p.Get("cgpipe.runner." + sch.Name + ".global_hold"); ok {
 		gh = eval.Truthy(v)
 	}
 	// Effective working directory recorded in the ledger so a later status read /
 	// restart can resolve the job's relative paths: the explicit Dir if set,
-	// otherwise the process cwd (the directory cgp was launched from).
+	// otherwise the process cwd (the directory cgpipe was launched from).
 	wd := opts.Dir
 	if wd == "" {
 		wd, _ = os.Getwd()
 	}
 	b := &backend{prog: p, sch: sch, opts: opts, shell: shell, globalHold: gh, user: os.Getenv("USER"), wd: wd}
-	if v, ok := p.Get("cgp.run_id"); ok {
+	if v, ok := p.Get("cgpipe.run_id"); ok {
 		b.runID = eval.Stringify(v)
 	}
 	// Optional ledger: enables cross-run reuse of still-active jobs. Not used in
 	// dry-run (no real job ids).
-	if v, ok := p.Get("cgp.ledger"); ok && eval.Stringify(v) != "" && !opts.DryRun {
+	if v, ok := p.Get("cgpipe.ledger"); ok && eval.Stringify(v) != "" && !opts.DryRun {
 		lg, err := ledger.Open(eval.Stringify(v))
 		if err != nil {
 			return nil, fmt.Errorf("ledger: %w", err)
@@ -456,9 +517,9 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 // while keeping the rest of its wiring (submit command, status probes, mem
 // normalization). Two sources, in priority order:
 //
-//  1. cgp.runner.<name>.template = "<path>" — explicit and per-scheduler, via
+//  1. cgpipe.runner.<name>.template = "<path>" — explicit and per-scheduler, via
 //     normal config layering. A set-but-unreadable/empty path is a loud error.
-//  2. ~/.cgp/custom_template.cgp — a single zero-config convention file applied to
+//  2. ~/.cgpipe/custom_template.cgp — a single zero-config convention file applied to
 //     whichever scheduler runner is active (most users target one cluster). Absent
 //     or empty ⇒ silently keep the built-in.
 //
@@ -466,7 +527,7 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 // source path in b.templateSrc for error messages.
 func (b *backend) resolveTemplate() error {
 	name := b.sch.Name
-	if path := b.cfg("cgp.runner." + name + ".template"); path != "" {
+	if path := b.cfg("cgpipe.runner." + name + ".template"); path != "" {
 		full := expandTilde(path)
 		data, err := os.ReadFile(full)
 		if err != nil {
@@ -480,7 +541,7 @@ func (b *backend) resolveTemplate() error {
 		return nil
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		conv := filepath.Join(home, ".cgp", "custom_template.cgp")
+		conv := filepath.Join(home, ".cgpipe", "custom_template.cgp")
 		if data, err := os.ReadFile(conv); err == nil && strings.TrimSpace(string(data)) != "" {
 			b.sch.Template = string(data)
 			b.templateSrc = conv
@@ -520,6 +581,27 @@ type backend struct {
 	dryN        int
 	ids         []string
 	held        []string
+	activeCache map[string]bool // memoized IsActive(owner) results, per run
+}
+
+// isActive reports whether the owning job id is still active in the scheduler,
+// memoized for the run so a job owning many outputs (or every task of a large
+// array) is probed at most once — avoiding a flood of scheduler shell-outs. A
+// scheduler with no IsActive probe is treated as active (the reuse default).
+func (b *backend) isActive(id string) bool {
+	if b.sch.IsActive == nil {
+		return true
+	}
+	if v, ok := b.activeCache[id]; ok {
+		return v
+	}
+	v := b.sch.IsActive(id)
+	if b.activeCache == nil {
+		b.activeCache = map[string]bool{}
+	}
+	b.activeCache[id] = v
+	debug.Logf(3, "active? %s = %v", id, v)
+	return v
 }
 
 func (b *backend) cfg(name string) string {
@@ -540,9 +622,10 @@ func (b *backend) ExternalDep(input string) (string, bool) {
 	if err != nil || !ok || owner == "" {
 		return "", false
 	}
-	if b.sch.IsActive != nil && !b.sch.IsActive(owner) {
+	if !b.isActive(owner) {
 		return "", false
 	}
+	debug.Logf(3, "external dep: %s owned by active job %s", input, owner)
 	return owner, true
 }
 
@@ -582,7 +665,7 @@ func (b *backend) reuseActiveOwner(t *eval.Target) (string, bool) {
 		if err != nil || !ok || owner == "" {
 			continue
 		}
-		if b.sch.IsActive == nil || b.sch.IsActive(owner) {
+		if b.isActive(owner) {
 			return owner, true
 		}
 	}
@@ -614,7 +697,7 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// An integer job.array is a pipeline array-membership marker (the element's task
 	// index), consumed by the driver/SubmitArray — a lone target is not an array, so
 	// strip it here. A string job.array (a literal index spec, e.g. from
-	// `cgp sub --array`) is kept and rendered into the array directive.
+	// `cgpipe sub --array`) is kept and rendered into the array directive.
 	if v, ok := vars["job.array"]; ok {
 		if _, isInt := v.(eval.IntVal); isInt {
 			delete(vars, "job.array")
@@ -676,10 +759,10 @@ func (b *backend) finalizeVars(vars map[string]eval.Value, body string, inputs, 
 	if len(deps) > 0 {
 		vars["job.depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
 	}
-	if pe := b.cfg("cgp.runner.sge.parallelenv"); pe != "" {
+	if pe := b.cfg("cgpipe.runner.sge.parallelenv"); pe != "" {
 		setDefault(vars, "job.parallelenv", eval.StrVal(pe))
 	}
-	if rid := b.cfg("cgp.run_id"); rid != "" {
+	if rid := b.cfg("cgpipe.run_id"); rid != "" {
 		setDefault(vars, "job.run_id", eval.StrVal(rid))
 	}
 }
@@ -766,7 +849,7 @@ func (b *backend) SubmitArray(members []*eval.Target, indices []int, deps, after
 		allIn = append(allIn, e.t.Inputs...)
 		allOut = append(allOut, e.t.Outputs...)
 	}
-	fmt.Fprintf(&casebody, "*) echo \"cgp: no array task $%s\" >&2; exit 1 ;;\nesac\n", b.sch.ArrayTaskVar)
+	fmt.Fprintf(&casebody, "*) echo \"cgpipe: no array task $%s\" >&2; exit 1 ;;\nesac\n", b.sch.ArrayTaskVar)
 
 	vars := baseVars
 	vars["job.array"] = eval.StrVal(spec.String())

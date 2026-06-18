@@ -3,7 +3,7 @@ package spectest
 import (
 	"testing"
 
-	"github.com/compgen-io/cgp/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/eval"
 )
 
 // §13.2 export exposes a value to a calling workflow but is a no-op when the

@@ -2,14 +2,14 @@
 
 Align reads, mark duplicates, recalibrate base qualities, then call variants on
 each chromosome **in parallel** and merge the results. This is the recipe that best
-shows off cgp's scatter-gather model — and how temporary files and opportunistic
+shows off cgpipe's scatter-gather model — and how temporary files and opportunistic
 cleanup keep the working directory tidy without breaking restarts.
 
 > Requires: `bwa`, `samtools`, `gatk`. Needs an indexed reference (see
 > [Reference preparation](reference-preparation.md)).
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 #
 # DNA-seq: align, mark duplicates, recalibrate, then call variants per
 # chromosome in parallel and merge. Intermediate BAMs/VCFs are marked temporary
@@ -97,14 +97,14 @@ ${sample}.g.vcf.gz: @{per_chrom} {{
   On a scheduler the per-chromosome jobs run in parallel and the gather waits on all
   of them, wired automatically from the `@{per_chrom}` inputs.
 - **Temporary outputs (`^`).** The sorted BAM, the markdup BAM, and the per-chrom
-  gVCFs are intermediates. Marking them `^` means that if you delete them, cgp's
+  gVCFs are intermediates. Marking them `^` means that if you delete them, cgpipe's
   staleness check looks *through* them to the reads — so a restart rebuilds
   correctly instead of being confused by missing files. The recalibrated BAM and
   the final gVCF are kept (no `^`).
 - **Opportunistic cleanup (step 6).** A target with no outputs (`: inputs`) runs only
   after everything else and only if its inputs exist. Guarded by
   `if [ -e ${sample}.g.vcf.gz ]`, it removes the temps **once the final gVCF is
-  there** — never prematurely. cgp never auto-deletes files; cleanup is always this
+  there** — never prematurely. cgpipe never auto-deletes files; cleanup is always this
   explicit.
 - **Building a flag list.** `${if per_chrom; "-I " + per_chrom.join(" -I ")}` turns
   the gVCF list into `-I a -I b -I c` for `MergeVcfs`.
@@ -113,14 +113,14 @@ ${sample}.g.vcf.gz: @{per_chrom} {{
 
 ```sh
 # preview the whole DAG without running anything
-cgp -dr dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
+cgpipe -dr dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
 
 # submit to SLURM (per-chromosome jobs fan out in parallel)
-cgp -r slurm dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
+cgpipe -r slurm dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
 ```
 
 Override the interval list with `--chroms` (a repeated flag builds a list), or set
-a default for your genome build in `~/.cgp/config`.
+a default for your genome build in `~/.cgpipe/config`.
 
 ## Adapt it
 

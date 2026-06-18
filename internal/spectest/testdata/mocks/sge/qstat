@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mock SGE qstat. cgp's IsActive runs `qstat -j <id>` and inspects only the exit
+# Mock SGE qstat. cgpipe's IsActive runs `qstat -j <id>` and inspects only the exit
 # code (0 = job exists).
 MOCK_NAME=qstat
 . "$(dirname "$0")/../lib.sh"

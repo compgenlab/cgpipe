@@ -1,6 +1,6 @@
 # §12 Per-target container settings shape the engine invocation: extra binds,
 # env passthrough, raw opts, the in-image shell.
-cgp.container.engine = "docker"
+cgpipe.container.engine = "docker"
 out.bam: in.bam {{
     job.container          = "img:1"
     job.container.bind     = ["/data", "/refs"]

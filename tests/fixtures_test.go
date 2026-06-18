@@ -22,19 +22,19 @@ func TestFixtures(t *testing.T) {
 	dir := filepath.Dir(file) // tests/
 	root := filepath.Dir(dir) // repo root
 
-	// Build the binary under test once and hand it to the harness via CGP_BIN
+	// Build the binary under test once and hand it to the harness via CGPIPE_BIN
 	// so the fixtures exercise the current code rather than a stale bin/.
-	bin := filepath.Join(t.TempDir(), "cgp")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/cgp")
+	bin := filepath.Join(t.TempDir(), "cgpipe")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/cgpipe")
 	build.Dir = root
 	build.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build cgp: %v\n%s", err, out)
+		t.Fatalf("build cgpipe: %v\n%s", err, out)
 	}
 
 	cmd := exec.Command("bash", filepath.Join(dir, "run.sh"))
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "CGP_BIN="+bin)
+	cmd.Env = append(os.Environ(), "CGPIPE_BIN="+bin)
 	out, err := cmd.CombinedOutput()
 	t.Logf("\n%s", out)
 	if err != nil {

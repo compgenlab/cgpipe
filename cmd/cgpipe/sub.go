@@ -7,23 +7,23 @@ import (
 	"os"
 	"strings"
 
-	"github.com/compgen-io/cgp/internal/ast"
-	"github.com/compgen-io/cgp/internal/eval"
-	"github.com/compgen-io/cgp/internal/runner/sched"
-	"github.com/compgen-io/cgp/internal/runner/shell"
+	"github.com/compgenlab/cgpipe/internal/ast"
+	"github.com/compgenlab/cgpipe/internal/eval"
+	"github.com/compgenlab/cgpipe/internal/runner/sched"
+	"github.com/compgenlab/cgpipe/internal/runner/shell"
 )
 
-const subUsage = `cgp sub — submit a one-off command as a job
+const subUsage = `cgpipe sub — submit a one-off command as a job
 
 usage:
-    cgp sub [options] COMMAND... [-- FILE...]
+    cgpipe sub [options] COMMAND... [-- FILE...]
 
 The first token that is not a recognized option begins COMMAND; everything from
 there until a bare -- is the command, verbatim (so flags meant for your command,
-like ` + "`gzip -9`" + `, pass straight through). The command is treated as a cgp body:
+like ` + "`gzip -9`" + `, pass straight through). The command is treated as a cgpipe body:
 ${input}/${output} substitute; use $VAR for shell variables.
 
-Fan-out: list FILEs after -- (or via --files-from) and cgp submits one independent
+Fan-out: list FILEs after -- (or via --files-from) and cgpipe submits one independent
 job per file, expanding {} placeholders in the command, the job name, and the
 -o/-i/-a values:
 
@@ -54,15 +54,15 @@ options:
     -h, --help           show this help
 
 Tip: quote redirects/pipes in COMMAND (e.g. 'sort {} > {@.txt}.sorted') so your
-shell applies them to the job, not to cgp.
+shell applies them to the job, not to cgpipe.
 `
 
-// runSub handles `cgp sub [options] command... [-- file...]`.
+// runSub handles `cgpipe sub [options] command... [-- file...]`.
 //
 // Argument grammar: leading recognized options (and their values) are consumed;
 // the first token that is not a recognized option begins the command, which runs
 // verbatim until a bare `--`. Tokens after `--` (plus any --files-from lists) are
-// the fan-out file list — with files, cgp submits one job per file, expanding `{}`
+// the fan-out file list — with files, cgpipe submits one job per file, expanding `{}`
 // placeholders; with none, it submits a single job.
 func runSub(args []string) int {
 	var name string
@@ -99,7 +99,7 @@ flags:
 				return inlineVal, true
 			}
 			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "cgp sub: %s needs a value\n", tok)
+				fmt.Fprintf(os.Stderr, "cgpipe sub: %s needs a value\n", tok)
 				return "", false
 			}
 			v := args[i+1]
@@ -176,7 +176,7 @@ flags:
 				return 2
 			}
 			if filesFromSet {
-				fmt.Fprintln(os.Stderr, "cgp sub: --files-from may be given only once")
+				fmt.Fprintln(os.Stderr, "cgpipe sub: --files-from may be given only once")
 				return 2
 			}
 			filesFrom, filesFromSet = v, true
@@ -197,8 +197,8 @@ flags:
 		}
 	}
 
-	// CGP_DRYRUN forces dry run, matching the pipeline path in main.go.
-	if os.Getenv("CGP_DRYRUN") != "" {
+	// CGPIPE_DRYRUN forces dry run, matching the pipeline path in main.go.
+	if os.Getenv("CGPIPE_DRYRUN") != "" {
 		dryRun = true
 	}
 
@@ -222,39 +222,39 @@ flags:
 	if filesFromSet {
 		list, err := readFilesFrom(filesFrom)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgp sub: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgpipe sub: %v\n", err)
 			return 1
 		}
 		fanFiles = append(fanFiles, list...)
 	}
 	fanFiles = append(fanFiles, files...)
 
-	// Merge config (cgp.* / job.*) as defaults, then let explicit flags win.
+	// Merge config (cgpipe.* / job.*) as defaults, then let explicit flags win.
 	cfgs, err := loadConfigs()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
 		return 1
 	}
 	base, err := eval.Run(&ast.File{}, eval.Options{Configs: cfgs})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
 		return 1
 	}
 	for k, v := range base.Vars() {
-		if strings.HasPrefix(k, "cgp.") || strings.HasPrefix(k, "job.") {
+		if strings.HasPrefix(k, "cgpipe.") || strings.HasPrefix(k, "job.") {
 			if _, set := settings[k]; !set {
 				settings[k] = v
 			}
 		}
 	}
 	if runnerName != "" {
-		settings["cgp.runner"] = eval.StrVal(runnerName)
+		settings["cgpipe.runner"] = eval.StrVal(runnerName)
 	}
 	if ledgerPath != "" {
-		settings["cgp.ledger"] = eval.StrVal(ledgerPath)
+		settings["cgpipe.ledger"] = eval.StrVal(ledgerPath)
 	}
 	if runnerName == "" {
-		if v, ok := settings["cgp.runner"]; ok {
+		if v, ok := settings["cgpipe.runner"]; ok {
 			runnerName = eval.Stringify(v)
 		}
 	}
@@ -269,18 +269,18 @@ flags:
 		t := prog.Targets[0]
 		if runnerName == "" || runnerName == "shell" {
 			if err := shell.SubmitOne(prog, t, shell.Options{DryRun: dryRun}); err != nil {
-				fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+				fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
 				return 1
 			}
 			return 0
 		}
 		sch, ok := sched.For(runnerName)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "cgp sub: unknown runner %q\n", runnerName)
+			fmt.Fprintf(os.Stderr, "cgpipe sub: unknown runner %q\n", runnerName)
 			return 2
 		}
-		if _, err := sched.SubmitOne(prog, sch, t, deps, jobAfter, sched.Options{DryRun: dryRun, Pipeline: "cgp sub"}); err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		if _, err := sched.SubmitOne(prog, sch, t, deps, jobAfter, sched.Options{DryRun: dryRun, Pipeline: "cgpipe sub"}); err != nil {
+			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
 			return 1
 		}
 		return 0
@@ -301,7 +301,7 @@ flags:
 			// submission (a single dependency directive) cannot express.
 			for _, a := range after {
 				if strings.Contains(a, "{") {
-					fmt.Fprintln(os.Stderr, "cgp sub: --array cannot use a {}-expanded --after "+
+					fmt.Fprintln(os.Stderr, "cgpipe sub: --array cannot use a {}-expanded --after "+
 						"(per-element dependency); use a fixed --after, or drop --array")
 					return 2
 				}
@@ -316,14 +316,14 @@ flags:
 				jobIns = append(jobIns, substAll(ins, f, n)...)
 				jobOuts = append(jobOuts, substAll(outs, f, n)...)
 			}
-			fmt.Fprintf(&body, "  *) echo \"cgp: no array task $%s\" >&2; exit 1 ;;\nesac\n", taskVar)
+			fmt.Fprintf(&body, "  *) echo \"cgpipe: no array task $%s\" >&2; exit 1 ;;\nesac\n", taskVar)
 			settings["job.array"] = eval.StrVal(fmt.Sprintf("1-%d", len(fanFiles)))
 			if dryRun {
 				fmt.Printf("# ── array job: %d tasks ──\n", len(fanFiles))
 			}
 			return submitOne(body.String(), name, dedupeStrings(jobOuts), dedupeStrings(jobIns), after)
 		}
-		fmt.Fprintf(os.Stderr, "cgp sub: --array is not supported for this runner; submitting one job per file\n")
+		fmt.Fprintf(os.Stderr, "cgpipe sub: --array is not supported for this runner; submitting one job per file\n")
 	}
 
 	// Fan-out: one independent job per file, with `{}` expansion against it.

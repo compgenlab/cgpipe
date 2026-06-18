@@ -1,18 +1,18 @@
 # Running Jobs
 
-A cgp pipeline describes work; a **runner** carries it out. You choose the runner
+A cgpipe pipeline describes work; a **runner** carries it out. You choose the runner
 at run time, and the same targets become a bash script, scheduler submissions, a
 graph, or a status page — without editing the pipeline. This chapter covers the
 runners, the per-job settings they consume, how dependencies are wired, dry runs,
-and one-off submission with `cgp sub`.
+and one-off submission with `cgpipe sub`.
 
 ## Runners
 
-Select with `-r NAME`, or set `cgp.runner` in the script or config.
+Select with `-r NAME`, or set `cgpipe.runner` in the script or config.
 
 | Runner | What it does |
 |--------|--------------|
-| `shell` (default) | Assemble one bash script — printed to stdout, or executed if `cgp.runner.shell.autoexec` is set |
+| `shell` (default) | Assemble one bash script — printed to stdout, or executed if `cgpipe.runner.shell.autoexec` is set |
 | `slurm` | Submit each job with `sbatch`, wiring dependencies |
 | `sge` | Submit with `qsub` (Sun Grid Engine / OGE) |
 | `pbs` | Submit with `qsub` (PBS / Torque) |
@@ -52,7 +52,7 @@ A few settings are scheduler-specific (silently ignored elsewhere):
 |---------|-----------|---------|
 | `job.qos` | SLURM, PBS | Quality-of-service |
 | `job.nice` | SLURM | Scheduling priority adjustment (`--nice`) |
-| `parallelenv` | SGE | Parallel-environment name, required for `-pe` when `job.procs > 1` (usually set once as `cgp.runner.sge.parallelenv` in config) |
+| `parallelenv` | SGE | Parallel-environment name, required for `-pe` when `job.procs > 1` (usually set once as `cgpipe.runner.sge.parallelenv` in config) |
 
 The same `job.` prefix applies whether you set a default globally before your
 targets (`job.mem = "4G"`) or inside a body's directive block (`job.mem = "4G"`).
@@ -111,7 +111,7 @@ BatchQ (`-r batchq`):
 ```
 
 You write `job.mem`, `job.procs`, `job.walltime` once; the per-scheduler mapping is
-cgp's job.
+cgpipe's job.
 
 ### `job.mail`, `job.custom`
 
@@ -127,7 +127,7 @@ job.mail = "user@example.com"
 ```
 
 `job.custom` passes through extra directive lines verbatim, for site-specific
-options cgp doesn't model:
+options cgpipe doesn't model:
 
 ```
 job.custom = ["--exclusive", "--constraint=haswell"]
@@ -138,13 +138,13 @@ job.custom = ["--exclusive", "--constraint=haswell"]
 ```
 
 When even `custom` isn't enough and you need a different submission *script*,
-replace the whole template: `cgp show-template -r slurm > ~/.cgp/custom_template.cgp`,
-edit it, and cgp uses it (or set `cgp.runner.<name>.template`). See
+replace the whole template: `cgpipe show-template -r slurm > ~/.cgpipe/custom_template.cgp`,
+edit it, and cgpipe uses it (or set `cgpipe.runner.<name>.template`). See
 [Tutorial 10](tutorials/10-custom-templates.md).
 
 ## Dependencies are wired for you
 
-When one target's output is another's input, cgp submits them in order and passes
+When one target's output is another's input, cgpipe submits them in order and passes
 the upstream job id into the downstream submission. For:
 
 ```
@@ -169,22 +169,22 @@ Cross-*run* and cross-*stage* dependencies are resolved through the
 submitting. It is the first tool to reach for when something looks wrong:
 
 ```sh
-cgp -dr -r slurm pipeline.cgp
+cgpipe -dr -r slurm pipeline.cgp
 ```
 
-> Remember that cgp's own `$(cmd)` substitution runs at render time, so it executes
+> Remember that cgpipe's own `$(cmd)` substitution runs at render time, so it executes
 > under `-dr` too. Use `\$(cmd)` to defer to the job's shell. See
 > [Troubleshooting](17-Troubleshooting.md).
 
-## One-off jobs: `cgp sub`
+## One-off jobs: `cgpipe sub`
 
 Sometimes you just want to submit a single command with resources and
-dependencies, no pipeline file. `cgp sub` does that. The first token that is not a
+dependencies, no pipeline file. `cgpipe sub` does that. The first token that is not a
 recognized option begins the command; everything from there until a bare `--` is
-the command, treated as a cgp body (so `${input}`/`${output}` substitute):
+the command, treated as a cgpipe body (so `${input}`/`${output}` substitute):
 
 ```sh
-cgp sub -r slurm -n sort -m 8G -p 4 \
+cgpipe sub -r slurm -n sort -m 8G -p 4 \
     -o sorted.bam -i in.bam \
     samtools sort -o ${output} ${input}
 ```
@@ -210,17 +210,17 @@ produced a file (via the ledger) and depends on it — letting you attach a one-
 job to a pipeline that's already in flight.
 
 > **Quote your redirects.** Pipes and redirects in the command run *before* `--`,
-> so an unquoted `>` or `|` would be applied to `cgp` itself by your shell. Quote
+> so an unquoted `>` or `|` would be applied to `cgpipe` itself by your shell. Quote
 > the affected part — `'sort {} > {@.txt}.sorted'` — so it reaches the job.
 
 ### Fan-out: one job per file
 
-List files *after* `--` and `cgp sub` submits one independent job per file. Inside
+List files *after* `--` and `cgpipe sub` submits one independent job per file. Inside
 the command (and in `-o`/`-i`/`-a` and the job name) `{}` placeholders expand to the
 current file:
 
 ```sh
-cgp sub -r slurm -m 4G -o '{@.fastq.gz}.bam' \
+cgpipe sub -r slurm -m 4G -o '{@.fastq.gz}.bam' \
     'bwa mem ref.fa {} > {@.fastq.gz}.bam' \
     -- sampleA.fastq.gz sampleB.fastq.gz
 ```
@@ -239,7 +239,7 @@ stdin) with `--files-from` instead of globbing on the command line — no `--` n
 
 ```sh
 find data -name '*.fastq.gz' > inputs.txt
-cgp sub -m 4G --files-from inputs.txt -o '{@.fastq.gz}.bam' \
+cgpipe sub -m 4G --files-from inputs.txt -o '{@.fastq.gz}.bam' \
     'bwa mem ref.fa {} > {@.fastq.gz}.bam'
 ```
 
@@ -260,4 +260,4 @@ separate ones, add `--array` — see [Array Jobs](09-Array_Jobs.md).
   precedence, and where to put cluster defaults.
 
 Reference → [language-spec.md §11.4](language-spec.md#114-per-job-settings-the-job-namespace),
-[§15.1](language-spec.md#151-cgp-sub--one-off-submission).
+[§15.1](language-spec.md#151-cgpipe-sub--one-off-submission).

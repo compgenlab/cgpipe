@@ -14,7 +14,7 @@ func convertOf(t *testing.T, src string) string {
 
 func TestShebang(t *testing.T) {
 	got := convertOf(t, "#!/usr/bin/env cgpipe\n")
-	if !strings.HasPrefix(got, "#!/usr/bin/env cgp\n") {
+	if !strings.HasPrefix(got, "#!/usr/bin/env cgpipe\n") {
 		t.Fatalf("shebang not rewritten:\n%s", got)
 	}
 }
@@ -47,14 +47,15 @@ func TestForToBraces(t *testing.T) {
 
 func TestSettingsRename(t *testing.T) {
 	got := convertOf(t, "cgpipe.joblog = \"j.log\"\ncgpipe.log = \"x.log\"\ncgpipe.loglevel = 2\n")
-	if !strings.Contains(got, "cgp.ledger = \"j.log\"") {
+	if !strings.Contains(got, "cgpipe.ledger = \"j.log\"") {
 		t.Errorf("joblog->ledger missing:\n%s", got)
 	}
-	if !strings.Contains(got, "cgp.log = \"x.log\"") || !strings.Contains(got, "cgp.loglevel = 2") {
-		t.Errorf("cgpipe.*->cgp.* missing:\n%s", got)
+	// Keys that were not renamed keep the cgpipe.* prefix unchanged.
+	if !strings.Contains(got, "cgpipe.log = \"x.log\"") || !strings.Contains(got, "cgpipe.loglevel = 2") {
+		t.Errorf("unrenamed cgpipe.* keys missing:\n%s", got)
 	}
-	if strings.Contains(got, "cgpipe.") {
-		t.Errorf("leftover cgpipe.:\n%s", got)
+	if strings.Contains(got, "cgpipe.joblog") {
+		t.Errorf("leftover legacy cgpipe.joblog:\n%s", got)
 	}
 }
 
@@ -157,7 +158,7 @@ func TestNestedTargetInForLoop(t *testing.T) {
 }
 
 func TestBareCmdSubstWrapped(t *testing.T) {
-	// bare $(...) in a condition / assignment is wrapped into a cgp string
+	// bare $(...) in a condition / assignment is wrapped into a cgpipe string
 	got := convertOf(t, "if $(which bgzip) == \"\"\n    exit 1\nendif\nx = $(date +%Y)\n")
 	if !strings.Contains(got, `if "$(which bgzip)" == "" {`) {
 		t.Errorf("bare $() in condition not wrapped:\n%s", got)
@@ -187,7 +188,7 @@ func TestInlineFlagged(t *testing.T) {
 		t.Fatal("inline <% %> on a shell line should produce a warning")
 	}
 	out := convertOf(t, src)
-	if !strings.Contains(out, "# cgp-convert:") {
+	if !strings.Contains(out, "# cgpipe-convert:") {
 		t.Errorf("inline case not annotated:\n%s", out)
 	}
 }
@@ -240,12 +241,12 @@ func TestTabIndentedBody(t *testing.T) {
 }
 
 // A legacy multi-variable for loop can't be mechanically converted; it is passed
-// through with a warning and an inline cgp-convert note.
+// through with a warning and an inline cgpipe-convert note.
 func TestMultiVarForLoopWarns(t *testing.T) {
 	src := "for a, b in xs, ys\n    echo $a $b\ndone\n"
 	got, warnings := Convert(src)
-	if !strings.Contains(got, "# cgp-convert: rewrite this multi-variable for loop") {
-		t.Errorf("missing inline cgp-convert note in:\n%s", got)
+	if !strings.Contains(got, "# cgpipe-convert: rewrite this multi-variable for loop") {
+		t.Errorf("missing inline cgpipe-convert note in:\n%s", got)
 	}
 	found := false
 	for _, w := range warnings {

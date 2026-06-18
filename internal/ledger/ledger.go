@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/compgenlab/cgpipe/internal/debug"
 )
 
 // snapshotName is the compacted log written by Vacuum. It is read like any other
@@ -210,6 +212,7 @@ func load(dir string) (*state, error) {
 			return nil, err
 		}
 	}
+	debug.Logf(1, "ledger: %s folded %d file(s) → %d job(s), %d owned output(s)", dir, len(logs), len(st.jobs), len(st.owner))
 	return st, nil
 }
 
@@ -227,6 +230,7 @@ func foldFile(st *state, path string) error {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), maxLine)
+	var ok, bad int
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(bytes.TrimSpace(line)) == 0 {
@@ -234,10 +238,13 @@ func foldFile(st *state, path string) error {
 		}
 		var r record
 		if err := json.Unmarshal(line, &r); err != nil {
+			bad++
 			continue // tolerate a partial/corrupt line
 		}
 		st.apply(r)
+		ok++
 	}
+	debug.Logf(4, "ledger: %s — %d record(s), %d skipped", filepath.Base(path), ok, bad)
 	return nil // ignore scanner errors (an over-long final line is treated as torn)
 }
 
@@ -519,7 +526,7 @@ func (l *Ledger) Dump(w io.Writer, only []string) error {
 }
 
 // Jobs returns every folded job, ordered by submit time then job id (a copy,
-// safe for the caller to retain). Used by `cgp ledger status` to enumerate jobs.
+// safe for the caller to retain). Used by `cgpipe ledger status` to enumerate jobs.
 func (l *Ledger) Jobs() []Job {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -527,7 +534,7 @@ func (l *Ledger) Jobs() []Job {
 }
 
 // Owners returns a snapshot of the current ownership map: each output path mapped
-// to the id of the job that last produced it. Used by `cgp ledger status -output`.
+// to the id of the job that last produced it. Used by `cgpipe ledger status -output`.
 func (l *Ledger) Owners() map[string]string {
 	l.mu.Lock()
 	defer l.mu.Unlock()

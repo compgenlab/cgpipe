@@ -1,7 +1,7 @@
 # Tutorial 9: Containerized jobs
 
 Run a job inside a container without rewriting the job. You add one directive
-naming the image; cgp wraps the body in `docker run` (or `singularity exec`),
+naming the image; cgpipe wraps the body in `docker run` (or `singularity exec`),
 mounts the right paths, and runs it.
 
 ## Turn wrapping on
@@ -11,9 +11,9 @@ Two things enable wrapping: an **engine** and a per-target **image**.
 `pipeline.cgp`:
 
 ```
-#!/usr/bin/env cgp
+#!/usr/bin/env cgpipe
 
-cgp.container.engine = "docker"
+cgpipe.container.engine = "docker"
 
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
@@ -23,23 +23,23 @@ out.bam: in.bam {{
 @default: out.bam
 ```
 
-The engine is usually set once in `~/.cgp/config`
+The engine is usually set once in `~/.cgpipe/config`
 ([Configuration Reference](../14-Configuration_Reference.md)) so individual
 pipelines only name images.
 
 ## Render it
 
 ```console
-$ cgp -dr pipeline.cgp
+$ cgpipe -dr pipeline.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
 # ---- out.bam ----
-__cgp_body=$(mktemp "/tmp/cgp-body.XXXXXX")
-trap 'rm -f "$__cgp_body"' EXIT
-cat > "$__cgp_body" <<'__CGP_BODY__'
+__cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
+trap 'rm -f "$__cgpipe_body"' EXIT
+cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
 samtools sort in.bam > out.bam
-__CGP_BODY__
+__CGPIPE_BODY__
 
 docker run --rm \
     -v /tmp:/tmp \
@@ -47,10 +47,10 @@ docker run --rm \
     -w __WORKDIR__ \
     -u $(id -u):$(id -g) \
     biocontainers/samtools:1.9 \
-    sh "$__cgp_body"
+    sh "$__cgpipe_body"
 ```
 
-cgp wrote your body to a temp file and ran it inside the image, bind-mounting the
+cgpipe wrote your body to a temp file and ran it inside the image, bind-mounting the
 working directory (so `in.bam`/`out.bam` resolve) and mapping your user id (so the
 output isn't owned by root). The body itself is unchanged — drop the `job.container`
 line and it runs bare.

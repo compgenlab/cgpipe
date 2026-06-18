@@ -9,7 +9,7 @@ import (
 
 // §1.2 A leading #! line is ignored by the parser.
 func TestShebangIgnored(t *testing.T) {
-	if got := printed(t, "#!/usr/bin/env cgp\nprint \"ok\""); got != "ok\n" {
+	if got := printed(t, "#!/usr/bin/env cgpipe\nprint \"ok\""); got != "ok\n" {
 		t.Errorf("shebang not ignored: out = %q", got)
 	}
 }
@@ -17,7 +17,7 @@ func TestShebangIgnored(t *testing.T) {
 // §1.3 The leading run of comment lines (after the shebang) is the help text,
 // ended by the first blank or non-comment line.
 func TestHelpTextBlock(t *testing.T) {
-	prog, _ := build(t, "#!/usr/bin/env cgp\n# Align reads.\n# --ref FILE\n\n# not help (after the blank)\nx = 1", nil)
+	prog, _ := build(t, "#!/usr/bin/env cgpipe\n# Align reads.\n# --ref FILE\n\n# not help (after the blank)\nx = 1", nil)
 	mustContain(t, prog.Help, "Align reads.", "--ref FILE")
 	if strings.Contains(prog.Help, "not help") {
 		t.Errorf("help block did not end at the blank line: %q", prog.Help)
@@ -49,7 +49,7 @@ func TestRawShellBodyKeepsBraceLines(t *testing.T) {
 	}
 }
 
-// §1.5 `{ }` delimits cgp code (if/for); braces are matched by counting, so a
+// §1.5 `{ }` delimits cgpipe code (if/for); braces are matched by counting, so a
 // nested block parses correctly.
 func TestCodeBlockBracesNest(t *testing.T) {
 	out := printed(t, `n = 2
