@@ -38,7 +38,7 @@ Accumulate the per-sample outputs into a list as you emit each target, then make
 final target depend on `@{…}` of that list:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 samples = open("samples.tsv").read_tsv(header=true)
 sums = []
 
@@ -59,7 +59,7 @@ cohort.txt: @{sums} {{
 ```
 
 ```console
-$ cgpipe -dr pipeline.cgp
+$ cgp -dr pipeline.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -117,7 +117,7 @@ for s in open("samples.txt").read_lines(comment="#") {
 ## One graph, one report
 
 Since the whole cohort is a single dependency graph, `-r graphviz` and `-r html`
-already render it — scatter **and** gather — as one document. `cgpipe -r html
+already render it — scatter **and** gather — as one document. `cgp -r html
 pipeline.cgp > cohort.html` is a status page for the entire cohort.
 
 ## Next

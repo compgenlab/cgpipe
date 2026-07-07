@@ -4,9 +4,9 @@ set -euo pipefail
 # ---- out.bam ----
 __cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
 trap 'rm -f "$__cgpipe_body"' EXIT
-cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
+cat > "$__cgpipe_body" <<'__CGP_BODY__'
 bwa in.bam > out.bam
-__CGPIPE_BODY__
+__CGP_BODY__
 
 singularity exec \
     -B /tmp:/tmp \

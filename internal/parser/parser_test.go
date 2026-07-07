@@ -56,9 +56,9 @@ func TestCallStatement(t *testing.T) {
 }
 
 func TestDottedAssign(t *testing.T) {
-	a := only(t, `cgpipe.runner = "slurm"`).(*ast.Assign)
-	if a.Name != "cgpipe.runner" {
-		t.Fatalf("name = %q, want cgpipe.runner", a.Name)
+	a := only(t, `cgp.runner = "slurm"`).(*ast.Assign)
+	if a.Name != "cgp.runner" {
+		t.Fatalf("name = %q, want cgp.runner", a.Name)
 	}
 	if s, ok := a.Value.(*ast.StringLit); !ok || s.Raw != "slurm" {
 		t.Fatalf("value = %#v", a.Value)
@@ -347,7 +347,7 @@ func TestLogIsAnOrdinaryIdentifier(t *testing.T) {
 }
 
 func TestHelpTextExtraction(t *testing.T) {
-	f := mustParse(t, "#!/usr/bin/env cgpipe\n# Align reads.\n# Options: --ref FILE\n\nx = 1\n")
+	f := mustParse(t, "#!/usr/bin/env cgp\n# Align reads.\n# Options: --ref FILE\n\nx = 1\n")
 	if f.Help != "Align reads.\nOptions: --ref FILE" {
 		t.Errorf("help = %q", f.Help)
 	}

@@ -19,7 +19,7 @@ sorted.bam: input.bam {{
 }}
 ```
 
-Every example here is rendered with `cgpipe -dr` (dry run), which shows the assembled
+Every example here is rendered with `cgp -dr` (dry run), which shows the assembled
 script without running it. The outputs shown are real fixture output from
 [`tests/build/`](../tests/build/).
 

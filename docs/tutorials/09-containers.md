@@ -11,9 +11,9 @@ Two things enable wrapping: an **engine** and a per-target **image**.
 `pipeline.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 
-cgpipe.container.engine = "docker"
+cgp.container.engine = "docker"
 
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
@@ -23,23 +23,23 @@ out.bam: in.bam {{
 @default: out.bam
 ```
 
-The engine is usually set once in `~/.cgpipe/config`
+The engine is usually set once in `~/.cgp/config`
 ([Configuration Reference](../14-Configuration_Reference.md)) so individual
 pipelines only name images.
 
 ## Render it
 
 ```console
-$ cgpipe -dr pipeline.cgp
+$ cgp -dr pipeline.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
 # ---- out.bam ----
 __cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
 trap 'rm -f "$__cgpipe_body"' EXIT
-cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
+cat > "$__cgpipe_body" <<'__CGP_BODY__'
 samtools sort in.bam > out.bam
-__CGPIPE_BODY__
+__CGP_BODY__
 
 docker run --rm \
     -v /tmp:/tmp \

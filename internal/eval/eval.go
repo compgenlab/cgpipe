@@ -62,7 +62,7 @@ func Stringify(v Value) string { return stringify(v) }
 // Truthy reports a value's truthiness (exported for runners).
 func Truthy(v Value) bool { return truthy(v) }
 
-// Get reads a variable from the program's final scope (e.g. a cgpipe.* setting).
+// Get reads a variable from the program's final scope (e.g. a cgp.* setting).
 func (p *Program) Get(name string) (Value, bool) {
 	if p.Scope == nil {
 		return nil, false
@@ -70,13 +70,13 @@ func (p *Program) Get(name string) (Value, bool) {
 	return p.Scope.get(name)
 }
 
-// JobSpec describes a one-off command to submit (used by `cgpipe sub`).
+// JobSpec describes a one-off command to submit (used by `cgp sub`).
 type JobSpec struct {
 	Command  string           // the shell command line (treated as a cgpipe body)
 	Name     string           // job name
 	Outputs  []string         // declared outputs (ledger ownership)
 	Inputs   []string         // declared inputs
-	Settings map[string]Value // job.* and cgpipe.* values (e.g. job.mem, cgpipe.ledger)
+	Settings map[string]Value // job.* and cgp.* values (e.g. job.mem, cgp.ledger)
 }
 
 // NewJob builds a single-target Program from a one-off command. The command is
@@ -147,7 +147,7 @@ type interp struct {
 // defaults, before any config layer or the pipeline runs. They are ordinary
 // globals: every config layer, target snapshot, and runner inherits them, and any
 // later assignment (global or directive) overrides them. Only static, universal
-// defaults belong here — `job.shell` is derived from the cgpipe.shell config and so is
+// defaults belong here — `job.shell` is derived from the cgp.shell config and so is
 // defaulted in the runner, and `job.name` defaults to a target's output and so is
 // defaulted per-target in renderTargetScope.
 func seedJobDefaults(sc *Scope) {
@@ -471,7 +471,7 @@ func (ip *interp) execAssignIndex(n *ast.Assign) error {
 	}
 	// Bind the (possibly freshly-vivified) map following the bare-assignment rule:
 	// an existing map is rebound where it already lives (a no-op for the shared
-	// reference); a new one lands in the current frame (or root for job.*/cgpipe.*).
+	// reference); a new one lands in the current frame (or root for job.*/cgp.*).
 	ip.sc.assign(recvIdent.Name, mv)
 	return nil
 }

@@ -100,7 +100,7 @@ func TestStringRawInner(t *testing.T) {
 
 func TestComments(t *testing.T) {
 	// shebang + comment lines are skipped; only the assignment survives
-	eq(t, kinds("#!/usr/bin/env cgpipe\n# a comment\nx = 1 # trailing\n"), []token.Kind{
+	eq(t, kinds("#!/usr/bin/env cgp\n# a comment\nx = 1 # trailing\n"), []token.Kind{
 		token.NEWLINE, token.NEWLINE,
 		token.IDENT, token.ASSIGN, token.INT, token.NEWLINE,
 	})

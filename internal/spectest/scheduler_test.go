@@ -43,8 +43,8 @@ func installMocks(t *testing.T, scheduler string) string {
 		copyExec(t, filepath.Join(srcDir, e.Name()), filepath.Join(binDir, e.Name()))
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CGPIPE_TEST_CAPTURE", capture)
-	t.Setenv("CGPIPE_TEST_JOBID_BASE", "1001")
+	t.Setenv("CGP_TEST_CAPTURE", capture)
+	t.Setenv("CGP_TEST_JOBID_BASE", "1001")
 	return capture
 }
 
@@ -237,8 +237,8 @@ func TestSlurmState(t *testing.T) {
 	resp := t.TempDir()
 	installMocks(t, "slurm")
 	// canned scontrol responses keyed by job id (the mock serves these when
-	// CGPIPE_TEST_RESPONSES is set)
-	t.Setenv("CGPIPE_TEST_RESPONSES", resp)
+	// CGP_TEST_RESPONSES is set)
+	t.Setenv("CGP_TEST_RESPONSES", resp)
 	if err := os.MkdirAll(filepath.Join(resp, "scontrol"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestLedgerReuseAcrossRuns(t *testing.T) {
 	capture := installMocks(t, "slurm")
 	workdir := t.TempDir()
 	ledgerPath := filepath.Join(workdir, "ledger.db")
-	src := "cgpipe.ledger = \"" + ledgerPath + "\"\n" +
+	src := "cgp.ledger = \"" + ledgerPath + "\"\n" +
 		"a.bam: {{\n    job.name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
 	sch, _ := sched.For("slurm")
 
@@ -328,7 +328,7 @@ func atoi(s string) int {
 func TestGlobalHoldReleases(t *testing.T) {
 	capture := installMocks(t, "slurm")
 	workdir := t.TempDir()
-	src := "cgpipe.runner.slurm.global_hold = true\n" +
+	src := "cgp.runner.slurm.global_hold = true\n" +
 		"a.bam: {{\n    job.name = \"a\"\n    --\n    echo a > ${output}\n}}\n@default: a.bam"
 	prog, _ := build(t, src, nil)
 	sch, _ := sched.For("slurm")

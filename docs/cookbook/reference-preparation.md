@@ -7,7 +7,7 @@ all three; the other recipes depend on them existing.
 > Requires: `bwa`, `samtools`, `gatk`.
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Build the indexes that downstream alignment/calling need from a reference FASTA.
 #
@@ -57,8 +57,8 @@ all: ${ref}.bwt ${ref}.fai ${ref.sub("\\.fa(sta)?$", "")}.dict
 ## Run it
 
 ```sh
-cgpipe reference-preparation.cgp --ref genome.fa | bash    # local
-cgpipe -r slurm reference-preparation.cgp --ref genome.fa  # on a cluster
+cgp reference-preparation.cgp --ref genome.fa | bash    # local
+cgp -r slurm reference-preparation.cgp --ref genome.fa  # on a cluster
 ```
 
 ## Adapt it

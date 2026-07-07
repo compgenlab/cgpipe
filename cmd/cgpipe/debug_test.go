@@ -8,7 +8,7 @@ import (
 	"github.com/compgenlab/cgpipe/internal/debug"
 )
 
-// -debug N and CGPIPE_DEBUG set the global level, with the explicit flag winning;
+// -debug N and CGP_DEBUG set the global level, with the explicit flag winning;
 // a non-numeric -debug value is a usage error.
 func TestDebugFlagAndEnv(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -31,17 +31,17 @@ func TestDebugFlagAndEnv(t *testing.T) {
 	}
 
 	debug.SetLevel(0)
-	t.Setenv("CGPIPE_DEBUG", "2")
+	t.Setenv("CGP_DEBUG", "2")
 	runDr()
 	if debug.Level() != 2 {
-		t.Fatalf("CGPIPE_DEBUG=2 → level %d, want 2", debug.Level())
+		t.Fatalf("CGP_DEBUG=2 → level %d, want 2", debug.Level())
 	}
 
 	// Explicit flag beats the env var.
 	debug.SetLevel(0)
 	runDr("-debug", "5")
 	if debug.Level() != 5 {
-		t.Fatalf("flag should beat CGPIPE_DEBUG → level %d, want 5", debug.Level())
+		t.Fatalf("flag should beat CGP_DEBUG → level %d, want 5", debug.Level())
 	}
 
 	// Non-numeric level is a usage error (exit 2), before any pipeline work.

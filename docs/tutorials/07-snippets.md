@@ -9,7 +9,7 @@ module-load block, a helper function. That's a **snippet**.
 `build.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 
 snippet common {{
     set -euo pipefail
@@ -29,7 +29,7 @@ lines in at that point.
 ## Render it
 
 ```console
-$ cgpipe -dr build.cgp
+$ cgp -dr build.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 

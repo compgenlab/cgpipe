@@ -9,7 +9,7 @@ cleanup keep the working directory tidy without breaking restarts.
 > [Reference preparation](reference-preparation.md)).
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # DNA-seq: align, mark duplicates, recalibrate, then call variants per
 # chromosome in parallel and merge. Intermediate BAMs/VCFs are marked temporary
@@ -113,14 +113,14 @@ ${sample}.g.vcf.gz: @{per_chrom} {{
 
 ```sh
 # preview the whole DAG without running anything
-cgpipe -dr dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
+cgp -dr dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
 
 # submit to SLURM (per-chromosome jobs fan out in parallel)
-cgpipe -r slurm dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
+cgp -r slurm dnaseq-variant-calling.cgp --sample NA12878 --r1 r1.fq.gz --r2 r2.fq.gz --ref genome.fa
 ```
 
 Override the interval list with `--chroms` (a repeated flag builds a list), or set
-a default for your genome build in `~/.cgpipe/config`.
+a default for your genome build in `~/.cgp/config`.
 
 ## Adapt it
 

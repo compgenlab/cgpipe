@@ -2,4 +2,4 @@
 # as the owners of calls.chr{1,2,3}.vcf. (Its scheduler calls go to a scratch
 # capture dir, not the one under test.)
 touch aligned.bam
-"$CGPIPE" -r batchq array-reuse.cgp >/dev/null 2>&1 || true
+"$CGP" -r batchq array-reuse.cgp >/dev/null 2>&1 || true

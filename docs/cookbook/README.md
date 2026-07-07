@@ -3,7 +3,7 @@
 Real, end-to-end pipeline recipes for common bioinformatics workflows. Unlike the
 [`examples/`](../../examples/) (which run anywhere with just coreutils), these use
 actual tools — **bwa, STAR, GATK, MACS2, …** — so they're **templates to adapt**,
-not run as-is. Every recipe is valid cgpipe that renders cleanly with `cgpipe -dr`; drop
+not run as-is. Every recipe is valid cgpipe that renders cleanly with `cgp -dr`; drop
 in your reference and reads and they're ready to run.
 
 | Recipe | Workflow | cgpipe patterns it shows |
@@ -18,14 +18,14 @@ in your reference and reads and they're ready to run.
 ## How to use a recipe
 
 1. Copy the `.cgp` block into a file.
-2. Make sure the tools it lists are on your `PATH` (or set `cgpipe.container.engine`
+2. Make sure the tools it lists are on your `PATH` (or set `cgp.container.engine`
    and add `job.container = "..."` directives — see
    [Containers & GPUs](../10-Containers_and_GPUs.md)).
-3. Preview it with `cgpipe -dr recipe.cgp <args>` — this renders the exact commands
+3. Preview it with `cgp -dr recipe.cgp <args>` — this renders the exact commands
    without running them.
-4. Run locally (`cgpipe recipe.cgp <args> | bash`) or submit to your scheduler
-   (`cgpipe -r slurm recipe.cgp <args>`). Configure your cluster once in
-   `~/.cgpipe/config` (see the [Configuration Reference](../14-Configuration_Reference.md)).
+4. Run locally (`cgp recipe.cgp <args> | bash`) or submit to your scheduler
+   (`cgp -r slurm recipe.cgp <args>`). Configure your cluster once in
+   `~/.cgp/config` (see the [Configuration Reference](../14-Configuration_Reference.md)).
 
 The resource directives (`job.mem`, `job.procs`, `job.walltime`) are starting points
 — tune them for your data and cluster.

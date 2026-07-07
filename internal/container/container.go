@@ -154,9 +154,9 @@ func absDir(p string) string {
 }
 
 func pickMarker(body string) string {
-	marker := "__CGPIPE_BODY__"
+	marker := "__CGP_BODY__"
 	for i := 0; strings.Contains(body, marker); i++ {
-		marker = "__CGPIPE_BODY_" + string(rune('A'+i)) + "__"
+		marker = "__CGP_BODY_" + string(rune('A'+i)) + "__"
 	}
 	return marker
 }

@@ -16,7 +16,7 @@ Language support for [cgpipe](https://github.com/compgenlab/cgpipe) pipeline scr
   language server required.
 
 - **Language server** (optional): when the `cgpipe` binary is on your `PATH`, the
-  extension starts `cgpipe lsp` to add diagnostics (parse errors), semantic
+  extension starts `cgp lsp` to add diagnostics (parse errors), semantic
   tokens, hover, and completion. See the `cgpipe.serverPath` setting to point at a
   specific binary.
 

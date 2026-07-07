@@ -8,7 +8,7 @@ once. This introduces wildcards and the `all:` convention.
 `gzip.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Compress FASTQ files with gzip.
 
@@ -26,12 +26,12 @@ the input side. One rule covers every file.
 
 `all:` is a [bodyless aggregator](../05-Build_Targets.md#bodyless-aggregator-targets):
 it has no recipe of its own; requesting it just builds its inputs. `@default: all`
-makes that the thing built when you run `cgpipe gzip.cgp` with no target.
+makes that the thing built when you run `cgp gzip.cgp` with no target.
 
 ## Render it
 
 ```console
-$ cgpipe -dr gzip.cgp
+$ cgp -dr gzip.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 

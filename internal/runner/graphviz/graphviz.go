@@ -1,5 +1,5 @@
 // Package graphviz turns a pipeline's dependency graph into a structured Graph
-// and renders it as Graphviz DOT — `cgpipe -r graphviz pipeline.cgp` writes the DOT
+// and renders it as Graphviz DOT — `cgp -r graphviz pipeline.cgp` writes the DOT
 // to stdout, ready for `dot -Tsvg`. The same Graph backs the HTML status report.
 // Nodes are files (a target's outputs and inputs), edges point input → output;
 // temp outputs (^) are dashed, source files (produced by no target) are notes.

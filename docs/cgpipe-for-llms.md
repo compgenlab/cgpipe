@@ -17,9 +17,9 @@ in doubt, that and the `tests/` fixtures win.
 
 ## Hello
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
-# Help text: this comment block is shown by `cgpipe file.cgp -h`.
+# Help text: this comment block is shown by `cgp file.cgp -h`.
 
 greeting ?= "world"
 
@@ -28,9 +28,9 @@ hello.txt: {{
 }}
 @default: hello.txt
 ```
-Run: `cgpipe hello.cgp` prints the assembled bash to stdout (pipe to `bash` to run);
-`cgpipe hello.cgp --greeting Sam` overrides the variable; `cgpipe -dr ...` previews;
-`cgpipe -r slurm ...` submits to SLURM instead.
+Run: `cgp hello.cgp` prints the assembled bash to stdout (pipe to `bash` to run);
+`cgp hello.cgp --greeting Sam` overrides the variable; `cgp -dr ...` previews;
+`cgp -r slurm ...` submits to SLURM instead.
 
 ## Types
 `bool` (`true`/`false`), `int`, `float`, `string` (always `"..."`),
@@ -52,11 +52,11 @@ Lexically block-scoped: every `{ }` (if/for body, target body) is a scope. A bar
 `x =` writes through to an enclosing binding if one exists, else makes a block-local
 that dies with the block — so a loop variable and a name first used inside a loop do
 NOT persist after it. Declare with `var` in an outer scope to keep a value:
-`var last` then `for s in xs { last = s }`. `job.*`/`cgpipe.*` settings assigned inside a
+`var last` then `for s in xs { last = s }`. `job.*`/`cgp.*` settings assigned inside a
 block still take effect outside it. Write handles auto-close on scope exit.
 
 ## Command-line variables (double hyphen)
-`cgpipe p.cgp --sample s1 --threads 16` sets `sample`, `threads`. Rules:
+`cgp p.cgp --sample s1 --threads 16` sets `sample`, `threads`. Rules:
 `--flag` (bare) → `flag = true`; `--hp-dist` → `hp_dist` (hyphens→underscores);
 repeat → list (`--x a --x b` → `["a","b"]`). Put the file before a trailing bare
 flag. Guard required vars: `if !sample { print "ERROR: --sample required"; exit 1 }`.
@@ -159,12 +159,12 @@ out1 out2 : in1 in2 {{
 
 ## Runners & scheduling
 `-r shell` (default; prints bash) | `slurm` `sge` `pbs` `batchq` (submit) |
-`graphviz` (DOT) | `html` (status page). Set via `-r` or `cgpipe.runner`. Directives
+`graphviz` (DOT) | `html` (status page). Set via `-r` or `cgp.runner`. Directives
 map per scheduler (`mem="8G"` → SLURM `--mem=8000`, `procs=4` → `-c 4`).
 Dependencies are derived from `output: input` edges (SLURM `afterok:<id>`).
-One-off: `cgpipe sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
-Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgpipe sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
-Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgpipe sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
+One-off: `cgp sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
+Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgp sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
+Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
 
 ## Reading files (sample sheets, scatter + gather)
 Read a data file at **eval time** and build targets from its rows — scatter and
@@ -220,16 +220,16 @@ mix (positional first). Used by the file readers above (and any method that docu
 named parameters).
 
 ## Ledger (optional), workflows
-- **Ledger** (`cgpipe.ledger = "jobs.ledger"`, a directory): records which job owns which output;
+- **Ledger** (`cgp.ledger = "jobs.ledger"`, a directory): records which job owns which output;
   enables cross-run reuse of still-queued jobs (scheduler runners). Restart is
-  mtime-based regardless; `-force` rebuilds all. Inspect: `cgpipe ledger dump/search/status/vacuum`
+  mtime-based regardless; `-force` rebuilds all. Inspect: `cgp ledger dump/search/status/vacuum`
   (`status [-r RUNNER] [-output]` shows live scheduler status per job/output).
 - **Workflow** (chain pipelines): `stage NAME FILE --arg ...`; a stage exposes a
   value with top-level `export name = expr`, used as `${NAME.name}` in later stages.
 
 ## Worked example (per-chromosome calling + merge + cleanup)
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Options: --bam FILE  --ref FILE  --out PREFIX
 if !bam { print "ERROR: --bam required"; exit 1 }

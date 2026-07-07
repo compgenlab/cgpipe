@@ -10,7 +10,7 @@ introduces **dynamic target generation** (a `for` loop that emits targets), an
 `call.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Per-chromosome variant calling with a merge.
 #
@@ -60,7 +60,7 @@ How it works:
 ## Render it
 
 ```console
-$ cgpipe -dr call.cgp --bam sample.bam --ref ref.fa --out sample
+$ cgp -dr call.cgp --bam sample.bam --ref ref.fa --out sample
 #!/usr/bin/env bash
 set -euo pipefail
 

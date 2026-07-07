@@ -1,5 +1,5 @@
 // Package debug is cgpipe's tiny leveled trace facility. It is off by default
-// (level 0); the CLI raises the level from -debug N / CGPIPE_DEBUG. Higher levels
+// (level 0); the CLI raises the level from -debug N / CGP_DEBUG. Higher levels
 // print progressively more detail about what the interpreter and runner are
 // doing — useful when a pipeline won't resolve, stalls, or behaves unexpectedly.
 //

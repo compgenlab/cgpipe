@@ -29,7 +29,7 @@ The pitch, in five points:
 - **Fan out without a DSL.** Read a sample sheet in-language with
   `open("samples.tsv").read_tsv()` and loop over its rows, or generate
   per-chromosome jobs with an ordinary `for` loop. No channels, no operators.
-- **A single static binary.** `cgpipe` is one file with no runtime to install. Fast
+- **A single static binary.** `cgp` is one file with no runtime to install. Fast
   startup, and an optional *ledger* that makes restarts cheap at scale.
 
 ### The same script, two backends
@@ -37,7 +37,7 @@ The pitch, in five points:
 Here is a one-target pipeline that aligns reads:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Align reads to a reference.
 
@@ -53,7 +53,7 @@ aligned.bam: ${reads} ${ref} {{
 Run it with the default (shell) runner and cgpipe prints a bash script:
 
 ```console
-$ cgpipe -dr align.cgp --reads reads.fq --ref ref.fa
+$ cgp -dr align.cgp --reads reads.fq --ref ref.fa
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -65,7 +65,7 @@ Add `-r slurm` — *nothing else changes* — and the very same target becomes a
 `sbatch` submission, with `job.procs = 4` mapped to the scheduler's CPU request:
 
 ```console
-$ cgpipe -dr -r slurm align.cgp --reads reads.fq --ref ref.fa
+$ cgp -dr -r slurm align.cgp --reads reads.fq --ref ref.fa
 # [dryrun.1] aligned.bam
 #!/bin/bash
 #SBATCH -J aligned.bam
@@ -90,21 +90,21 @@ shared libraries.
 
 **Download a release (recommended).** Grab the binary for your platform from the
 project's [Releases page](https://github.com/compgenlab/cgpipe/releases) — they're
-named `cgpipe-<version>-<os>-<arch>` (e.g. `cgpipe-v0.1.0-linux-amd64`,
-`cgpipe-v0.1.0-darwin-arm64` for Apple Silicon). It's a single uncompressed binary;
+named `cgp-<version>-<os>-<arch>` (e.g. `cgp-v0.1.0-linux-amd64`,
+`cgp-v0.1.0-darwin-arm64` for Apple Silicon). It's a single uncompressed binary;
 make it executable and put it on your `PATH`:
 
 ```sh
-chmod +x cgpipe-v0.1.0-linux-amd64
-install cgpipe-v0.1.0-linux-amd64 ~/bin/cgpipe     # somewhere on your PATH
-cgpipe version
+chmod +x cgp-v0.1.0-linux-amd64
+install cgp-v0.1.0-linux-amd64 ~/bin/cgp     # somewhere on your PATH
+cgp version
 ```
 
 **Build from source.** If you have Go (1.25+), build it directly — it's pure Go, so
 no C toolchain or CGO is involved:
 
 ```sh
-go build -o ~/bin/cgpipe ./cmd/cgpipe
+go build -o ~/bin/cgp ./cmd/cgpipe
 ```
 
 Cross-compiling for another platform is a plain `GOOS`/`GOARCH` build:
@@ -113,14 +113,14 @@ Cross-compiling for another platform is a plain `GOOS`/`GOARCH` build:
 GOOS=linux GOARCH=arm64 go build -o cgpipe-linux-arm64 ./cmd/cgpipe
 ```
 
-(`make all` cross-builds every supported target into `bin/cgpipe.<os>_<arch>`.)
+(`make all` cross-builds every supported target into `bin/cgp.<os>_<arch>`.)
 
 ### Write your first pipeline
 
 A pipeline is a `.cgp` file. Make one called `copy.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Copy a file. (Replace this with real work.)
 
@@ -151,7 +151,7 @@ Create the input, then run cgpipe. The default runner is the local shell, which
 
 ```console
 $ echo hello > in.txt
-$ cgpipe copy.cgp
+$ cgp copy.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -162,11 +162,11 @@ cp in.txt out.txt
 To actually run the work, pipe it to a shell:
 
 ```sh
-cgpipe copy.cgp | bash
+cgp copy.cgp | bash
 ```
 
 (If you would rather cgpipe execute directly instead of printing, set
-`cgpipe.runner.shell.autoexec = true` in the script or your config.)
+`cgp.runner.shell.autoexec = true` in the script or your config.)
 
 ### Preview without running: `-dr`
 
@@ -176,7 +176,7 @@ runner — under `-r slurm` it shows you the submission scripts instead of
 submitting them.
 
 ```sh
-cgpipe -dr copy.cgp
+cgp -dr copy.cgp
 ```
 
 > **One sharp edge:** cgpipe's own `$(...)` command substitution is evaluated *while
@@ -189,7 +189,7 @@ Anything not hard-coded in the script can come from the command line as a
 **double-hyphen** variable:
 
 ```sh
-cgpipe align.cgp --reads sample.fq --ref hg38.fa
+cgp align.cgp --reads sample.fq --ref hg38.fa
 ```
 
 Inside the script, `--reads sample.fq` sets the variable `reads`. A few rules
@@ -207,13 +207,13 @@ if !reads { print "ERROR: --reads required"; exit 1 }
 
 ### Choose a runner
 
-`-r NAME` selects the backend (or set `cgpipe.runner` in the script/config):
+`-r NAME` selects the backend (or set `cgp.runner` in the script/config):
 
 | Runner | What it does |
 |--------|--------------|
 | `shell` (default) | Assemble one bash script (printed, or executed with autoexec) |
 | `slurm`, `sge`, `pbs`, `batchq` | Submit each job to that scheduler, wiring dependencies |
-| `graphviz` | Emit the dependency graph as DOT (`cgpipe -r graphviz … | dot -Tsvg`) |
+| `graphviz` | Emit the dependency graph as DOT (`cgp -r graphviz … | dot -Tsvg`) |
 | `html` | A self-contained HTML status report of the pipeline |
 
 ### See the help text
@@ -221,20 +221,20 @@ if !reads { print "ERROR: --reads required"; exit 1 }
 Because you wrote a help block, `-h` *after the filename* prints it:
 
 ```console
-$ cgpipe copy.cgp -h
+$ cgp copy.cgp -h
 Copy a file. (Replace this with real work.)
 ```
 
-(`cgpipe -h` on its own — before any file — prints cgpipe's own usage instead.)
+(`cgp -h` on its own — before any file — prints cgpipe's own usage instead.)
 
 ---
 
 ## Configuration in one paragraph
 
-cgpipe reads layered config before your pipeline: a `.cgpiperc` next to the binary,
-`/etc/cgpipe/config`, then `~/.cgpipe/config`, then the `CGPIPE_ENV` environment variable —
+cgpipe reads layered config before your pipeline: a `.cgprc` next to the binary,
+`/etc/cgp/config`, then `~/.cgp/config`, then the `CGP_ENV` environment variable —
 each one itself a cgpipe script, later layers winning. This is where you set
-site-wide defaults like `cgpipe.runner = "slurm"` or a scheduler account, so your
+site-wide defaults like `cgp.runner = "slurm"` or a scheduler account, so your
 pipelines stay portable and your cluster details stay out of them. The full list
 of settings is in the [Configuration Reference](14-Configuration_Reference.md).
 
@@ -243,12 +243,12 @@ of settings is in the [Configuration Reference](14-Configuration_Reference.md).
 ## Editor support
 
 A [VSCode extension](../editor/vscode/) gives `.cgp` files syntax highlighting out
-of the box (a TextMate grammar — no setup beyond installing it). When the `cgpipe`
+of the box (a TextMate grammar — no setup beyond installing it). When the `cgp`
 binary is on your `PATH`, the extension also starts cgpipe's built-in language server
-(`cgpipe lsp`) for parse-error diagnostics, hover, completion, and semantic
+(`cgp lsp`) for parse-error diagnostics, hover, completion, and semantic
 highlighting. The server speaks the standard [Language Server
 Protocol](https://microsoft.github.io/language-server-protocol/), so any
-LSP-capable editor can launch `cgpipe lsp` over stdio. See
+LSP-capable editor can launch `cgp lsp` over stdio. See
 [`editor/vscode/README.md`](../editor/vscode/README.md) for installation.
 
 ---
@@ -260,6 +260,6 @@ LSP-capable editor can launch `cgpipe lsp` over stdio. See
 - **[Language Syntax](03-Language_Syntax.md)** — types, variables, control flow.
 - **[Build Targets](05-Build_Targets.md)** — wildcards, temp files, dependencies,
   the things that make targets powerful.
-- **[Running Jobs](08-Running_Jobs.md)** — schedulers, resources, `cgpipe sub`.
+- **[Running Jobs](08-Running_Jobs.md)** — schedulers, resources, `cgp sub`.
 
 Reference → [language specification](language-spec.md).

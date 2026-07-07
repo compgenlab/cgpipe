@@ -19,10 +19,10 @@ Keep them straight and the rest follows.
 
 `#` begins a comment to end of line. The leading run of comment lines at the top
 of a file (after an optional `#!` shebang) is the script's **help text**, printed
-by `cgpipe script.cgp -h`:
+by `cgp script.cgp -h`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Align reads and call variants.
 #
@@ -107,7 +107,7 @@ script runs. (Single-hyphen arguments like `-dr` are cgpipe's own options;
 double-hyphen are always script variables.)
 
 ```sh
-cgpipe pipeline.cgp --sample patient_42 --threads 16
+cgp pipeline.cgp --sample patient_42 --threads 16
 ```
 
 Values are typed like literals (`16` → int, `0.5` → float, `true`/`false` → bool,
@@ -120,7 +120,7 @@ else string). Three conventions:
 
 Two edge cases: a value starting with `-` needs the explicit form
 (`--offset=-5`); and put the pipeline file *before* a trailing boolean flag
-(`cgpipe p.cgp --adaptive`) so the filename isn't swallowed as the flag's value.
+(`cgp p.cgp --adaptive`) so the filename isn't swallowed as the flag's value.
 
 Because CLI values are applied first, `?=` defaults never override them. Guard the
 required ones:

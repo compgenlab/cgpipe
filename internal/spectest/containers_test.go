@@ -5,7 +5,7 @@ import "testing"
 // §12 With an engine and a per-target image both set, the body is wrapped to run
 // inside the container; input/output paths are bind-mounted automatically.
 func TestContainerWrapDocker(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "docker"
+	got := render(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
     --
@@ -16,7 +16,7 @@ out.bam: in.bam {{
 
 // §12 A target with no container = runs unwrapped even when an engine is set.
 func TestNoContainerWithoutImage(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "docker"
+	got := render(t, `cgp.container.engine = "docker"
 out.txt: in.txt {{
     cp ${input} ${output}
 }}`)
@@ -37,7 +37,7 @@ func TestNoEngineNoWrap(t *testing.T) {
 
 // §12.1 gpu adds the engine's GPU flag inside a container (Docker --gpus).
 func TestContainerGPUDocker(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "docker"
+	got := render(t, `cgp.container.engine = "docker"
 train.model: data.tf {{
     job.container = "tf/tf:latest"
     job.gpu = 2
@@ -49,7 +49,7 @@ train.model: data.tf {{
 
 // §12 Singularity uses `singularity exec` and the --nv GPU flag.
 func TestContainerSingularityGPU(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "singularity"
+	got := render(t, `cgp.container.engine = "singularity"
 out.bam: in.bam {{
     job.container = "docker://biocontainers/bwa:0.7.17"
     job.gpu = true
@@ -63,7 +63,7 @@ out.bam: in.bam {{
 // mounts, env passthrough, raw engine opts, the body-file dir, and the in-image
 // shell.
 func TestContainerDockerSettings(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "docker"
+	got := render(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
     job.container        = "img:1"
     job.container.bind   = ["/data", "/refs"]
@@ -83,9 +83,9 @@ out.bam: in.bam {{
 	)
 }
 
-// §12 Docker user mapping is on by default and disabled by cgpipe.container.user_map.
+// §12 Docker user mapping is on by default and disabled by cgp.container.user_map.
 func TestContainerUserMapToggle(t *testing.T) {
-	on := render(t, `cgpipe.container.engine = "docker"
+	on := render(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
     job.container = "img:1"
     --
@@ -93,8 +93,8 @@ out.bam: in.bam {{
 }}`)
 	mustContain(t, on, "-u $(id -u):$(id -g)")
 
-	off := render(t, `cgpipe.container.engine = "docker"
-cgpipe.container.user_map = false
+	off := render(t, `cgp.container.engine = "docker"
+cgp.container.user_map = false
 out.bam: in.bam {{
     job.container = "img:1"
     --
@@ -105,7 +105,7 @@ out.bam: in.bam {{
 
 // §12 Singularity bind/env use its own flag syntax (-B / --env NAME="$NAME").
 func TestContainerSingularitySettings(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "singularity"
+	got := render(t, `cgp.container.engine = "singularity"
 out.bam: in.bam {{
     job.container      = "img.sif"
     job.container.bind = ["/data"]
@@ -118,10 +118,10 @@ out.bam: in.bam {{
 	mustContain(t, got, "img.sif")
 }
 
-// §12 Global cgpipe.container.* settings apply when no per-target override is given.
+// §12 Global cgp.container.* settings apply when no per-target override is given.
 func TestContainerGlobalBind(t *testing.T) {
-	got := render(t, `cgpipe.container.engine = "docker"
-cgpipe.container.bind = ["/shared"]
+	got := render(t, `cgp.container.engine = "docker"
+cgp.container.bind = ["/shared"]
 out.bam: in.bam {{
     job.container = "img:1"
     --

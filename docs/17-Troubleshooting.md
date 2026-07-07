@@ -10,8 +10,8 @@ would do — the assembled shell script, or the scheduler submission scripts —
 running anything:
 
 ```sh
-cgpipe -dr pipeline.cgp
-cgpipe -dr -r slurm pipeline.cgp
+cgp -dr pipeline.cgp
+cgp -dr -r slurm pipeline.cgp
 ```
 
 If a variable resolved wrong, a path came out malformed, or a directive didn't take
@@ -93,8 +93,8 @@ out.bam: in.bam {{
 
 ### A boolean flag swallowed the filename
 
-`cgpipe --adaptive pipeline.cgp` reads `pipeline.cgp` as the value of `--adaptive`.
-Put the pipeline file first (`cgpipe pipeline.cgp --adaptive`), or write
+`cgp --adaptive pipeline.cgp` reads `pipeline.cgp` as the value of `--adaptive`.
+Put the pipeline file first (`cgp pipeline.cgp --adaptive`), or write
 `--adaptive=true`.
 
 ### A failed job left a corrupt output that won't rebuild
@@ -109,13 +109,13 @@ To force a rebuild now, delete the bad file (or run with `-force`).
 
 ## Inspecting state
 
-- **`cgpipe ledger dump <dir>`** — the full provenance of every recorded job; grep it
+- **`cgp ledger dump <dir>`** — the full provenance of every recorded job; grep it
   for an output to see who produced it and with what command.
   [The Ledger](11-The_Ledger.md#inspecting-the-ledger-cgpipe-ledger).
-- **`cgpipe ledger status [-r RUNNER] [-output] <dir>`** — ask the scheduler what is
+- **`cgp ledger status [-r RUNNER] [-output] <dir>`** — ask the scheduler what is
   happening with the recorded jobs right now (native status per job, or per output
   reconciled against the file on disk).
-- **`cgpipe ledger vacuum <dir>`** — compact the ledger to a single `snapshot.jsonl`,
+- **`cgp ledger vacuum <dir>`** — compact the ledger to a single `snapshot.jsonl`,
   dropping jobs that no longer own a current output.
 - **`-r graphviz` / `-r html`** — visualize the dependency graph and (with a ledger)
   each output's live state. [Tutorial 14](tutorials/14-status-report.md).

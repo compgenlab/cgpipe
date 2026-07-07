@@ -34,7 +34,7 @@ workflow as `${stage.name}`; a no-op when the pipeline runs standalone.
 [Workflows](12-Workflows.md#exposing-values-with-export).
 
 **Fan-out.** Emitting many independent targets from a loop — e.g. one per row of a
-sample sheet, or `cgpipe sub` over a list of files. Pairs with a **gather** target that
+sample sheet, or `cgp sub` over a list of files. Pairs with a **gather** target that
 depends on `@{…}` of the fanned-out outputs.
 [Sample Sheets](13-Sample_Sheets.md).
 
@@ -72,7 +72,7 @@ inputs already exist, never forcing them — the pattern for guarded cleanup.
 built into cgpipe and never a file on disk. [Reserved Targets](06-Reserved_Targets.md).
 
 **Runner.** The backend that carries out a pipeline: `shell`, `slurm`, `sge`, `pbs`,
-`batchq`, `graphviz`, or `html`. Chosen with `-r` or `cgpipe.runner`.
+`batchq`, `graphviz`, or `html`. Chosen with `-r` or `cgp.runner`.
 [Running Jobs](08-Running_Jobs.md#runners).
 
 **Shexec.** `job.shexec = true` — run a body directly on the submit host instead of

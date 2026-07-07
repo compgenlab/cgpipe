@@ -1,11 +1,11 @@
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # The smallest pipeline: build one file.
 #
 # Options:
 #     --name NAME   who to greet (default: world)
 #
-# Run:  cgpipe pipeline.cgp | bash   (then: cat hello.txt)
+# Run:  cgp pipeline.cgp | bash   (then: cat hello.txt)
 
 name ?= "world"
 

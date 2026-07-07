@@ -4,8 +4,8 @@
 // "# cgpipe-convert:" comment so a human can finish the job.
 //
 // What it handles:
-//   - shebang  #!.../cgpipe        -> #!/usr/bin/env cgpipe
-//   - settings cgpipe.joblog       -> cgpipe.ledger  (renamed keys only)
+//   - shebang  #!.../cgpipe        -> #!/usr/bin/env cgp
+//   - settings cgpipe.*            -> cgp.*  (and cgpipe.joblog -> cgp.ledger)
 //   - control  if/elif/else/endif  -> brace blocks; for/done -> brace blocks
 //   - targets  out: in  + indented body  -> out: in {{ ... }}
 //   - special  __pre__:: etc.      -> @pre { ... } (and post/setup/teardown/postsubmit)
@@ -75,7 +75,7 @@ func (c *converter) global(lines []string) {
 
 		// shebang
 		if i == 0 && shebangRe.MatchString(line) {
-			c.emit("#!/usr/bin/env cgpipe")
+			c.emit("#!/usr/bin/env cgp")
 			i++
 			continue
 		}
@@ -115,7 +115,7 @@ func (c *converter) global(lines []string) {
 			c.emit("}}")
 			continue
 		}
-		// assignment / statement (rewrite cgpipe.* -> cgpipe.*)
+		// assignment / statement (rewrite cgpipe.* -> cgp.*)
 		if assignRe.MatchString(line) || keywordRe.MatchString(trimmed) {
 			c.emit(wrapBareCmdSubst(rewriteSettings(line)))
 			i++
@@ -421,11 +421,12 @@ func convertControl(t string) string {
 	return t
 }
 
-// rewriteSettings maps legacy setting names that were renamed in the Go
-// rewrite. The cgpipe.* prefix is unchanged from the JVM era, so only keys
-// whose name actually changed are rewritten.
+// rewriteSettings maps legacy JVM-era setting names to their cgp.* names:
+// the whole cgpipe.* namespace becomes cgp.*, and cgpipe.joblog is renamed
+// to cgp.ledger.
 func rewriteSettings(line string) string {
-	line = strings.ReplaceAll(line, "cgpipe.joblog", "cgpipe.ledger")
+	line = strings.ReplaceAll(line, "cgpipe.joblog", "cgp.ledger")
+	line = strings.ReplaceAll(line, "cgpipe.", "cgp.")
 	return line
 }
 

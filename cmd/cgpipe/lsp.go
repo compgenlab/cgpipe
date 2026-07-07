@@ -7,14 +7,14 @@ import (
 	"github.com/compgenlab/cgpipe/internal/lsp"
 )
 
-const lspUsage = `cgpipe lsp — run the cgpipe language server
+const lspUsage = `cgp lsp — run the cgpipe language server
 
 The server speaks the Language Server Protocol over stdin/stdout and is meant to
 be launched by an editor, not run interactively. It provides syntax diagnostics,
 semantic tokens, hover, and completion for .cgp files.
 
 usage:
-    cgpipe lsp
+    cgp lsp
 `
 
 func runLSP(args []string) int {
@@ -24,13 +24,13 @@ func runLSP(args []string) int {
 			fmt.Fprint(os.Stdout, lspUsage)
 			return 0
 		default:
-			fmt.Fprintf(os.Stderr, "cgpipe lsp: unknown argument %q\n", a)
+			fmt.Fprintf(os.Stderr, "cgp lsp: unknown argument %q\n", a)
 			return 2
 		}
 	}
 	// stdout is the protocol channel; keep diagnostics on stderr.
 	if err := lsp.Run(os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe lsp: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp lsp: %v\n", err)
 		return 1
 	}
 	return 0

@@ -1,9 +1,9 @@
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Read a sample sheet, scatter a per-sample job for each row, then gather every
 # sample's result into one cohort summary — all in a single pipeline.
 #
-#     cgpipe pipeline.cgp | bash
+#     cgp pipeline.cgp | bash
 #     cat cohort.txt
 #
 # open("samples.tsv").read_tsv() returns one ordered map per row; read a column

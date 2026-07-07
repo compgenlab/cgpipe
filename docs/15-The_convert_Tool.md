@@ -1,11 +1,11 @@
 # The `convert` Tool
 
-`cgpipe convert` brings an older `cgpipe`-era script forward to the current cgpipe
+`cgp convert` brings an older `cgpipe`-era script forward to the current cgpipe
 language. It does the mechanical rewriting for you and flags anything it can't
 translate safely, so you can move an existing script over without retyping it.
 
 ```
-cgpipe convert <old.cgp> [-o out.cgp]
+cgp convert <old.cgp> [-o out.cgp]
 ```
 
 It reads the old script and writes the cgpipe-equivalent to stdout, or to a file with
@@ -16,7 +16,7 @@ It reads the old script and writes the cgpipe-equivalent to stdout, or to a file
 Given a legacy script:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 threads ?= 4
 out.bam: in.bam
     <%
@@ -26,11 +26,11 @@ out.bam: in.bam
     samtools sort -@ ${job.procs} -o $> $<
 ```
 
-`cgpipe convert` produces:
+`cgp convert` produces:
 
 ```console
-$ cgpipe convert old.cgp
-#!/usr/bin/env cgpipe
+$ cgp convert old.cgp
+#!/usr/bin/env cgp
 threads ?= 4
 out.bam: in.bam {{
     job.mem = "8G"
@@ -42,7 +42,7 @@ out.bam: in.bam {{
 
 It handled, mechanically:
 
-- the **shebang** (`cgpipe` → `cgpipe`),
+- the **shebang** (`cgpipe` → `cgp`),
 - the **body delimiters** — the indented recipe becomes a `{{ }}` block,
 - the **settings block** `<% … %>` → a directive block ending in `--`, with each
   per-job setting keeping its `job.` prefix,
@@ -52,7 +52,7 @@ It handled, mechanically:
 More broadly it rewrites the known structural differences: `<% if … %>` / `<% for …
 %>` → `%`-control lines, `if … endif` / `for … done` → brace blocks, `__pre__::`
 and friends → `@pre` etc., `name::` snippets → `snippet name { }`, `import` → `@name`,
-and `cgpipe.*` settings → `cgpipe.*`.
+and `cgp.*` settings → `cgp.*`.
 
 ## What needs your review
 
@@ -63,7 +63,7 @@ shell reference, so always:
 
 1. `grep cgpipe-convert` the output for flagged lines.
 2. Read the bodies for stale references.
-3. Dry-run it (`cgpipe -dr converted.cgp …`) and compare the rendered scripts to what
+3. Dry-run it (`cgp -dr converted.cgp …`) and compare the rendered scripts to what
    the original produced.
 
 Treat the output as a strong first draft, not a finished port.

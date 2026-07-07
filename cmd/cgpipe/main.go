@@ -28,7 +28,7 @@ import (
 )
 
 // loadConfigs discovers and parses the config layers (system, then user, then
-// CGPIPE_ENV / CGPIPE_RUN_ID), each itself a cgpipe script, in resolution order.
+// CGP_ENV / CGP_RUN_ID), each itself a cgpipe script, in resolution order.
 func loadConfigs() ([]eval.ConfigFile, error) {
 	var cfgs []eval.ConfigFile
 	addSrc := func(name, dir, src string) error {
@@ -54,40 +54,40 @@ func loadConfigs() ([]eval.ConfigFile, error) {
 		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 			exe = resolved
 		}
-		if err := addFile(filepath.Join(filepath.Dir(exe), ".cgpiperc")); err != nil {
+		if err := addFile(filepath.Join(filepath.Dir(exe), ".cgprc")); err != nil {
 			return nil, err
 		}
 	}
-	if err := addFile("/etc/cgpipe/config"); err != nil {
+	if err := addFile("/etc/cgp/config"); err != nil {
 		return nil, err
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		if err := addFile(filepath.Join(home, ".cgpipe", "config")); err != nil {
+		if err := addFile(filepath.Join(home, ".cgp", "config")); err != nil {
 			return nil, err
 		}
 	}
-	envSrc := os.Getenv("CGPIPE_ENV")
-	if rid := os.Getenv("CGPIPE_RUN_ID"); rid != "" {
-		envSrc += "\ncgpipe.run_id = \"" + rid + "\""
+	envSrc := os.Getenv("CGP_ENV")
+	if rid := os.Getenv("CGP_RUN_ID"); rid != "" {
+		envSrc += "\ncgp.run_id = \"" + rid + "\""
 	}
 	if strings.TrimSpace(envSrc) != "" {
 		cwd, _ := os.Getwd()
-		if err := addSrc("CGPIPE_ENV", cwd, envSrc); err != nil {
+		if err := addSrc("CGP_ENV", cwd, envSrc); err != nil {
 			return nil, err
 		}
 	}
 	return cfgs, nil
 }
 
-const usage = `cgpipe — run a .cgp pipeline
+const usage = `cgp — run a .cgp pipeline
 
 usage:
-    cgpipe [options] <pipeline.cgp> [goal ...] [--name value ...]
-    cgpipe sub [options] <command ...> [-- file ...]   (one-off job / fan-out; see cgpipe sub -h)
-    cgpipe ledger {dump|search|status|vacuum} <dir>   (see cgpipe ledger)
-    cgpipe show-template -r <runner>          (print a scheduler's built-in submission template)
-    cgpipe lsp                                (run the language server over stdio; for editors)
-    cgpipe version
+    cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
+    cgp sub [options] <command ...> [-- file ...]   (one-off job / fan-out; see cgp sub -h)
+    cgp ledger {dump|search|status|vacuum} <dir>   (see cgp ledger)
+    cgp show-template -r <runner>          (print a scheduler's built-in submission template)
+    cgp lsp                                (run the language server over stdio; for editors)
+    cgp version
 
 options (single hyphen):
     -h, --help   show this help (after a pipeline file, shows that script's help)
@@ -98,22 +98,22 @@ options (single hyphen):
     -force       rebuild every target in the goal graph, ignoring staleness
     -r NAME      runner: shell (default), slurm, sge, pbs, batchq, graphviz, html
                  (graphviz=DOT to stdout; html=status report reading the ledger)
-                 (also set via cgpipe.runner in the script/config)
+                 (also set via cgp.runner in the script/config)
     -debug N     trace what the interpreter/runner is doing, to stderr; N=1..5
-                 (more detail as N grows; also via CGPIPE_DEBUG=N)
+                 (more detail as N grows; also via CGP_DEBUG=N)
 
 Script variables use a double hyphen: --name value (or --name=value). A bare
 --name (no value) sets name=true; hyphens in a name become underscores
 (--hp-dist sets hp_dist); a repeated flag builds a list (--x a --x b => [a, b]).
-A bare argument is a goal (target) to build. With no goal, cgpipe builds @default
+A bare argument is a goal (target) to build. With no goal, cgp builds @default
 (or the first defined target).
 `
 
 // printUsage writes the help text followed by the version footer (e.g.
-// "cgpipe v0.1.2-dev-abcdef").
+// "cgp v0.1.2-dev-abcdef").
 func printUsage(w io.Writer) {
 	fmt.Fprint(w, usage)
-	fmt.Fprintf(w, "\ncgpipe %s\n", buildinfo.Version)
+	fmt.Fprintf(w, "\ncgp %s\n", buildinfo.Version)
 }
 
 func main() {
@@ -131,7 +131,7 @@ func run(args []string) int {
 		printUsage(os.Stdout)
 		return 0
 	case "version":
-		fmt.Printf("cgpipe %s\n", buildinfo.Version)
+		fmt.Printf("cgp %s\n", buildinfo.Version)
 		return 0
 	case "ledger":
 		return runLedger(args[1:])
@@ -196,26 +196,26 @@ func run(args []string) int {
 				showHelp = true
 			case "-r":
 				if i+1 >= len(rest) {
-					fmt.Fprintln(os.Stderr, "cgpipe: option -r needs a value")
+					fmt.Fprintln(os.Stderr, "cgp: option -r needs a value")
 					return 2
 				}
 				i++
 				runnerName = rest[i]
 			case "-debug":
 				if i+1 >= len(rest) {
-					fmt.Fprintln(os.Stderr, "cgpipe: option -debug needs a numeric level (1-5)")
+					fmt.Fprintln(os.Stderr, "cgp: option -debug needs a numeric level (1-5)")
 					return 2
 				}
 				i++
 				n, err := strconv.Atoi(rest[i])
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "cgpipe: -debug needs a numeric level, got %q\n", rest[i])
+					fmt.Fprintf(os.Stderr, "cgp: -debug needs a numeric level, got %q\n", rest[i])
 					return 2
 				}
 				debugLevel = n
 				debugFromFlag = true
 			default:
-				fmt.Fprintf(os.Stderr, "cgpipe: unknown option %s\n", a)
+				fmt.Fprintf(os.Stderr, "cgp: unknown option %s\n", a)
 				return 2
 			}
 		default:
@@ -235,19 +235,19 @@ func run(args []string) int {
 	}
 
 	if file == "" {
-		fmt.Fprintln(os.Stderr, "cgpipe: no pipeline file given")
+		fmt.Fprintln(os.Stderr, "cgp: no pipeline file given")
 		printUsage(os.Stderr)
 		return 2
 	}
 
-	if os.Getenv("CGPIPE_DRYRUN") != "" {
+	if os.Getenv("CGP_DRYRUN") != "" {
 		dryRun = true
 	}
 
-	// Debug verbosity: an explicit -debug flag wins; otherwise CGPIPE_DEBUG. Set it
+	// Debug verbosity: an explicit -debug flag wins; otherwise CGP_DEBUG. Set it
 	// before configs/eval/run so every phase can trace.
 	if !debugFromFlag {
-		if v := strings.TrimSpace(os.Getenv("CGPIPE_DEBUG")); v != "" {
+		if v := strings.TrimSpace(os.Getenv("CGP_DEBUG")); v != "" {
 			if n, err := strconv.Atoi(v); err == nil {
 				debugLevel = n
 			}
@@ -257,13 +257,13 @@ func run(args []string) int {
 
 	src, err := os.ReadFile(file)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 
 	f, err := parser.Parse(string(src), file)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 
@@ -271,14 +271,14 @@ func run(args []string) int {
 		if f.Help != "" {
 			fmt.Println(f.Help)
 		} else {
-			fmt.Fprintf(os.Stderr, "cgpipe: %s has no help text\n", file)
+			fmt.Fprintf(os.Stderr, "cgp: %s has no help text\n", file)
 		}
 		return 0
 	}
 
 	cfgs, err := loadConfigs()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 
@@ -294,7 +294,7 @@ func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[stri
 		if errors.As(err, &ex) {
 			return ex.Code
 		}
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	if len(prog.Stages) > 0 {
@@ -307,7 +307,7 @@ func runPipeline(f *ast.File, file string, cfgs []eval.ConfigFile, vars map[stri
 func dispatchRun(prog *eval.Program, file string, goals []string, runnerName string, dryRun, force bool, cache *runner.Cache) int {
 	name := runnerName
 	if name == "" {
-		if v, ok := prog.Get("cgpipe.runner"); ok {
+		if v, ok := prog.Get("cgp.runner"); ok {
 			name = eval.Stringify(v)
 		}
 	}
@@ -317,18 +317,18 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 
 	if name == "shell" {
 		autoexec := false
-		if v, ok := prog.Get("cgpipe.runner.shell.autoexec"); ok {
+		if v, ok := prog.Get("cgp.runner.shell.autoexec"); ok {
 			autoexec = eval.Truthy(v)
 		}
 		if err := shell.Run(prog, shell.Options{Goals: goals, DryRun: dryRun, AutoExec: autoexec, Force: force, Cache: cache}); err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		return 0
 	}
 	if name == "graphviz" {
 		if err := graphviz.Run(prog, goals, os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		return 0
@@ -338,11 +338,11 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 	}
 	sch, ok := sched.For(name)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "cgpipe: unknown runner %q (have: shell, graphviz, html, %s)\n", name, strings.Join(sched.Names(), ", "))
+		fmt.Fprintf(os.Stderr, "cgp: unknown runner %q (have: shell, graphviz, html, %s)\n", name, strings.Join(sched.Names(), ", "))
 		return 2
 	}
 	if err := sched.Run(prog, sch, sched.Options{Goals: goals, DryRun: dryRun, Force: force, Pipeline: file, Cache: cache}); err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0
@@ -352,7 +352,7 @@ func dispatchRun(prog *eval.Program, file string, goals []string, runnerName str
 func runReport(prog *eval.Program, file string, goals []string, out io.Writer) int {
 	g := graphviz.Build(prog, goals)
 	if err := report.Run(g, precomputeStatus(prog, g), file, out); err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0
@@ -364,13 +364,13 @@ func runReport(prog *eval.Program, file string, goals []string, out io.Writer) i
 // here, so the snapshot does not hold the ledger open while rendering.
 func precomputeStatus(prog *eval.Program, g graphviz.Graph) func(string) report.State {
 	var sch *sched.Scheduler
-	if v, ok := prog.Get("cgpipe.runner"); ok {
+	if v, ok := prog.Get("cgp.runner"); ok {
 		if s, found := sched.For(eval.Stringify(v)); found {
 			sch = &s
 		}
 	}
 	var lg *ledger.Ledger
-	if v, ok := prog.Get("cgpipe.ledger"); ok && eval.Stringify(v) != "" {
+	if v, ok := prog.Get("cgp.ledger"); ok && eval.Stringify(v) != "" {
 		if l, err := ledger.OpenRead(eval.Stringify(v)); err == nil {
 			lg = l
 			defer lg.Close()
@@ -433,23 +433,23 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 	for _, st := range wf.Stages {
 		name, err := eval.Interpolate(st.Name, wfVars)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: stage name: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: stage name: %v\n", err)
 			return 1
 		}
 		subfile, err := eval.Interpolate(st.File, wfVars)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: stage %s file: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "cgp: stage %s file: %v\n", name, err)
 			return 1
 		}
 		subVars := map[string]eval.Value{}
 		for i := 0; i < len(st.Args); i++ {
 			a, err := eval.Interpolate(st.Args[i], wfVars)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "cgpipe: stage %s args: %v\n", name, err)
+				fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
 				return 1
 			}
 			if !strings.HasPrefix(a, "--") {
-				fmt.Fprintf(os.Stderr, "cgpipe: stage %s: expected --name, got %q\n", name, a)
+				fmt.Fprintf(os.Stderr, "cgp: stage %s: expected --name, got %q\n", name, a)
 				return 2
 			}
 			nv := a[2:]
@@ -462,7 +462,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 				i++
 				val, err := eval.Interpolate(st.Args[i], wfVars)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "cgpipe: stage %s args: %v\n", name, err)
+					fmt.Fprintf(os.Stderr, "cgp: stage %s args: %v\n", name, err)
 					return 1
 				}
 				addCLIVar(subVars, cliVarName(nv), eval.ParseScalar(val))
@@ -473,7 +473,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 
 		sf, err := pc.load(subfile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: stage %s: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
 			return 1
 		}
 		subProg, err := eval.Run(sf, eval.Options{File: subfile, Configs: cfgs, Vars: subVars, DryRun: dryRun})
@@ -482,7 +482,7 @@ func orchestrate(wf *eval.Program, cfgs []eval.ConfigFile, runnerName string, dr
 			if errors.As(err, &ex) {
 				return ex.Code
 			}
-			fmt.Fprintf(os.Stderr, "cgpipe: stage %s: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "cgp: stage %s: %v\n", name, err)
 			return 1
 		}
 		if code := dispatchRun(subProg, subfile, nil, runnerName, dryRun, force, runner.NewCache()); code != 0 {
@@ -525,7 +525,7 @@ func validateStageRefs(wf *eval.Program, wfVars map[string]eval.Value, pc parseC
 				stage, exp := m[1], m[2]
 				set, known := exports[stage]
 				if known && !set[exp] {
-					fmt.Fprintf(os.Stderr, "cgpipe: reference ${%s.%s}, but stage %q exports no %q\n", stage, exp, stage, exp)
+					fmt.Fprintf(os.Stderr, "cgp: reference ${%s.%s}, but stage %q exports no %q\n", stage, exp, stage, exp)
 					return 1
 				}
 			}

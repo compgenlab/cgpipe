@@ -1,7 +1,7 @@
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Stage 2: summarize the cleaned text. Runnable on its own with --text.
-cgpipe.runner.shell.autoexec = true
+cgp.runner.shell.autoexec = true
 
 summary.txt: ${text} {{
     printf "lines: %s\nwords: %s\n" "$(wc -l < ${input})" "$(wc -w < ${input})" > ${output}

@@ -7,7 +7,7 @@ recipe shows off.
 > Requires: `bowtie2`, `samtools`, `macs2`. Needs a bowtie2 index.
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # ChIP-seq / ATAC-seq peak calling: align the treatment and the input control,
 # then call peaks. The peak-calling job depends on BOTH BAMs — a multi-input
@@ -64,7 +64,7 @@ ${sample}_peaks.narrowPeak: ${treat.sub("\\.fq\\.gz$", "")}.bam ${control.sub("\
 ## Run it
 
 ```sh
-cgpipe -r slurm chipseq-atac-peaks.cgp --sample H3K27ac \
+cgp -r slurm chipseq-atac-peaks.cgp --sample H3K27ac \
     --treat h3k27ac.fq.gz --control input.fq.gz --index bowtie2/hg38
 ```
 

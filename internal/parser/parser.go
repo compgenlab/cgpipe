@@ -653,7 +653,7 @@ func (p *parser) parsePostfix() ast.Expr {
 			pos := p.advance().Pos
 			name := p.expect(token.IDENT).Lit
 			if p.cur().Kind != token.LPAREN {
-				// dotted variable name (e.g. job.stdout, cgpipe.runner) — extend the
+				// dotted variable name (e.g. job.stdout, cgp.runner) — extend the
 				// identifier rather than treating '.' as a method call.
 				if id, ok := x.(*ast.Ident); ok {
 					id.Name += "." + name

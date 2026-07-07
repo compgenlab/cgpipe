@@ -9,7 +9,7 @@ seen cgpipe skip work that is already done.
 Create `hello.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Greet someone.
 #
@@ -27,7 +27,7 @@ hello.txt: {{
 
 Line by line:
 
-- `#!/usr/bin/env cgpipe` — the shebang. With it (and `chmod +x`) you can run the
+- `#!/usr/bin/env cgp` — the shebang. With it (and `chmod +x`) you can run the
   file directly as `./hello.cgp`.
 - The comment block under the shebang is the **help text**. The first blank or
   non-comment line ends it.
@@ -43,7 +43,7 @@ Line by line:
 The default runner assembles a bash script and prints it (it does not run it):
 
 ```console
-$ cgpipe hello.cgp
+$ cgp hello.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -54,7 +54,7 @@ echo "Hello, world!" > hello.txt
 Pass `--name` to override the default:
 
 ```console
-$ cgpipe hello.cgp --name Marcus
+$ cgp hello.cgp --name Marcus
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -67,7 +67,7 @@ echo "Hello, Marcus!" > hello.txt
 Pipe the rendered script to a shell:
 
 ```console
-$ cgpipe hello.cgp --name Marcus | bash
+$ cgp hello.cgp --name Marcus | bash
 $ cat hello.txt
 Hello, Marcus!
 ```
@@ -78,7 +78,7 @@ Run the same command again. Because `hello.txt` already exists and nothing it
 depends on has changed, cgpipe emits **no work** — just the empty bash preamble:
 
 ```console
-$ cgpipe hello.cgp --name Marcus
+$ cgp hello.cgp --name Marcus
 #!/usr/bin/env bash
 set -euo pipefail
 ```
@@ -86,7 +86,7 @@ set -euo pipefail
 To rebuild regardless, force it:
 
 ```console
-$ cgpipe -force hello.cgp --name Marcus
+$ cgp -force hello.cgp --name Marcus
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -102,7 +102,7 @@ story.)
 ## See the help text
 
 ```console
-$ cgpipe hello.cgp -h
+$ cgp hello.cgp -h
 Greet someone.
 
 Options:
@@ -110,7 +110,7 @@ Options:
 ```
 
 The help block you wrote at the top is what `-h` prints (when it comes *after* the
-filename — `cgpipe -h` alone prints cgpipe's own usage).
+filename — `cgp -h` alone prints cgpipe's own usage).
 
 ## Next
 

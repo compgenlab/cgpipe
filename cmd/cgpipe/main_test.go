@@ -14,7 +14,7 @@ import (
 // which assert on executed output. The shell runner now *emits* a script by
 // default; that default is covered explicitly by TestShellEmitsScriptByDefault.
 func TestMain(m *testing.M) {
-	os.Setenv("CGPIPE_ENV", "cgpipe.runner.shell.autoexec = true")
+	os.Setenv("CGP_ENV", "cgp.runner.shell.autoexec = true")
 	os.Exit(m.Run())
 }
 
@@ -92,7 +92,7 @@ func TestRunExitCode(t *testing.T) {
 func TestRunPipelineHelp(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	os.WriteFile("p.cgp", []byte("#!/usr/bin/env cgpipe\n# Does a thing.\n# --ref FILE\nx: {{\n  true\n}}"), 0o644)
+	os.WriteFile("p.cgp", []byte("#!/usr/bin/env cgp\n# Does a thing.\n# --ref FILE\nx: {{\n  true\n}}"), 0o644)
 	if code := run([]string{"p.cgp", "-h"}); code != 0 {
 		t.Fatalf("run(p.cgp -h) = %d, want 0", code)
 	}
@@ -103,10 +103,10 @@ func TestRunPipelineHelp(t *testing.T) {
 func TestHelpFlagIsScriptAware(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	os.WriteFile("p.cgp", []byte("#!/usr/bin/env cgpipe\n# Does a thing.\n# --ref FILE\nx: {{\n  true\n}}"), 0o644)
+	os.WriteFile("p.cgp", []byte("#!/usr/bin/env cgp\n# Does a thing.\n# --ref FILE\nx: {{\n  true\n}}"), 0o644)
 
 	scriptHelp := "Does a thing." // first line of the script's help text
-	cgpipeHelp := "cgpipe — run a .cgp pipeline"
+	cgpipeHelp := "cgp — run a .cgp pipeline"
 
 	// --help after the file → the script's help (the bug this fixes: it used to
 	// be swallowed as a `help` variable and the pipeline ran instead).
@@ -123,7 +123,7 @@ func TestHelpFlagIsScriptAware(t *testing.T) {
 	}
 	// --help with no file → cgpipe's own help.
 	if out := captureStdout(t, func() int { return run([]string{"--help"}) }); !strings.Contains(out, cgpipeHelp) {
-		t.Errorf("--help (no file) did not show cgpipe help; got:\n%s", out)
+		t.Errorf("--help (no file) did not show cgp help; got:\n%s", out)
 	}
 	// --help=value remains an ordinary script variable, not a help request.
 	if out := captureStdout(t, func() int { return run([]string{"p.cgp", "--help=x", "-dr"}) }); strings.Contains(out, scriptHelp) {
@@ -135,7 +135,7 @@ func TestSubShellCreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	if code := run([]string{"sub", "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
-		t.Fatalf("cgpipe sub = %d, want 0", code)
+		t.Fatalf("cgp sub = %d, want 0", code)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "out.txt"))
 	if err != nil || string(b) != "hi\n" {
@@ -143,21 +143,21 @@ func TestSubShellCreatesFile(t *testing.T) {
 	}
 }
 
-// CGPIPE_DRYRUN=1 makes `cgpipe sub` render the job instead of running it, matching
+// CGP_DRYRUN=1 makes `cgp sub` render the job instead of running it, matching
 // the pipeline path. Regression: sub previously honored only the -dr flag.
 func TestSubDryRunEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("CGPIPE_DRYRUN", "1")
+	t.Setenv("CGP_DRYRUN", "1")
 	if code := run([]string{"sub", "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
-		t.Fatalf("cgpipe sub = %d, want 0", code)
+		t.Fatalf("cgp sub = %d, want 0", code)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "out.txt")); !os.IsNotExist(err) {
-		t.Fatalf("CGPIPE_DRYRUN=1 should not run the job; out.txt err=%v", err)
+		t.Fatalf("CGP_DRYRUN=1 should not run the job; out.txt err=%v", err)
 	}
 }
 
-// cgpipe sub fan-out: files after -- submit one job each, with `{}` substitution.
+// cgp sub fan-out: files after -- submit one job each, with `{}` substitution.
 func TestSubFanout(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -165,7 +165,7 @@ func TestSubFanout(t *testing.T) {
 	os.WriteFile("b.in", []byte("BBB\n"), 0o644)
 	// {} -> each file, {@.in} -> basename minus the .in suffix.
 	if code := run([]string{"sub", "-n", "cp{#}", "-o", "{@.in}.out", "cp {} {@.in}.out", "--", "a.in", "b.in"}); code != 0 {
-		t.Fatalf("cgpipe sub fan-out = %d, want 0", code)
+		t.Fatalf("cgp sub fan-out = %d, want 0", code)
 	}
 	for _, c := range []struct{ f, want string }{{"a.out", "AAA\n"}, {"b.out", "BBB\n"}} {
 		b, err := os.ReadFile(filepath.Join(dir, c.f))
@@ -175,7 +175,7 @@ func TestSubFanout(t *testing.T) {
 	}
 }
 
-// cgpipe sub --files-from: the fan-out list can come from a file (no -- needed).
+// cgp sub --files-from: the fan-out list can come from a file (no -- needed).
 func TestSubFilesFrom(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -183,7 +183,7 @@ func TestSubFilesFrom(t *testing.T) {
 	os.WriteFile("b.in", []byte("BBB\n"), 0o644)
 	os.WriteFile("list.txt", []byte("a.in\n\nb.in\n"), 0o644) // blank line ignored
 	if code := run([]string{"sub", "--files-from", "list.txt", "-o", "{@.in}.out", "cp {} {@.in}.out"}); code != 0 {
-		t.Fatalf("cgpipe sub --files-from = %d, want 0", code)
+		t.Fatalf("cgp sub --files-from = %d, want 0", code)
 	}
 	for _, c := range []struct{ f, want string }{{"a.out", "AAA\n"}, {"b.out", "BBB\n"}} {
 		b, err := os.ReadFile(filepath.Join(dir, c.f))
@@ -193,7 +193,7 @@ func TestSubFilesFrom(t *testing.T) {
 	}
 }
 
-// cgpipe sub -d/--deps is both comma-separated AND repeatable: the two accumulate.
+// cgp sub -d/--deps is both comma-separated AND repeatable: the two accumulate.
 func TestSubDepsCSVAndRepeatable(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -207,7 +207,7 @@ func TestSubDepsCSVAndRepeatable(t *testing.T) {
 	}
 }
 
-// cgpipe sub --files-from may be given only once (unlike the repeatable list flags).
+// cgp sub --files-from may be given only once (unlike the repeatable list flags).
 func TestSubFilesFromOnlyOnce(t *testing.T) {
 	if code := run([]string{"sub", "-f", "a.txt", "-f", "b.txt", "echo hi"}); code != 2 {
 		t.Errorf("repeated --files-from = %d, want 2", code)
@@ -216,10 +216,10 @@ func TestSubFilesFromOnlyOnce(t *testing.T) {
 
 func TestConfigFileLoaded(t *testing.T) {
 	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".cgpipe"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".cgp"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(home, ".cgpipe", "config"), []byte(`greeting ?= "from-config"`), 0o644)
+	os.WriteFile(filepath.Join(home, ".cgp", "config"), []byte(`greeting ?= "from-config"`), 0o644)
 	t.Setenv("HOME", home)
 
 	dir := t.TempDir()
@@ -236,7 +236,7 @@ func TestConfigFileLoaded(t *testing.T) {
 
 func TestSubNoCommand(t *testing.T) {
 	if code := run([]string{"sub", "-m", "8G"}); code != 2 {
-		t.Fatalf("cgpipe sub with no command = %d, want 2", code)
+		t.Fatalf("cgp sub with no command = %d, want 2", code)
 	}
 }
 
@@ -286,9 +286,9 @@ func TestWorkflowRuntimeMissingExport(t *testing.T) {
 func TestConvertToStdout(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	os.WriteFile("old.cgp", []byte("#!/usr/bin/env cgpipe\nif !bam\n    exit 1\nendif\nout.bam: in.bam\n    sort -o $> $<\n"), 0o644)
+	os.WriteFile("old.cgp", []byte("#!/usr/bin/env cgp\nif !bam\n    exit 1\nendif\nout.bam: in.bam\n    sort -o $> $<\n"), 0o644)
 	if code := run([]string{"convert", "old.cgp"}); code != 0 {
-		t.Fatalf("cgpipe convert = %d, want 0", code)
+		t.Fatalf("cgp convert = %d, want 0", code)
 	}
 }
 
@@ -297,7 +297,7 @@ func TestConvertToFile(t *testing.T) {
 	t.Chdir(dir)
 	os.WriteFile("old.cgp", []byte("out.bam: in.bam\n    sort -o $> $<\n"), 0o644)
 	if code := run([]string{"convert", "old.cgp", "-o", "new.cgp"}); code != 0 {
-		t.Fatalf("cgpipe convert -o = %d, want 0", code)
+		t.Fatalf("cgp convert -o = %d, want 0", code)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "new.cgp"))
 	if err != nil || !strings.Contains(string(b), "out.bam: in.bam {{") {
@@ -307,7 +307,7 @@ func TestConvertToFile(t *testing.T) {
 
 func TestConvertNoInput(t *testing.T) {
 	if code := run([]string{"convert"}); code != 2 {
-		t.Fatalf("cgpipe convert with no input = %d, want 2", code)
+		t.Fatalf("cgp convert with no input = %d, want 2", code)
 	}
 }
 
@@ -418,7 +418,7 @@ func TestManifestFlagsRemoved(t *testing.T) {
 // §15 The shell runner emits a runnable script to stdout by default and does
 // NOT execute (no autoexec).
 func TestShellEmitsScriptByDefault(t *testing.T) {
-	t.Setenv("CGPIPE_ENV", "") // undo TestMain's autoexec
+	t.Setenv("CGP_ENV", "") // undo TestMain's autoexec
 	dir := t.TempDir()
 	t.Chdir(dir)
 	os.WriteFile("p.cgp", []byte("out.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
@@ -429,12 +429,12 @@ func TestShellEmitsScriptByDefault(t *testing.T) {
 	mustHave(t, out, "#!/usr/bin/env bash", "echo hi > out.txt")
 }
 
-// §11.3 cgpipe.runner.shell.autoexec = true makes the shell runner execute.
+// §11.3 cgp.runner.shell.autoexec = true makes the shell runner execute.
 func TestShellAutoexecRuns(t *testing.T) {
-	t.Setenv("CGPIPE_ENV", "")
+	t.Setenv("CGP_ENV", "")
 	dir := t.TempDir()
 	t.Chdir(dir)
-	os.WriteFile("p.cgp", []byte("cgpipe.runner.shell.autoexec = true\nout.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
+	os.WriteFile("p.cgp", []byte("cgp.runner.shell.autoexec = true\nout.txt: {{\n    echo hi > ${output}\n}}\n@default: out.txt"), 0o644)
 	if code := run([]string{"p.cgp"}); code != 0 {
 		t.Fatalf("run = %d", code)
 	}
@@ -481,19 +481,19 @@ func TestExplicitGoalOverridesDefault(t *testing.T) {
 	}
 }
 
-// §15.1 cgpipe sub -dr renders the one-off job instead of running it.
+// §15.1 cgp sub -dr renders the one-off job instead of running it.
 func TestSubDryRun(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	if code := run([]string{"sub", "-dr", "-o", "out.txt", "echo hi > ${output}"}); code != 0 {
-		t.Fatalf("cgpipe sub -dr = %d", code)
+		t.Fatalf("cgp sub -dr = %d", code)
 	}
 	if fileThere(dir, "out.txt") {
-		t.Error("cgpipe sub -dr should not create out.txt")
+		t.Error("cgp sub -dr should not create out.txt")
 	}
 }
 
-// cgpipe sub --array submits the fan-out as ONE job array: a single --array=1-N
+// cgp sub --array submits the fan-out as ONE job array: a single --array=1-N
 // header and a `case` over the scheduler's task-id var, one branch per file.
 func TestSubArray(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -506,7 +506,7 @@ func TestSubArray(t *testing.T) {
 		"1) echo a ;;", "2) echo b ;;", "3) echo c ;;",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("cgpipe sub --array output missing %q\n--- got ---\n%s", want, out)
+			t.Errorf("cgp sub --array output missing %q\n--- got ---\n%s", want, out)
 		}
 	}
 }
@@ -516,7 +516,7 @@ func TestSubArray(t *testing.T) {
 func TestSubArrayPerElementAfterRejected(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if code := run([]string{"sub", "-r", "slurm", "-dr", "--array", "-a", "{@}.done", "echo {}", "--", "a", "b"}); code == 0 {
-		t.Fatal("cgpipe sub --array with a {}-expanded --after should fail")
+		t.Fatal("cgp sub --array with a {}-expanded --after should fail")
 	}
 }
 
@@ -528,7 +528,7 @@ func TestSubArrayUnsupportedRunnerFallsBack(t *testing.T) {
 	os.WriteFile("b.in", []byte("B\n"), 0o644)
 	// default shell runner has no arrays → per-file fallback still produces outputs.
 	if code := run([]string{"sub", "--array", "-o", "{@.in}.out", "cp {} {@.in}.out", "--", "a.in", "b.in"}); code != 0 {
-		t.Fatalf("cgpipe sub --array shell fallback = %d, want 0", code)
+		t.Fatalf("cgp sub --array shell fallback = %d, want 0", code)
 	}
 	for _, f := range []string{"a.out", "b.out"} {
 		if !fileThere(dir, f) {
@@ -537,7 +537,7 @@ func TestSubArrayUnsupportedRunnerFallsBack(t *testing.T) {
 	}
 }
 
-// §15.2 cgpipe ledger vacuum runs against a ledger db.
+// §15.2 cgp ledger vacuum runs against a ledger db.
 func TestLedgerVacuumCLI(t *testing.T) {
 	dir := t.TempDir()
 	db := filepath.Join(dir, "l.db")
@@ -547,7 +547,7 @@ func TestLedgerVacuumCLI(t *testing.T) {
 		t.Fatalf("seed ledger = %d", code)
 	}
 	if code := run([]string{"ledger", "vacuum", db}); code != 0 {
-		t.Fatalf("cgpipe ledger vacuum = %d, want 0", code)
+		t.Fatalf("cgp ledger vacuum = %d, want 0", code)
 	}
 }
 
@@ -569,7 +569,7 @@ func TestForceFlagRebuilds(t *testing.T) {
 	}
 }
 
-// §15.2 cgpipe ledger dump / search read the ledger and print the joblog TSV.
+// §15.2 cgp ledger dump / search read the ledger and print the joblog TSV.
 func TestLedgerDumpAndSearchCLI(t *testing.T) {
 	dir := t.TempDir()
 	db := filepath.Join(dir, "l.db")

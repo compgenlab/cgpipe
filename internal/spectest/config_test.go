@@ -61,13 +61,13 @@ func TestScriptAssignVsConfig(t *testing.T) {
 	}
 }
 
-// §11.1/§11.3 cgpipe.* settings are read back from the program scope.
+// §11.1/§11.3 cgp.* settings are read back from the program scope.
 func TestCgpSettingsNamespace(t *testing.T) {
-	prog := runWith(t, "cgpipe.runner = \"slurm\"\ncgpipe.ledger = \"/tmp/x.db\"", nil)
-	if v, _ := prog.Get("cgpipe.runner"); eval.Stringify(v) != "slurm" {
-		t.Errorf("cgpipe.runner = %v", v)
+	prog := runWith(t, "cgp.runner = \"slurm\"\ncgp.ledger = \"/tmp/x.db\"", nil)
+	if v, _ := prog.Get("cgp.runner"); eval.Stringify(v) != "slurm" {
+		t.Errorf("cgp.runner = %v", v)
 	}
-	if v, _ := prog.Get("cgpipe.ledger"); eval.Stringify(v) != "/tmp/x.db" {
-		t.Errorf("cgpipe.ledger = %v", v)
+	if v, _ := prog.Get("cgp.ledger"); eval.Stringify(v) != "/tmp/x.db" {
+		t.Errorf("cgp.ledger = %v", v)
 	}
 }
