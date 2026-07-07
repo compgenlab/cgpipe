@@ -9,8 +9,8 @@ separately and compose them with `stage` and `export`.
 `align.cgp` produces a BAM and **exports** its name:
 
 ```
-#!/usr/bin/env cgpipe
-cgpipe.runner.shell.autoexec = true
+#!/usr/bin/env cgp
+cgp.runner.shell.autoexec = true
 
 aligned.bam: ${reads} {{
     echo "aligned from ${input}" > ${output}
@@ -22,8 +22,8 @@ export bam = "aligned.bam"
 `call.cgp` takes a BAM and produces a VCF:
 
 ```
-#!/usr/bin/env cgpipe
-cgpipe.runner.shell.autoexec = true
+#!/usr/bin/env cgp
+cgp.runner.shell.autoexec = true
 
 calls.vcf: ${bam} {{
     echo "called from ${input}" > ${output}
@@ -31,7 +31,7 @@ calls.vcf: ${bam} {{
 @default: calls.vcf
 ```
 
-Each runs on its own — `cgpipe align.cgp --reads reads.fq` builds `aligned.bam`, and
+Each runs on its own — `cgp align.cgp --reads reads.fq` builds `aligned.bam`, and
 the `export` line is a no-op standalone.
 
 ## The workflow
@@ -39,7 +39,7 @@ the `export` line is a no-op standalone.
 `wgs.cgp` ties them together:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Two-stage workflow: align, then call.
 
@@ -55,7 +55,7 @@ stage exported.
 ## Run it
 
 ```console
-$ cgpipe wgs.cgp --reads reads.fq
+$ cgp wgs.cgp --reads reads.fq
 $ cat aligned.bam
 aligned from reads.fq
 $ cat calls.vcf
@@ -71,7 +71,7 @@ knowing about the other.
 Under the shell runner each stage finishes before the next starts, so `call` simply
 finds the file `align` wrote. On a scheduler, `align`'s jobs may still be queued
 when `call` submits — cgpipe wires the cross-stage `afterok` dependency through the
-[ledger](../11-The_Ledger.md), so configure `cgpipe.ledger` for scheduler workflows.
+[ledger](../11-The_Ledger.md), so configure `cgp.ledger` for scheduler workflows.
 
 ## Next
 

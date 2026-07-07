@@ -14,10 +14,10 @@ import (
 )
 
 const ledgerUsage = `usage:
-    cgpipe ledger dump <dir>                      dump all jobs as key/value TSV
-    cgpipe ledger search [filters] <dir>          dump jobs matching the filters
-    cgpipe ledger status [-r RUNNER] [-output] <dir>   show each job's (or output's) live scheduler status
-    cgpipe ledger vacuum <dir>                     compact the ledger, dropping jobs that own no current output
+    cgp ledger dump <dir>                      dump all jobs as key/value TSV
+    cgp ledger search [filters] <dir>          dump jobs matching the filters
+    cgp ledger status [-r RUNNER] [-output] <dir>   show each job's (or output's) live scheduler status
+    cgp ledger vacuum <dir>                     compact the ledger, dropping jobs that own no current output
 
 search filters (substring match; combined with AND):
     -i PATH      an input path contains PATH
@@ -27,11 +27,11 @@ search filters (substring match; combined with AND):
     -id JOBID    a job id, or an array id (matches all its tasks)
 
 status options:
-    -r RUNNER    scheduler to query (slurm/sge/pbs/batchq); defaults to cgpipe.runner from config
+    -r RUNNER    scheduler to query (slurm/sge/pbs/batchq); defaults to cgp.runner from config
     -output      report per output file (most recent owning job's status) instead of per job
 `
 
-// runLedger handles `cgpipe ledger <subcommand> ...`.
+// runLedger handles `cgp ledger <subcommand> ...`.
 func runLedger(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprint(os.Stderr, ledgerUsage)
@@ -51,12 +51,12 @@ func runLedger(args []string) int {
 		}
 		lg, err := ledger.Open(args[1])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		defer lg.Close()
 		if err := lg.Vacuum(); err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		return 0
@@ -66,7 +66,7 @@ func runLedger(args []string) int {
 	}
 }
 
-// runLedgerDump handles `cgpipe ledger dump <db>`.
+// runLedgerDump handles `cgp ledger dump <db>`.
 func runLedgerDump(args []string) int {
 	if len(args) != 1 {
 		fmt.Fprint(os.Stderr, ledgerUsage)
@@ -74,18 +74,18 @@ func runLedgerDump(args []string) int {
 	}
 	lg, err := ledger.OpenRead(args[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	defer lg.Close()
 	if err := lg.Dump(os.Stdout, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// runLedgerSearch handles `cgpipe ledger search [filters] <db>`.
+// runLedgerSearch handles `cgp ledger search [filters] <db>`.
 func runLedgerSearch(args []string) int {
 	var f ledger.Filter
 	var db string
@@ -147,26 +147,26 @@ func runLedgerSearch(args []string) int {
 	}
 	lg, err := ledger.OpenRead(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	defer lg.Close()
 	ids, err := lg.Search(f)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	if len(ids) == 0 {
 		return 0 // no matches: dump nothing (an empty set is not "everything")
 	}
 	if err := lg.Dump(os.Stdout, ids); err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// runLedgerStatus handles `cgpipe ledger status [-r RUNNER] [-output] <dir>`.
+// runLedgerStatus handles `cgp ledger status [-r RUNNER] [-output] <dir>`.
 func runLedgerStatus(args []string) int {
 	var runnerName, dir string
 	outputMode := false
@@ -195,26 +195,26 @@ func runLedgerStatus(args []string) int {
 	}
 
 	// Resolve the runner and ledger dir from config when not given explicitly,
-	// mirroring `cgpipe sub`: evaluate the config layers with an empty pipeline.
+	// mirroring `cgp sub`: evaluate the config layers with an empty pipeline.
 	if runnerName == "" || dir == "" {
 		cfgs, err := loadConfigs()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		base, err := eval.Run(&ast.File{}, eval.Options{Configs: cfgs})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 			return 1
 		}
 		vars := base.Vars()
 		if runnerName == "" {
-			if v, ok := vars["cgpipe.runner"]; ok {
+			if v, ok := vars["cgp.runner"]; ok {
 				runnerName = eval.Stringify(v)
 			}
 		}
 		if dir == "" {
-			if v, ok := vars["cgpipe.ledger"]; ok {
+			if v, ok := vars["cgp.ledger"]; ok {
 				dir = eval.Stringify(v)
 			}
 		}
@@ -226,18 +226,18 @@ func runLedgerStatus(args []string) int {
 	}
 	sch, ok := sched.For(runnerName)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "cgpipe: ledger status needs a scheduler runner (%s), got %q\n",
+		fmt.Fprintf(os.Stderr, "cgp: ledger status needs a scheduler runner (%s), got %q\n",
 			strings.Join(sched.Names(), "/"), runnerName)
 		return 2
 	}
 	lg, err := ledger.OpenRead(dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	defer lg.Close()
 	if err := ledgerStatus(os.Stdout, sch, lg, outputMode); err != nil {
-		fmt.Fprintf(os.Stderr, "cgpipe: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
 		return 1
 	}
 	return 0

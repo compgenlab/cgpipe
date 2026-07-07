@@ -526,7 +526,7 @@ func (l *Ledger) Dump(w io.Writer, only []string) error {
 }
 
 // Jobs returns every folded job, ordered by submit time then job id (a copy,
-// safe for the caller to retain). Used by `cgpipe ledger status` to enumerate jobs.
+// safe for the caller to retain). Used by `cgp ledger status` to enumerate jobs.
 func (l *Ledger) Jobs() []Job {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -534,7 +534,7 @@ func (l *Ledger) Jobs() []Job {
 }
 
 // Owners returns a snapshot of the current ownership map: each output path mapped
-// to the id of the job that last produced it. Used by `cgpipe ledger status -output`.
+// to the id of the job that last produced it. Used by `cgp ledger status -output`.
 func (l *Ledger) Owners() map[string]string {
 	l.mu.Lock()
 	defer l.mu.Unlock()

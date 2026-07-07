@@ -3,5 +3,5 @@
 // default; scheduler runners (slurm, sge, pbs, batchq) and the graphviz runner
 // follow the same template-based architecture.
 //
-// See docs/language-spec.md §11 (cgpipe.runner.*).
+// See docs/language-spec.md §11 (cgp.runner.*).
 package runner

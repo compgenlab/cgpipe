@@ -1,5 +1,5 @@
 // Package lsp implements a minimal Language Server Protocol server for the cgpipe
-// language, exposed as `cgpipe lsp`. It speaks JSON-RPC 2.0 over stdio and reuses
+// language, exposed as `cgp lsp`. It speaks JSON-RPC 2.0 over stdio and reuses
 // cgpipe's own lexer and parser to provide semantic tokens, parse diagnostics,
 // hover, and completion.
 //

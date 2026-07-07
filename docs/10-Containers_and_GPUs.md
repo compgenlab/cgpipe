@@ -9,13 +9,13 @@ container engine.
 
 Wrapping happens when **both** are set:
 
-- **`cgpipe.container.engine`** — `docker`, `singularity`, or `apptainer` (in config
+- **`cgp.container.engine`** — `docker`, `singularity`, or `apptainer` (in config
   or the script). Unset disables all wrapping.
 - **`job.container = "<image>"`** — a per-target directive naming the image. A
   target with no `job.container` runs unwrapped even when an engine is configured.
 
 ```
-cgpipe.container.engine = "docker"
+cgp.container.engine = "docker"
 
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
@@ -31,9 +31,9 @@ directory, and (for Docker) mapping the host user** automatically:
 ```bash
 __cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
 trap 'rm -f "$__cgpipe_body"' EXIT
-cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
+cat > "$__cgpipe_body" <<'__CGP_BODY__'
 samtools sort in.bam > out.bam
-__CGPIPE_BODY__
+__CGP_BODY__
 
 docker run --rm \
     -v /tmp:/tmp \
@@ -54,7 +54,7 @@ The same target with `engine = "singularity"` uses `singularity exec` with `-B`
 binds and `--pwd`:
 
 ```
-cgpipe.container.engine = "singularity"
+cgp.container.engine = "singularity"
 
 out.bam: in.bam {{
     job.container = "docker://biocontainers/bwa:0.7.17"
@@ -74,7 +74,7 @@ singularity exec \
 ## Tuning the invocation
 
 Extra settings shape the engine command. Each is available globally as
-`cgpipe.container.<name>` and/or per target as `job.container.<name>`:
+`cgp.container.<name>` and/or per target as `job.container.<name>`:
 
 | Setting | Purpose |
 |---------|---------|
@@ -83,7 +83,7 @@ Extra settings shape the engine command. Each is available globally as
 | `job.container.opts` | Raw extra flags for the engine |
 | `job.container.body_dir` | Where the temp body file is written/mounted (default `/tmp`) |
 | `job.container.shell` | Shell used to run the body inside the image (default `sh`) |
-| `cgpipe.container.user_map` | Docker: add `-u $(id -u):$(id -g)` (default on) |
+| `cgp.container.user_map` | Docker: add `-u $(id -u):$(id -g)` (default on) |
 
 ```
 out.bam: in.bam {{
@@ -126,7 +126,7 @@ train.model: data.tfrecord {{
 ```
 
 - `job.gpu = true` → one GPU; `job.gpu = N` → N; `job.gpu = false`/unset → none.
-  Global default: `cgpipe.gpu`.
+  Global default: `cgp.gpu`.
 - On a scheduler it emits the resource request — on SLURM, `#SBATCH --gres=gpu:2`.
 - Inside a container it adds the engine's GPU flag (Docker `--gpus`,
   Singularity/Apptainer `--nv`).

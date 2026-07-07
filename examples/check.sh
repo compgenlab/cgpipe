@@ -4,20 +4,20 @@
 # examples from bit-rotting. Uses only coreutils + gzip, so it runs anywhere.
 #
 #   examples/check.sh            # build cgpipe on the fly, run all examples
-#   CGPIPE=/path/to/cgpipe examples/check.sh   # use a prebuilt binary
+#   CGP=/path/to/cgp examples/check.sh   # use a prebuilt binary
 #
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-CGPIPE="${CGPIPE:-$ROOT/bin/cgpipe}"
-if [ ! -x "$CGPIPE" ]; then
-    echo "building cgpipe ..."
-    ( cd "$ROOT" && GOWORK=off go build -o bin/cgpipe ./cmd/cgpipe )
-    CGPIPE="$ROOT/bin/cgpipe"
+CGP="${CGP:-$ROOT/bin/cgp}"
+if [ ! -x "$CGP" ]; then
+    echo "building cgp ..."
+    ( cd "$ROOT" && GOWORK=off go build -o bin/cgp ./cmd/cgpipe )
+    CGP="$ROOT/bin/cgp"
 fi
 # Absolutize: each example runs from its own temp dir, so a relative path breaks.
-case "$CGPIPE" in /*) ;; *) CGPIPE="$(cd "$(dirname "$CGPIPE")" && pwd)/$(basename "$CGPIPE")" ;; esac
+case "$CGP" in /*) ;; *) CGP="$(cd "$(dirname "$CGP")" && pwd)/$(basename "$CGP")" ;; esac
 
 fail=0
 # Each entry: "<dir>|<cgpipe args>|<output file to check>"
@@ -25,7 +25,7 @@ run() {
     local dir="$1" args="$2" out="$3"
     local work; work="$(mktemp -d)"
     cp -R "$HERE/$dir/." "$work/"
-    ( cd "$work" && CGPIPE_ENV='cgpipe.runner.shell.autoexec = true' "$CGPIPE" $args ) >/dev/null 2>&1
+    ( cd "$work" && CGP_ENV='cgp.runner.shell.autoexec = true' "$CGP" $args ) >/dev/null 2>&1
     if [ -s "$work/$out" ]; then
         echo "ok    $dir -> $out"
     else

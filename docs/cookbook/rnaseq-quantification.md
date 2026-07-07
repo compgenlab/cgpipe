@@ -8,12 +8,12 @@ in one run.
 > annotation.
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # RNA-seq quantification: align with STAR, then count reads per gene with
 # ngsutilsj. Reads a sample sheet and emits an align+count chain per row:
 #
-#     cgpipe rnaseq-quantification.cgp --sheet samples.tsv \
+#     cgp rnaseq-quantification.cgp --sheet samples.tsv \
 #                    --index star_index --gtf genes.gtf
 #
 # samples.tsv has columns: sample, r1, r2
@@ -71,7 +71,7 @@ for row in samples {
 A cohort — `samples.tsv` with columns `sample`, `r1`, `r2`:
 
 ```sh
-cgpipe -r slurm rnaseq-quantification.cgp --sheet samples.tsv \
+cgp -r slurm rnaseq-quantification.cgp --sheet samples.tsv \
     --index star_index --gtf genes.gtf
 ```
 

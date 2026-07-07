@@ -27,9 +27,9 @@ import (
 
 // probeTimeout bounds how long a scheduler status probe may take; a hung or slow
 // scheduler must not stall the whole run. Default 30s, overridable via
-// CGPIPE_PROBE_TIMEOUT (whole seconds); a value <= 0 disables the bound.
+// CGP_PROBE_TIMEOUT (whole seconds); a value <= 0 disables the bound.
 func probeTimeout() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("CGPIPE_PROBE_TIMEOUT")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("CGP_PROBE_TIMEOUT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			if n <= 0 {
 				return 0
@@ -83,10 +83,10 @@ type Scheduler struct {
 	State      func(string) string   // normalized live state for reports: queued|running|done|failed|"" (unknown); optional
 	// Status returns the scheduler's native status word for a job (e.g. SLURM
 	// "PENDING", batchq "PROXYQUEUED"), or "" if the job is unknown/aged out. Used
-	// by `cgpipe ledger status` to show scheduler-specific states verbatim.
+	// by `cgp ledger status` to show scheduler-specific states verbatim.
 	Status func(string) string
 	// EndTime returns the job's completion time (Unix seconds) when the scheduler
-	// exposes one, with ok=false otherwise. Best-effort: used by `cgpipe ledger status`
+	// exposes one, with ok=false otherwise. Best-effort: used by `cgp ledger status`
 	// as the upper bound of the output-mtime window. Only some schedulers implement it.
 	EndTime func(string) (int64, bool)
 	// ArrayTaskVar is the run-time environment variable carrying a job array's task
@@ -126,7 +126,7 @@ var schedulers = map[string]Scheduler{
 		Status:     pbsStatus,
 		// No ArrayTaskVar: pipeline-array task ids on PBS use a different subjob
 		// format (12345[i]) than SLURM/BatchQ's <base>_<i>, so pipeline arrays fall
-		// back to per-element submission on PBS. (cgpipe sub --array has no downstream
+		// back to per-element submission on PBS. (cgp sub --array has no downstream
 		// task-id deps and still renders #PBS -J.)
 	},
 	"batchq": {
@@ -450,7 +450,7 @@ func Run(p *eval.Program, sch Scheduler, opts Options) error {
 
 // SubmitOne submits a single target with the given explicit dependency job ids,
 // plus dependencies derived from afterOutputs (the active ledger owner of each).
-// Used by `cgpipe sub`.
+// Used by `cgp sub`.
 func SubmitOne(p *eval.Program, sch Scheduler, t *eval.Target, explicitDeps, afterOutputs []string, opts Options) (string, error) {
 	b, err := newBackend(p, sch, opts)
 	if err != nil {
@@ -480,11 +480,11 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 		opts.Out = os.Stdout
 	}
 	shell := "/bin/bash"
-	if v, ok := p.Get("cgpipe.shell"); ok {
+	if v, ok := p.Get("cgp.shell"); ok {
 		shell = eval.Stringify(v)
 	}
 	gh := false
-	if v, ok := p.Get("cgpipe.runner." + sch.Name + ".global_hold"); ok {
+	if v, ok := p.Get("cgp.runner." + sch.Name + ".global_hold"); ok {
 		gh = eval.Truthy(v)
 	}
 	// Effective working directory recorded in the ledger so a later status read /
@@ -495,12 +495,12 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 		wd, _ = os.Getwd()
 	}
 	b := &backend{prog: p, sch: sch, opts: opts, shell: shell, globalHold: gh, user: os.Getenv("USER"), wd: wd}
-	if v, ok := p.Get("cgpipe.run_id"); ok {
+	if v, ok := p.Get("cgp.run_id"); ok {
 		b.runID = eval.Stringify(v)
 	}
 	// Optional ledger: enables cross-run reuse of still-active jobs. Not used in
 	// dry-run (no real job ids).
-	if v, ok := p.Get("cgpipe.ledger"); ok && eval.Stringify(v) != "" && !opts.DryRun {
+	if v, ok := p.Get("cgp.ledger"); ok && eval.Stringify(v) != "" && !opts.DryRun {
 		lg, err := ledger.Open(eval.Stringify(v))
 		if err != nil {
 			return nil, fmt.Errorf("ledger: %w", err)
@@ -517,9 +517,9 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 // while keeping the rest of its wiring (submit command, status probes, mem
 // normalization). Two sources, in priority order:
 //
-//  1. cgpipe.runner.<name>.template = "<path>" — explicit and per-scheduler, via
+//  1. cgp.runner.<name>.template = "<path>" — explicit and per-scheduler, via
 //     normal config layering. A set-but-unreadable/empty path is a loud error.
-//  2. ~/.cgpipe/custom_template.cgp — a single zero-config convention file applied to
+//  2. ~/.cgp/custom_template.cgp — a single zero-config convention file applied to
 //     whichever scheduler runner is active (most users target one cluster). Absent
 //     or empty ⇒ silently keep the built-in.
 //
@@ -527,7 +527,7 @@ func newBackend(p *eval.Program, sch Scheduler, opts Options) (*backend, error) 
 // source path in b.templateSrc for error messages.
 func (b *backend) resolveTemplate() error {
 	name := b.sch.Name
-	if path := b.cfg("cgpipe.runner." + name + ".template"); path != "" {
+	if path := b.cfg("cgp.runner." + name + ".template"); path != "" {
 		full := expandTilde(path)
 		data, err := os.ReadFile(full)
 		if err != nil {
@@ -541,7 +541,7 @@ func (b *backend) resolveTemplate() error {
 		return nil
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		conv := filepath.Join(home, ".cgpipe", "custom_template.cgp")
+		conv := filepath.Join(home, ".cgp", "custom_template.cgp")
 		if data, err := os.ReadFile(conv); err == nil && strings.TrimSpace(string(data)) != "" {
 			b.sch.Template = string(data)
 			b.templateSrc = conv
@@ -697,7 +697,7 @@ func (b *backend) Submit(t *eval.Target, deps []string) (string, error) {
 	// An integer job.array is a pipeline array-membership marker (the element's task
 	// index), consumed by the driver/SubmitArray — a lone target is not an array, so
 	// strip it here. A string job.array (a literal index spec, e.g. from
-	// `cgpipe sub --array`) is kept and rendered into the array directive.
+	// `cgp sub --array`) is kept and rendered into the array directive.
 	if v, ok := vars["job.array"]; ok {
 		if _, isInt := v.(eval.IntVal); isInt {
 			delete(vars, "job.array")
@@ -759,10 +759,10 @@ func (b *backend) finalizeVars(vars map[string]eval.Value, body string, inputs, 
 	if len(deps) > 0 {
 		vars["job.depids"] = eval.StrVal(strings.Join(deps, b.sch.DepSep))
 	}
-	if pe := b.cfg("cgpipe.runner.sge.parallelenv"); pe != "" {
+	if pe := b.cfg("cgp.runner.sge.parallelenv"); pe != "" {
 		setDefault(vars, "job.parallelenv", eval.StrVal(pe))
 	}
-	if rid := b.cfg("cgpipe.run_id"); rid != "" {
+	if rid := b.cfg("cgp.run_id"); rid != "" {
 		setDefault(vars, "job.run_id", eval.StrVal(rid))
 	}
 }

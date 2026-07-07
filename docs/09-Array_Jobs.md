@@ -12,7 +12,7 @@ This chapter covers:
 
 - **`for … with i`** — a loop counter, handy for indexing array tasks (and useful
   on its own).
-- **`cgpipe sub --array`** — submit a `cgpipe sub` fan-out as one array job.
+- **`cgp sub --array`** — submit a `cgp sub` fan-out as one array job.
 - **Pipeline array jobs** — mark a fan-out rule with `job.array` and cgpipe coalesces
   it into one array submission, wiring downstream dependencies per task.
 
@@ -35,16 +35,16 @@ It works over lists and ranges, and — like the element variable — the counte
 remains set after the loop. The index is 1-based because scheduler arrays
 conventionally start at 1 (SGE in particular disallows task 0).
 
-## `cgpipe sub --array`
+## `cgp sub --array`
 
-[`cgpipe sub`](08-Running_Jobs.md#one-off-jobs-cgpipe-sub) already fans a command out
+[`cgp sub`](08-Running_Jobs.md#one-off-jobs-cgpipe-sub) already fans a command out
 over a list of files — one job per file, with `{}` placeholders expanded against
 each. Add `--array` and cgpipe submits that fan-out as **one** array job instead of N
 separate ones:
 
 ```sh
 # one sbatch --array=1-3 instead of three sbatch calls
-cgpipe sub -r slurm --array -n qc 'fastqc {} -o qc/' -- a.fastq b.fastq c.fastq
+cgp sub -r slurm --array -n qc 'fastqc {} -o qc/' -- a.fastq b.fastq c.fastq
 ```
 
 The rendered submission carries the array header, and the command becomes a
@@ -67,7 +67,7 @@ fan-out — each `case` branch is just that file's fully-rendered command. The b
 list works the same way through `--files-from`:
 
 ```sh
-cgpipe sub -r slurm --array --files-from samples.txt -m 4G \
+cgp sub -r slurm --array --files-from samples.txt -m 4G \
     'bwa mem ref.fa {} > {@.fastq.gz}.bam'
 ```
 
@@ -86,7 +86,7 @@ A fixed dependency applies to the whole array, so `--deps` and a fixed `--after`
 work as usual — every task waits on the named job(s):
 
 ```sh
-cgpipe sub -r slurm --array --deps 4242 'process {}' -- *.dat   # whole array waits on 4242
+cgp sub -r slurm --array --deps 4242 'process {}' -- *.dat   # whole array waits on 4242
 ```
 
 A **`{}`-expanded `--after`** is rejected, because it asks each task to depend on a
@@ -94,7 +94,7 @@ A **`{}`-expanded `--after`** is rejected, because it asks each task to depend o
 carries one dependency directive for all its tasks) cannot express:
 
 ```sh
-cgpipe sub -r slurm --array -a '{@}.bam' 'index {}' -- *.bam
+cgp sub -r slurm --array -a '{@}.bam' 'index {}' -- *.bam
 # error: --array cannot use a {}-expanded --after (per-element dependency);
 #        use a fixed --after, or drop --array
 ```
@@ -169,7 +169,7 @@ array→gather edges work now.
 
 `aftercorr` for element-wise array→array edges and auto-deconstructing a mismatched
 dependent array on restart are planned follow-ups. For embarrassingly-parallel work
-today, `job.array` (with a gather) and `cgpipe sub --array` cover the common cases.
+today, `job.array` (with a gather) and `cgp sub --array` cover the common cases.
 
 To scatter a [sample sheet](13-Sample_Sheets.md) as an array, loop its rows with a
 counter and set `job.array` to the index:

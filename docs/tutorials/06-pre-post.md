@@ -9,7 +9,7 @@ once with the `@pre` and `@post` reserved targets.
 `wrapped.cgp`:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 
 @pre {{
     echo "==> ${output}"
@@ -30,7 +30,7 @@ out.txt: {{
 ## Render it
 
 ```console
-$ cgpipe -dr wrapped.cgp
+$ cgp -dr wrapped.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 

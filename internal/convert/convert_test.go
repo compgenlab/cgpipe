@@ -14,7 +14,7 @@ func convertOf(t *testing.T, src string) string {
 
 func TestShebang(t *testing.T) {
 	got := convertOf(t, "#!/usr/bin/env cgpipe\n")
-	if !strings.HasPrefix(got, "#!/usr/bin/env cgpipe\n") {
+	if !strings.HasPrefix(got, "#!/usr/bin/env cgp\n") {
 		t.Fatalf("shebang not rewritten:\n%s", got)
 	}
 }
@@ -47,15 +47,15 @@ func TestForToBraces(t *testing.T) {
 
 func TestSettingsRename(t *testing.T) {
 	got := convertOf(t, "cgpipe.joblog = \"j.log\"\ncgpipe.log = \"x.log\"\ncgpipe.loglevel = 2\n")
-	if !strings.Contains(got, "cgpipe.ledger = \"j.log\"") {
+	if !strings.Contains(got, "cgp.ledger = \"j.log\"") {
 		t.Errorf("joblog->ledger missing:\n%s", got)
 	}
-	// Keys that were not renamed keep the cgpipe.* prefix unchanged.
-	if !strings.Contains(got, "cgpipe.log = \"x.log\"") || !strings.Contains(got, "cgpipe.loglevel = 2") {
-		t.Errorf("unrenamed cgpipe.* keys missing:\n%s", got)
+	// The whole legacy cgpipe.* namespace is rewritten to cgp.*.
+	if !strings.Contains(got, "cgp.log = \"x.log\"") || !strings.Contains(got, "cgp.loglevel = 2") {
+		t.Errorf("cgpipe.* -> cgp.* rewrite missing:\n%s", got)
 	}
-	if strings.Contains(got, "cgpipe.joblog") {
-		t.Errorf("leftover legacy cgpipe.joblog:\n%s", got)
+	if strings.Contains(got, "cgpipe.") {
+		t.Errorf("leftover legacy cgpipe.* prefix:\n%s", got)
 	}
 }
 

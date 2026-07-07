@@ -10,7 +10,7 @@ let client: LanguageClient | undefined;
 
 export function activate(_context: ExtensionContext): void {
   const config = workspace.getConfiguration("cgpipe");
-  const serverPath = config.get<string>("serverPath") || "cgpipe";
+  const serverPath = config.get<string>("serverPath") || "cgp";
 
   const serverOptions: ServerOptions = {
     command: serverPath,
@@ -37,7 +37,7 @@ export function activate(_context: ExtensionContext): void {
     window.showWarningMessage(
       `cgpipe: could not start the language server ("${serverPath} lsp"). ` +
         `Syntax highlighting still works; diagnostics/hover/completion are disabled. ` +
-        `Set "cgpipe.serverPath" to your cgpipe binary. (${err})`,
+        `Set "cgpipe.serverPath" to your cgp binary. (${err})`,
     );
   });
 }

@@ -50,7 +50,7 @@
         "cgpipe.serverPath": {
           "type": "string",
           "default": "cgpipe",
-          "markdownDescription": "Path to the `cgpipe` binary used to run the language server (`cgpipe lsp`). Defaults to `cgpipe` on your PATH."
+          "markdownDescription": "Path to the `cgp` binary used to run the language server (`cgp lsp`). Defaults to `cgp` on your PATH."
         },
         "cgpipe.trace.server": {
           "type": "string",

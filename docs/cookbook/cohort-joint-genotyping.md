@@ -10,12 +10,12 @@ into a single command with a **`stage` workflow**.
 ## The joint step
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Joint genotyping: combine many per-sample gVCFs into one cohort VCF. Pass each
 # gVCF with a repeated flag, which cgpipe collects into a list:
 #
-#     cgpipe joint.cgp --ref genome.fa --gvcf A.g.vcf.gz --gvcf B.g.vcf.gz --gvcf C.g.vcf.gz
+#     cgp joint.cgp --ref genome.fa --gvcf A.g.vcf.gz --gvcf B.g.vcf.gz --gvcf C.g.vcf.gz
 
 if !ref  { print "ERROR: --ref required"; exit 1 }
 if !gvcf { print "ERROR: at least one --gvcf required"; exit 1 }
@@ -36,7 +36,7 @@ cohort.vcf.gz: @{gvcf} ${ref} {{
 ```
 
 ```sh
-cgpipe -r slurm joint.cgp --ref genome.fa \
+cgp -r slurm joint.cgp --ref genome.fa \
     --gvcf A.g.vcf.gz --gvcf B.g.vcf.gz --gvcf C.g.vcf.gz
 ```
 
@@ -55,13 +55,13 @@ To call every sample and joint-genotype in one command, chain them with stages.
 Each calling stage **exports** its gVCF path, which the joint stage gathers:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Cohort workflow: call each sample, then joint-genotype.
-#     cgpipe cohort.cgp --ref genome.fa
+#     cgp cohort.cgp --ref genome.fa
 #
 # For a large cohort, generate the call stages from a sample sheet rather than
-# listing them by hand. On a scheduler, set cgpipe.ledger so the joint stage waits on
+# listing them by hand. On a scheduler, set cgp.ledger so the joint stage waits on
 # the still-queued call jobs.
 
 if !ref { print "ERROR: --ref required"; exit 1 }
@@ -90,7 +90,7 @@ export gvcf = "${sample}.g.vcf.gz"
 - **`stage` / `export`.** Each `call-one.cgp` is a normal, independently runnable
   pipeline; `export gvcf = "..."` exposes its output as `${callA.gvcf}` to the
   workflow without changing standalone behavior.
-- **Cross-stage dependencies.** On a scheduler, configure `cgpipe.ledger` so the joint
+- **Cross-stage dependencies.** On a scheduler, configure `cgp.ledger` so the joint
   stage's `afterok` is wired onto the still-queued calling jobs (see
   [The Ledger](../11-The_Ledger.md)).
 

@@ -125,7 +125,7 @@ out: in {{
 }
 
 func TestRenderContainerWrap(t *testing.T) {
-	got := renderFirst(t, `cgpipe.container.engine = "docker"
+	got := renderFirst(t, `cgp.container.engine = "docker"
 out.bam: in.bam {{
     job.container = "biocontainers/samtools:1.9"
     --

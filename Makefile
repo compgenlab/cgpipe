@@ -25,30 +25,30 @@ LDFLAGS := -ldflags "-X github.com/compgenlab/cgpipe/internal/buildinfo.Version=
 # `make all` cross-builds every supported target; that's what CI runs
 # and what release tarballs are built from.
 # go env GOOS reports darwin, but our binaries use the macos label, so
-# normalize it. Otherwise HOST_BINARY on macOS would be cgpipe.darwin_arm64,
+# normalize it. Otherwise HOST_BINARY on macOS would be cgp.darwin_arm64,
 # which has no rule, and `make spec` fails with "no target to build".
 HOST_OS := $(subst darwin,macos,$(shell go env GOOS))
 HOST_ARCH := $(shell go env GOARCH)
-HOST_BINARY := bin/cgpipe.$(HOST_OS)_$(HOST_ARCH)
+HOST_BINARY := bin/cgp.$(HOST_OS)_$(HOST_ARCH)
 
 .DEFAULT_GOAL := $(HOST_BINARY)
 
 all: \
-	bin/cgpipe.linux_amd64 \
-	bin/cgpipe.linux_arm64 \
-	bin/cgpipe.macos_amd64 \
-	bin/cgpipe.macos_arm64
+	bin/cgp.linux_amd64 \
+	bin/cgp.linux_arm64 \
+	bin/cgp.macos_amd64 \
+	bin/cgp.macos_arm64
 
-bin/cgpipe.macos_amd64: go.mod go.sum $(SOURCES) | bin
+bin/cgp.macos_amd64: go.mod go.sum $(SOURCES) | bin
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $@ ./cmd/cgpipe
 
-bin/cgpipe.macos_arm64: go.mod go.sum $(SOURCES) | bin
+bin/cgp.macos_arm64: go.mod go.sum $(SOURCES) | bin
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $@ ./cmd/cgpipe
 
-bin/cgpipe.linux_amd64: go.mod go.sum $(SOURCES) | bin
+bin/cgp.linux_amd64: go.mod go.sum $(SOURCES) | bin
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $@ ./cmd/cgpipe
 
-bin/cgpipe.linux_arm64: go.mod go.sum $(SOURCES) | bin
+bin/cgp.linux_arm64: go.mod go.sum $(SOURCES) | bin
 	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $@ ./cmd/cgpipe
 
 bin:
@@ -68,6 +68,6 @@ test:
 # in ./tests); this target is the human-facing entry point — pass FLAGS=-v for
 # per-failure diffs or FLAGS=-u to refresh golden files.
 spec: $(HOST_BINARY)
-	CGPIPE_BIN=$(abspath $(HOST_BINARY)) ./tests/run.sh $(FLAGS)
+	CGP_BIN=$(abspath $(HOST_BINARY)) ./tests/run.sh $(FLAGS)
 
 .PHONY: all clean run test spec

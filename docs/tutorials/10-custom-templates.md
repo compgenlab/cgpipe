@@ -33,7 +33,7 @@ out.bam: {{
 ```
 
 ```console
-$ cgpipe -dr -r slurm pipeline.cgp
+$ cgp -dr -r slurm pipeline.cgp
 ...
 #SBATCH -J j
 #SBATCH --qos=long
@@ -42,12 +42,12 @@ $ cgpipe -dr -r slurm pipeline.cgp
 ...
 ```
 
-These are best set **once** in `~/.cgpipe/config`, so every pipeline inherits your
+These are best set **once** in `~/.cgp/config`, so every pipeline inherits your
 cluster's account and partition without mentioning them:
 
 ```
-# ~/.cgpipe/config
-cgpipe.runner   = "slurm"
+# ~/.cgp/config
+cgp.runner   = "slurm"
 job.account  = "lab123"
 job.queue    = "highmem"
 ```
@@ -67,7 +67,7 @@ out.bam: {{
 ```
 
 ```console
-$ cgpipe -dr -r slurm pipeline.cgp
+$ cgp -dr -r slurm pipeline.cgp
 ...
 #SBATCH -J j
 #SBATCH --exclusive
@@ -114,7 +114,7 @@ script structure, a module-load preamble, or directives cgpipe doesn't model —
 your **own** template. Start from the built-in:
 
 ```sh
-cgpipe show-template -r slurm > ~/.cgpipe/custom_template.cgp
+cgp show-template -r slurm > ~/.cgp/custom_template.cgp
 ```
 
 Edit that file (it's the body language: `${job.name}`, `${job.mem}`, `${job.procs}`,
@@ -124,8 +124,8 @@ cgpipe uses it for the active scheduler runner. Two ways to point at a template:
 
 | Source | Scope |
 |--------|-------|
-| `~/.cgpipe/custom_template.cgp` | A single file, applied to whichever scheduler runner is active (most people target one cluster) |
-| `cgpipe.runner.<name>.template = "<path>"` | Explicit and per-scheduler — set in `~/.cgpipe/config`, a site config, or the pipeline |
+| `~/.cgp/custom_template.cgp` | A single file, applied to whichever scheduler runner is active (most people target one cluster) |
+| `cgp.runner.<name>.template = "<path>"` | Explicit and per-scheduler — set in `~/.cgp/config`, a site config, or the pipeline |
 
 **Precedence:** the explicit config key wins, then the convention file, then the
 built-in. Only the *template* is replaced — the submit command, the status/`squeue`
@@ -133,8 +133,8 @@ probes, and mem normalization stay as configured. A config key pointing at a
 missing file is a hard error (so a typo fails loudly).
 
 ```
-# ~/.cgpipe/config — force a vetted site template for SLURM
-cgpipe.runner.slurm.template = "/etc/cgpipe/slurm.template.cgp"
+# ~/.cgp/config — force a vetted site template for SLURM
+cgp.runner.slurm.template = "/etc/cgp/slurm.template.cgp"
 ```
 
 ## Next

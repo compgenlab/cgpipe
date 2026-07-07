@@ -147,32 +147,32 @@ func (p *Program) renderTargetScope(t *Target) (*Scope, string, error) {
 }
 
 // defaultJobName is the job name used when a target sets no job.name. It mirrors
-// the scheduler's fallback: the primary output, else cgpipe.<special>, else cgpipe.job.
+// the scheduler's fallback: the primary output, else cgp.<special>, else cgp.job.
 func defaultJobName(t *Target) string {
 	if len(t.Outputs) > 0 {
 		return t.Outputs[0]
 	}
 	if t.Special != "" {
-		return "cgpipe." + t.Special
+		return "cgp." + t.Special
 	}
-	return "cgpipe.job"
+	return "cgp.job"
 }
 
-// wrapContainer wraps the body to run inside a container when cgpipe.container.engine
+// wrapContainer wraps the body to run inside a container when cgp.container.engine
 // and a per-target image (job.container = …) are both set.
 func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
-	engine := p.settingStr("cgpipe.container.engine")
+	engine := p.settingStr("cgp.container.engine")
 	image := scopeStr(sc, "job.container")
 	if engine == "" || image == "" {
 		return body
 	}
-	optsKey := "cgpipe.container.docker_opts"
+	optsKey := "cgp.container.docker_opts"
 	if e := strings.ToLower(engine); e == "singularity" || e == "apptainer" {
-		optsKey = "cgpipe.container.singularity_opts"
+		optsKey = "cgp.container.singularity_opts"
 	}
 	gpu := scopeStr(sc, "job.gpu")
 	if gpu == "" {
-		gpu = p.settingStr("cgpipe.gpu")
+		gpu = p.settingStr("cgp.gpu")
 	}
 	if gpu == "true" {
 		gpu = "1"
@@ -180,21 +180,21 @@ func (p *Program) wrapContainer(sc *Scope, t *Target, body string) string {
 		gpu = ""
 	}
 	userMap := true
-	if v, ok := p.Get("cgpipe.container.user_map"); ok {
+	if v, ok := p.Get("cgp.container.user_map"); ok {
 		userMap = truthy(v)
 	}
 	return container.Wrap(body, container.Spec{
 		Engine:     engine,
 		Image:      image,
 		WorkingDir: scopeStr(sc, "job.wd"),
-		BodyDir:    firstNonEmpty(scopeStr(sc, "job.container.body_dir"), p.settingStr("cgpipe.container.body_dir")),
-		Shell:      firstNonEmpty(scopeStr(sc, "job.container.shell"), p.settingStr("cgpipe.container.shell")),
+		BodyDir:    firstNonEmpty(scopeStr(sc, "job.container.body_dir"), p.settingStr("cgp.container.body_dir")),
+		Shell:      firstNonEmpty(scopeStr(sc, "job.container.shell"), p.settingStr("cgp.container.shell")),
 		GPU:        gpu,
 		UserMap:    userMap,
-		Binds:      append(scopeList(sc, "job.container.bind"), p.settingList("cgpipe.container.bind")...),
+		Binds:      append(scopeList(sc, "job.container.bind"), p.settingList("cgp.container.bind")...),
 		Inputs:     t.Inputs,
 		Outputs:    t.Outputs,
-		Env:        append(scopeList(sc, "job.container.env"), p.settingList("cgpipe.container.env")...),
+		Env:        append(scopeList(sc, "job.container.env"), p.settingList("cgp.container.env")...),
 		Opts:       append(scopeList(sc, "job.container.opts"), p.settingList(optsKey)...),
 	})
 }

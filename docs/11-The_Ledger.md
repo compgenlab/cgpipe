@@ -9,7 +9,7 @@ queued without resubmitting or colliding.
 Enable it with a path — the ledger is a **directory**, created if it doesn't exist:
 
 ```
-cgpipe.ledger = "/scratch/me/jobs.ledger"
+cgp.ledger = "/scratch/me/jobs.ledger"
 ```
 
 ## What it does and doesn't track
@@ -72,19 +72,19 @@ rather than resubmitting:
 # reuse: a.bam already owned by active job 1001
 ```
 
-## Inspecting the ledger: `cgpipe ledger`
+## Inspecting the ledger: `cgp ledger`
 
 ```
-cgpipe ledger dump <dir>                   dump all jobs as key/value TSV
-cgpipe ledger search [filters] <dir>       dump jobs matching the filters
-cgpipe ledger status [-r RUNNER] [-output] <dir>   live scheduler status per job (or output)
-cgpipe ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
+cgp ledger dump <dir>                   dump all jobs as key/value TSV
+cgp ledger search [filters] <dir>       dump jobs matching the filters
+cgp ledger status [-r RUNNER] [-output] <dir>   live scheduler status per job (or output)
+cgp ledger vacuum <dir>                 compact the ledger, dropping jobs that own no current output
 ```
 
 `dump` prints every job as key/value TSV — provenance you can grep:
 
 ```console
-$ cgpipe ledger dump jobs.ledger
+$ cgp ledger dump jobs.ledger
 1001	PIPELINE	led.cgp
 1001	NAME	trim
 1001	OUTPUT	trimmed.fq
@@ -111,7 +111,7 @@ Note `1002 DEP 1001` — the recorded dependency edge. `search` narrows by filte
 | `-id JOBID` | the job id (exact) |
 
 ```console
-$ cgpipe ledger search -o aligned.bam jobs.ledger
+$ cgp ledger search -o aligned.bam jobs.ledger
 1002	NAME	align
 1002	OUTPUT	aligned.bam
 ...
@@ -121,15 +121,15 @@ $ cgpipe ledger search -o aligned.bam jobs.ledger
 
 `status` asks the scheduler what is happening with the recorded jobs right now —
 a pipeline-free view of the queue. It needs a scheduler runner to query: pass
-`-r <runner>` or let it pick up `cgpipe.runner` (and, if you omit `<dir>`,
-`cgpipe.ledger`) from your config.
+`-r <runner>` or let it pick up `cgp.runner` (and, if you omit `<dir>`,
+`cgp.ledger`) from your config.
 
 The status word shown is the scheduler's **native** one, so cluster-specific
 states stay visible (SLURM `PENDING`/`COMPLETED`, batchq `PROXYQUEUED`, SGE `qw`,
 …). A job the scheduler no longer knows about reads `UNKNOWN`.
 
 ```console
-$ cgpipe ledger status -r batchq jobs.ledger
+$ cgp ledger status -r batchq jobs.ledger
 1001	SUCCESS	trim
 1002	RUNNING	align
 1003	PROXYQUEUED	merge
@@ -139,7 +139,7 @@ With `-output`, each row is an **output file** mapped to the most recent job tha
 claims it, and the status is reconciled against the file on disk:
 
 ```console
-$ cgpipe ledger status -r batchq -output jobs.ledger
+$ cgp ledger status -r batchq -output jobs.ledger
 trimmed.fq	1001	SUCCESS
 aligned.bam	1002	RUNNING
 old.bam	1009	COMPLETE

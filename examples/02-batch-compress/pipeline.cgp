@@ -1,10 +1,10 @@
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # One wildcard rule compresses every input file; `all` requests them together.
 # Swap `gzip` for any per-file tool (samtools index, fastqc, …) and the shape
 # is identical.
 #
-# Run:  cgpipe pipeline.cgp | bash
+# Run:  cgp pipeline.cgp | bash
 
 %.txt.gz: %.txt {{
     gzip -c ${input} > ${output}

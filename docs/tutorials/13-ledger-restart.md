@@ -13,8 +13,8 @@ are skipped, and only the missing or stale ones rebuild. No flags, no state file
 no "resume mode."
 
 ```console
-$ cgpipe pipeline.cgp | bash      # dies after producing trimmed.fq
-$ cgpipe pipeline.cgp | bash      # re-run: trimmed.fq is reused, only aligned.bam runs
+$ cgp pipeline.cgp | bash      # dies after producing trimmed.fq
+$ cgp pipeline.cgp | bash      # re-run: trimmed.fq is reused, only aligned.bam runs
 ```
 
 `-force` overrides this and rebuilds the whole goal graph when you want a clean
@@ -28,9 +28,9 @@ duplicates. Configure a ledger and a scheduler runner, and cgpipe instead reuses
 in-flight jobs:
 
 ```
-#!/usr/bin/env cgpipe
-cgpipe.ledger = "jobs.ledger"
-cgpipe.runner = "slurm"
+#!/usr/bin/env cgp
+cgp.ledger = "jobs.ledger"
+cgp.runner = "slurm"
 
 trimmed.fq: a.fastq {{
     job.name = "trim"
@@ -49,10 +49,10 @@ aligned.bam: trimmed.fq {{
 The first submission records ownership and the dependency edge:
 
 ```console
-$ cgpipe pipeline.cgp
+$ cgp pipeline.cgp
 1001
 1002
-$ cgpipe ledger dump jobs.ledger
+$ cgp ledger dump jobs.ledger
 1001	NAME	trim
 1001	OUTPUT	trimmed.fq
 1002	NAME	align
@@ -75,10 +75,10 @@ earlier stage's jobs are still queued to produce.
 ## Inspecting and maintaining the ledger
 
 ```sh
-cgpipe ledger dump jobs.ledger                  # everything, as TSV
-cgpipe ledger search -o aligned.bam jobs.ledger # just jobs producing aligned.bam
-cgpipe ledger status -r slurm jobs.ledger       # live scheduler status per job
-cgpipe ledger vacuum jobs.ledger                # compact, dropping jobs that own no current output
+cgp ledger dump jobs.ledger                  # everything, as TSV
+cgp ledger search -o aligned.bam jobs.ledger # just jobs producing aligned.bam
+cgp ledger status -r slurm jobs.ledger       # live scheduler status per job
+cgp ledger vacuum jobs.ledger                # compact, dropping jobs that own no current output
 ```
 
 ## Next

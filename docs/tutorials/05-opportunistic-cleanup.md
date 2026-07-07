@@ -46,7 +46,7 @@ merge really produced its output.
 ## Render it
 
 ```console
-$ cgpipe -dr call.cgp --bam sample.bam --ref ref.fa --out sample
+$ cgp -dr call.cgp --bam sample.bam --ref ref.fa --out sample
 ...
 # ---- sample.vcf.gz ----
 bcftools concat -O z -o sample.vcf.gz sample.1.vcf.gz sample.2.vcf.gz sample.3.vcf.gz

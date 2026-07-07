@@ -221,7 +221,7 @@ func newScope() *Scope { return &Scope{vars: map[string]Value{}} }
 func (s *Scope) child() *Scope { return &Scope{vars: map[string]Value{}, parent: s} }
 
 // root returns the bottom-most frame of the chain (the run/render root). Used as
-// the implicit home of the reserved job.*/cgpipe.* setting namespaces.
+// the implicit home of the reserved job.*/cgp.* setting namespaces.
 func (s *Scope) root() *Scope {
 	for s.parent != nil {
 		s = s.parent
@@ -258,8 +258,8 @@ func (s *Scope) frameOf(name string) *Scope {
 
 // assign implements a bare `name = v`: write to the nearest enclosing frame that
 // already binds name; if it is bound nowhere, create it in the current frame —
-// except reserved settings (job.* / cgpipe.*), which are implicitly declared at the
-// root so a conditional `job.mem`/`cgpipe.runner` inside a block still reaches the
+// except reserved settings (job.* / cgp.*), which are implicitly declared at the
+// root so a conditional `job.mem`/`cgp.runner` inside a block still reaches the
 // engine. It returns the frame the binding landed in (for write-handle ownership).
 func (s *Scope) assign(name string, v Value) *Scope {
 	if f := s.frameOf(name); f != nil {
@@ -274,9 +274,9 @@ func (s *Scope) assign(name string, v Value) *Scope {
 	return target
 }
 
-// isReservedSetting reports whether name is in the job.*/cgpipe.* setting namespace.
+// isReservedSetting reports whether name is in the job.*/cgp.* setting namespace.
 func isReservedSetting(name string) bool {
-	return strings.HasPrefix(name, "job.") || strings.HasPrefix(name, "cgpipe.")
+	return strings.HasPrefix(name, "job.") || strings.HasPrefix(name, "cgp.")
 }
 
 // del removes name from the nearest frame that binds it.

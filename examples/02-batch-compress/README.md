@@ -5,7 +5,7 @@ once. This is the pattern for "run the same per-file tool over a directory of
 inputs."
 
 ```sh
-cgpipe pipeline.cgp | bash
+cgp pipeline.cgp | bash
 ls data/*.gz                     # a.txt.gz  b.txt.gz  c.txt.gz
 ```
 

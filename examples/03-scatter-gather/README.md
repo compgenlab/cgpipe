@@ -5,8 +5,8 @@ shape of per-chromosome variant calling, per-lane alignment, or any
 split-process-combine workflow.
 
 ```sh
-cgpipe -dr pipeline.cgp             # preview the generated jobs
-cgpipe pipeline.cgp | bash
+cgp -dr pipeline.cgp             # preview the generated jobs
+cgp pipeline.cgp | bash
 cat total.txt                    # 11 words total
 ```
 

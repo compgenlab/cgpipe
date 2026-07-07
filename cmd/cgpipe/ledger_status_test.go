@@ -32,7 +32,7 @@ func installBatchqStatusLines(t *testing.T, lines map[string]string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// §15.2 cgpipe ledger status (job mode) shows each job's native scheduler status,
+// §15.2 cgp ledger status (job mode) shows each job's native scheduler status,
 // UNKNOWN once a job has aged out.
 func TestLedgerStatusJobMode(t *testing.T) {
 	dir := t.TempDir()
@@ -69,7 +69,7 @@ func TestLedgerStatusJobMode(t *testing.T) {
 	}
 }
 
-// §15.2 cgpipe ledger status -output cross-checks each output's mtime against its
+// §15.2 cgp ledger status -output cross-checks each output's mtime against its
 // owning job's submit/end window: COMPLETE for an aged-out job with a good file,
 // DIRTY for a missing/stale/too-new file, the native word otherwise.
 func TestLedgerStatusOutputMode(t *testing.T) {

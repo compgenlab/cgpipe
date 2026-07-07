@@ -21,7 +21,7 @@ with `row["..."]`. The `for` loop emits a `${name}.sum` target per row and colle
 the output names; `cohort.txt` then depends on `@{sums}`.
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 samples = open("samples.tsv").read_tsv(header=true)
 sums = []
 
@@ -43,7 +43,7 @@ cohort.txt: @{sums} {{
 ## Render it
 
 ```console
-$ cgpipe -dr pipeline.cgp
+$ cgp -dr pipeline.cgp
 #!/usr/bin/env bash
 set -euo pipefail
 

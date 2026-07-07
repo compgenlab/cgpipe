@@ -54,17 +54,17 @@ print x`, nil)
 	}
 }
 
-// TestJobAndCgpHoistFromBlock: reserved job.*/cgpipe.* settings assigned inside an if
+// TestJobAndCgpHoistFromBlock: reserved job.*/cgp.* settings assigned inside an if
 // land at the root, so they survive the block (a conditional job/config setting).
 func TestJobAndCgpHoistFromBlock(t *testing.T) {
-	prog, out := runSrc(t, `if true { cgpipe.runner = "slurm"
+	prog, out := runSrc(t, `if true { cgp.runner = "slurm"
 job.mem = "32G" }
-print cgpipe.runner, job.mem`, nil)
+print cgp.runner, job.mem`, nil)
 	if out != "slurm 32G\n" {
 		t.Errorf("hoisted settings = %q, want 'slurm 32G'", out)
 	}
-	if v, ok := prog.Get("cgpipe.runner"); !ok || Stringify(v) != "slurm" {
-		t.Errorf("cgpipe.runner not in program scope: %v %v", v, ok)
+	if v, ok := prog.Get("cgp.runner"); !ok || Stringify(v) != "slurm" {
+		t.Errorf("cgp.runner not in program scope: %v %v", v, ok)
 	}
 }
 

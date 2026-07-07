@@ -33,11 +33,11 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME}"
           ldflags="-s -w -X github.com/compgenlab/cgpipe/internal/buildinfo.Version=${version}"
-          bin="cgpipe-${version}-${GOOS}-${GOARCH}"
+          bin="cgp-${version}-${GOOS}-${GOARCH}"
           mkdir -p dist
           go build -trimpath -ldflags "${ldflags}" -o "dist/${bin}" ./cmd/cgpipe
 
       - name: Attach to release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/cgpipe-*
+          files: dist/cgp-*

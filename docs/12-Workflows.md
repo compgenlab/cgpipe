@@ -13,7 +13,7 @@ convention as [command-line variables](03-Language_Syntax.md#command-line-variab
 and become the variables the stage pipeline receives:
 
 ```
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # Two-stage workflow: align, then call.
 
@@ -51,7 +51,7 @@ behavior, so a stage stays a normal pipeline you can run and debug by itself.
 With runnable bodies, the stages execute in order and the value threads through:
 
 ```console
-$ cgpipe wgs.cgp --reads reads.fq
+$ cgp wgs.cgp --reads reads.fq
 $ cat aligned.bam
 aligned from reads.fq
 $ cat calls.vcf
@@ -70,7 +70,7 @@ How a later stage waits for an earlier one depends on the runner:
 - **Scheduler runner:** an earlier stage's jobs may still be *queued* when a later
   stage submits. The cross-stage `afterok` wiring is resolved through the
   [ledger](11-The_Ledger.md#cross-run-and-cross-stage-reuse) — so a scheduler
-  workflow wants `cgpipe.ledger` configured.
+  workflow wants `cgp.ledger` configured.
 
 ## Export validation catches typos
 

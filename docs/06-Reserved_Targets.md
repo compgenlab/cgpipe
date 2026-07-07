@@ -17,7 +17,7 @@ called `pre`; only `@pre` is reserved.
 | `@postsubmit {{ }}` | Once per submitted job, on the submit host, right after submission |
 | `@default: …` | The goals to build when none are named (no body) |
 
-All examples are rendered with `cgpipe -dr` and match fixtures under
+All examples are rendered with `cgp -dr` and match fixtures under
 [`tests/build/`](../tests/build/).
 
 ## `@pre` and `@post`
@@ -121,7 +121,7 @@ submitted b.bam as 1002
 - **Forces its goals to build**, exactly as if requested on the command line.
 - **Fallback:** with no `@default`, cgpipe builds the **first defined target**, so
   trivial pipelines need nothing.
-- **CLI overrides:** `cgpipe p.cgp` builds the `@default` goals; `cgpipe p.cgp final.vcf`
+- **CLI overrides:** `cgp p.cgp` builds the `@default` goals; `cgp p.cgp final.vcf`
   builds the named target(s) instead.
 - **Accumulates:** multiple `@default:` lines (across the file, `include`s, or a
   loop) add to the goal set — so `@default: @{all_outputs}` after a `for` loop

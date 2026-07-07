@@ -45,9 +45,9 @@ Run `cgpipe [args] <file>`; compare against sibling golden files:
 | `<name>.cgp.args`   | no  | extra CLI args, one line, word-split |
 | `<name>.cgp.rc`     | no  | expected exit code (default 0) |
 | `<name>.cgp.err`    | no  | expected stderr (exact) |
-| `<name>.cgp.env`    | no  | shell sourced before the run (e.g. `export CGPIPE_ENV=...`) |
+| `<name>.cgp.env`    | no  | shell sourced before the run (e.g. `export CGP_ENV=...`) |
 | `<name>.files/`     | no  | helper files copied into the run dir (sources, includes) |
-| `<name>.setup.sh`   | no  | prep step run in the workdir before cgpipe (set input mtimes, seed a ledger); `$CGPIPE` is available |
+| `<name>.setup.sh`   | no  | prep step run in the workdir before cgpipe (set input mtimes, seed a ledger); `$CGP` is available |
 
 `lang/` scripts end with `exit` so execution stops before the runner and the
 golden is just the `print` output. `build/` scripts pass `-dr` (via `.args`) so
@@ -67,10 +67,10 @@ The harness puts mock scheduler binaries
 | `submit-N.stdin`| the rendered job script piped to the Nth submit |
 | `status-N.argv`, `release-N.argv`, … | other scheduler calls, in order |
 
-Job ids are deterministic (`CGPIPE_TEST_JOBID_BASE=1001`, incrementing). Optional
+Job ids are deterministic (`CGP_TEST_JOBID_BASE=1001`, incrementing). Optional
 siblings: `<name>.cgp.args`, `<name>.cgp.env`, `<name>.setup.sh`, and
 `<name>.responses/` (canned status responses keyed by job id, exposed as
-`CGPIPE_TEST_RESPONSES`). A `setup.sh` here runs with its own scratch capture dir,
+`CGP_TEST_RESPONSES`). A `setup.sh` here runs with its own scratch capture dir,
 so a first seeding `cgpipe` run (e.g. for the ledger-reuse fixture) doesn't pollute
 the captures under test.
 

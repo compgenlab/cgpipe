@@ -1,14 +1,14 @@
-#!/usr/bin/env cgpipe
+#!/usr/bin/env cgp
 #
 # The SAME pipeline runs locally or on a cluster — you only change the runner.
 # The directive block (before --) sets resources; each scheduler maps them to its
 # own headers. Preview without submitting:
 #
-#     cgpipe -dr            pipeline.cgp   # local bash
-#     cgpipe -dr -r slurm   pipeline.cgp   # SLURM sbatch script
-#     cgpipe -dr -r sge     pipeline.cgp   # SGE qsub script
+#     cgp -dr            pipeline.cgp   # local bash
+#     cgp -dr -r slurm   pipeline.cgp   # SLURM sbatch script
+#     cgp -dr -r sge     pipeline.cgp   # SGE qsub script
 #
-# Run locally:  cgpipe pipeline.cgp | bash
+# Run locally:  cgp pipeline.cgp | bash
 
 threads ?= 4
 

@@ -12,7 +12,7 @@ func TestWrapDocker(t *testing.T) {
 		Inputs: []string{"in.bam"}, Outputs: []string{"out.bam"},
 	})
 	for _, want := range []string{
-		"__cgpipe_body=$(mktemp", "<<'__CGPIPE_BODY__'", "samtools sort in.bam > out.bam",
+		"__cgpipe_body=$(mktemp", "<<'__CGP_BODY__'", "samtools sort in.bam > out.bam",
 		"docker run --rm", "-u $(id -u):$(id -g)", "--gpus all",
 		"biocontainers/samtools:1.9", `sh "$__cgpipe_body"`,
 	} {
@@ -52,9 +52,9 @@ func TestNoWrapWithoutEngineOrImage(t *testing.T) {
 }
 
 func TestMarkerCollisionAvoided(t *testing.T) {
-	got := Wrap("echo __CGPIPE_BODY__", Spec{Engine: "docker", Image: "x"})
+	got := Wrap("echo __CGP_BODY__", Spec{Engine: "docker", Image: "x"})
 	// the heredoc marker must differ from text in the body
-	if strings.Contains(got, "<<'__CGPIPE_BODY__'") {
+	if strings.Contains(got, "<<'__CGP_BODY__'") {
 		t.Errorf("marker collides with body content:\n%s", got)
 	}
 }

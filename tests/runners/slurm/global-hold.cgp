@@ -1,6 +1,6 @@
 # §11.3 global_hold submits every job held (sbatch -H), then releases each
 # after the whole pipeline submits cleanly (scontrol release).
-cgpipe.runner.slurm.global_hold = true
+cgp.runner.slurm.global_hold = true
 out.bam: {{
     job.name = "j"
     --

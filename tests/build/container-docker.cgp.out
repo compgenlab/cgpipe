@@ -4,9 +4,9 @@ set -euo pipefail
 # ---- out.bam ----
 __cgpipe_body=$(mktemp "/tmp/cgpipe-body.XXXXXX")
 trap 'rm -f "$__cgpipe_body"' EXIT
-cat > "$__cgpipe_body" <<'__CGPIPE_BODY__'
+cat > "$__cgpipe_body" <<'__CGP_BODY__'
 samtools sort in.bam > out.bam
-__CGPIPE_BODY__
+__CGP_BODY__
 
 docker run --rm \
     -v /tmp:/tmp \

@@ -12,20 +12,20 @@ scale.
 > local shell or a batch scheduler — the full language, dependency resolution
 > (mtime staleness with temp look-through), the SLURM/SGE/PBS/BatchQ runners, and
 > the optional job ledger (cross-run reuse of still-queued jobs) are
-> implemented, plus `cgpipe sub` for one-off job submission, config-file loading,
+> implemented, plus `cgp sub` for one-off job submission, config-file loading,
 > container/GPU wrapping, reading sample sheets in-language (`open(...).read_tsv()`
 > to scatter and gather over a TSV/CSV/JSON in one pipeline), and multi-pipeline
 > `stage` composition (chain standalone pipelines
-> via `export` / `${stage.x}`). `cgpipe convert` migrates a legacy cgpipe-jvm script to
+> via `export` / `${stage.x}`). `cgp convert` migrates a legacy cgpipe-jvm script to
 > the cgpipe language. The JVM version remains available and supported at
 > `compgen-io/cgpipe-jvm`.
 
 ```sh
-cgpipe pipeline.cgp                 # build @default (or the first target)
-cgpipe pipeline.cgp out.bam         # build a specific target
-cgpipe pipeline.cgp --sample p42    # set a pipeline variable
-cgpipe pipeline.cgp -dr             # dry run: print the rendered shell scripts
-cgpipe convert old.cgp -o new.cgp   # migrate a legacy cgpipe-jvm script
+cgp pipeline.cgp                 # build @default (or the first target)
+cgp pipeline.cgp out.bam         # build a specific target
+cgp pipeline.cgp --sample p42    # set a pipeline variable
+cgp pipeline.cgp -dr             # dry run: print the rendered shell scripts
+cgp convert old.cgp -o new.cgp   # migrate a legacy cgpipe-jvm script
 ```
 
 ## Install
@@ -49,20 +49,20 @@ Pure Go, no CGO:
 ```sh
 go build ./...
 go test ./...
-go build -o bin/cgpipe ./cmd/cgpipe
+go build -o bin/cgp ./cmd/cgpipe
 ```
 
 Cross-compilation is a plain `GOOS`/`GOARCH` build:
 
 ```sh
-GOOS=linux GOARCH=arm64 go build -o bin/cgpipe-linux-arm64 ./cmd/cgpipe
+GOOS=linux GOARCH=arm64 go build -o bin/cgp-linux-arm64 ./cmd/cgpipe
 ```
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `cmd/cgpipe/`        | the `cgpipe` binary (run a pipeline; `cgpipe sub` submits one-off jobs) |
+| `cmd/cgpipe/`        | the `cgp` binary (run a pipeline; `cgp sub` submits one-off jobs) |
 | `internal/token/` | lexical tokens + source positions |
 | `internal/lexer/` | source → tokens (incl. the `{{ }}` shell-body capture mode) |
 | `internal/ast/`   | AST node types |
@@ -72,7 +72,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/cgpipe-linux-arm64 ./cmd/cgpipe
 | `internal/ledger/` | optional append-only (JSONL) job ledger (output → owning job) |
 | `internal/container/` | container/GPU command wrapping (docker/singularity) |
 | `internal/convert/` | best-effort migrator from legacy cgpipe-jvm scripts |
-| `internal/lsp/`   | zero-dependency language server (`cgpipe lsp`) for editors |
+| `internal/lsp/`   | zero-dependency language server (`cgp lsp`) for editors |
 | `docs/`           | the user guide and the language specification |
 
 ## Examples
