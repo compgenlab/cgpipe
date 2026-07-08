@@ -41,6 +41,8 @@ options:
     -t, --walltime S     wall-time limit
     -o, --output PATH    declared output (repeatable; recorded in the ledger)
     -i, --input PATH     declared input (repeatable)
+    --stdout PATH        redirect job stdout to PATH (scheduler runners; {}-expanded per file)
+    --stderr PATH        redirect job stderr to PATH (scheduler runners; {}-expanded per file)
     -d, --deps IDS       depend on existing job ids (comma-separated; repeatable)
     -a, --after PATH     depend on the active job that owns PATH in the ledger (repeatable)
     -f, --files-from F   read fan-out files from F, one per line (- = stdin; only once)
@@ -66,6 +68,7 @@ shell applies them to the job, not to cgpipe.
 // placeholders; with none, it submits a single job.
 func runSub(args []string) int {
 	var name string
+	var stdout, stderr string
 	var outs, ins, deps, after []string
 	var runnerName, ledgerPath, filesFrom string
 	filesFromSet := false
@@ -152,6 +155,18 @@ flags:
 				return 2
 			}
 			ins = append(ins, v)
+		case "-stdout", "--stdout":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			stdout = v
+		case "-stderr", "--stderr":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			stderr = v
 		case "-r", "--runner":
 			v, ok := val()
 			if !ok {
@@ -261,10 +276,25 @@ flags:
 
 	// submitOne builds and dispatches one job. deps (the -d list) apply to every
 	// job; jobAfter is the per-job, already-{}-expanded -a list.
-	submitOne := func(command, jobName string, jobOuts, jobIns, jobAfter []string) int {
+	submitOne := func(command, jobName string, jobOuts, jobIns, jobAfter []string, jobStdout, jobStderr string) int {
+		// job.stdout/job.stderr are per-job (they may carry {}-expanded paths), so
+		// layer them over a copy of the shared settings rather than mutating it.
+		js := settings
+		if jobStdout != "" || jobStderr != "" {
+			js = make(map[string]eval.Value, len(settings)+2)
+			for k, v := range settings {
+				js[k] = v
+			}
+			if jobStdout != "" {
+				js["job.stdout"] = eval.StrVal(jobStdout)
+			}
+			if jobStderr != "" {
+				js["job.stderr"] = eval.StrVal(jobStderr)
+			}
+		}
 		prog := eval.NewJob(eval.JobSpec{
 			Command: command,
-			Name:    jobName, Outputs: jobOuts, Inputs: jobIns, Settings: settings,
+			Name:    jobName, Outputs: jobOuts, Inputs: jobIns, Settings: js,
 		})
 		t := prog.Targets[0]
 		if runnerName == "" || runnerName == "shell" {
@@ -288,7 +318,7 @@ flags:
 
 	// No files: a single job, command used as-is.
 	if len(fanFiles) == 0 {
-		return submitOne(strings.Join(cmdParts, " "), name, outs, ins, after)
+		return submitOne(strings.Join(cmdParts, " "), name, outs, ins, after, stdout, stderr)
 	}
 
 	// Array fan-out: a single `--array=1-N` submission over the whole file list,
@@ -321,7 +351,7 @@ flags:
 			if dryRun {
 				fmt.Printf("# ── array job: %d tasks ──\n", len(fanFiles))
 			}
-			return submitOne(body.String(), name, dedupeStrings(jobOuts), dedupeStrings(jobIns), after)
+			return submitOne(body.String(), name, dedupeStrings(jobOuts), dedupeStrings(jobIns), after, stdout, stderr)
 		}
 		fmt.Fprintf(os.Stderr, "cgp sub: --array is not supported for this runner; submitting one job per file\n")
 	}
@@ -344,6 +374,8 @@ flags:
 			substAll(outs, f, n),
 			jobIns,
 			substAll(after, f, n),
+			substInput(stdout, f, n),
+			substInput(stderr, f, n),
 		)
 		if code != 0 {
 			return code

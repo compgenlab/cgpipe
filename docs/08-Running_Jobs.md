@@ -197,6 +197,7 @@ Options:
 | `-m, --mem S` / `-p, --procs N` / `-t, --walltime S` | Resources |
 | `-o, --output PATH` | Declared output (repeatable; recorded in the ledger) |
 | `-i, --input PATH` | Declared input (repeatable) |
+| `--stdout PATH` / `--stderr PATH` | Redirect job stdout/stderr (scheduler runners; `{}`-expanded per fan-out file) |
 | `-d, --deps IDS` | Depend on existing job ids (comma-separated; repeatable) |
 | `-a, --after PATH` | Depend on the active job that owns `PATH` in the ledger (repeatable) |
 | `-f, --files-from F` | Read fan-out files from `F`, one per line (`-` = stdin; only once) |
