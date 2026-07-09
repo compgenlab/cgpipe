@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/compgenlab/cgpipe/internal/ledger"
 )
@@ -534,6 +535,117 @@ func TestSubArrayUnsupportedRunnerFallsBack(t *testing.T) {
 		if !fileThere(dir, f) {
 			t.Errorf("array fallback did not produce %s", f)
 		}
+	}
+}
+
+// touchNewer sets path's mtime a minute in the future so it counts as newer than
+// files just created alongside it — used to mark a task's output as up to date.
+func touchNewer(t *testing.T, path string) {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer := fi.ModTime().Add(time.Minute)
+	if err := os.Chtimes(path, newer, newer); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// captureOutErr runs fn with both stdout and stderr redirected, returning them
+// plus the exit code (unlike captureStdout it does not fail on a non-zero code).
+func captureOutErr(t *testing.T, fn func() int) (string, string, int) {
+	t.Helper()
+	oldOut, oldErr := os.Stdout, os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout, os.Stderr = wOut, wErr
+	code := fn()
+	wOut.Close()
+	wErr.Close()
+	os.Stdout, os.Stderr = oldOut, oldErr
+	var bo, be bytes.Buffer
+	bo.ReadFrom(rOut)
+	be.ReadFrom(rErr)
+	return bo.String(), be.String(), code
+}
+
+// cgp sub --array skips tasks whose -o output is already up to date, so only the
+// missing indices land in the --array spec and the case body.
+func TestSubArraySparseSkipsUpToDate(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, f := range []string{"a", "b", "c"} {
+		os.WriteFile(f, []byte("x\n"), 0o644)
+	}
+	// tasks 2 (b) and 3 (c) already done: output newer than the input.
+	for _, o := range []string{"b.out", "c.out"} {
+		os.WriteFile(o, []byte("done\n"), 0o644)
+		touchNewer(t, o)
+	}
+	out, errOut, code := captureOutErr(t, func() int {
+		return run([]string{"sub", "-r", "slurm", "-dr", "--array", "-o", "{}.out", "cmd {}", "--", "a", "b", "c"})
+	})
+	if code != 0 {
+		t.Fatalf("cgp sub --array = %d", code)
+	}
+	if !strings.Contains(out, "#SBATCH --array=1") || strings.Contains(out, "--array=1-3") {
+		t.Errorf("expected sparse --array=1, got:\n%s", out)
+	}
+	if !strings.Contains(out, "1) cmd a ;;") {
+		t.Errorf("expected task 1 branch, got:\n%s", out)
+	}
+	if strings.Contains(out, "2) cmd b") || strings.Contains(out, "3) cmd c") {
+		t.Errorf("up-to-date tasks 2/3 should be dropped, got:\n%s", out)
+	}
+	for _, want := range []string{"# skip: array task 2 (b)", "# skip: array task 3 (c)"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("expected stderr skip line %q, got:\n%s", want, errOut)
+		}
+	}
+}
+
+// When every array task is already up to date, nothing is submitted.
+func TestSubArrayAllUpToDate(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, f := range []string{"a", "b", "c"} {
+		os.WriteFile(f, []byte("x\n"), 0o644)
+		os.WriteFile(f+".out", []byte("done\n"), 0o644)
+		touchNewer(t, f+".out")
+	}
+	out, errOut, code := captureOutErr(t, func() int {
+		return run([]string{"sub", "-r", "slurm", "-dr", "--array", "-o", "{}.out", "cmd {}", "--", "a", "b", "c"})
+	})
+	if code != 0 {
+		t.Fatalf("cgp sub --array = %d", code)
+	}
+	if strings.Contains(out, "#SBATCH") || strings.Contains(out, "case ") {
+		t.Errorf("nothing should be submitted, got stdout:\n%s", out)
+	}
+	if !strings.Contains(errOut, "all 3 array tasks already up to date") {
+		t.Errorf("expected all-up-to-date note on stderr, got:\n%s", errOut)
+	}
+}
+
+// The plain per-file fan-out skips a file whose -o output is already up to date.
+func TestSubFanoutSkipsUpToDate(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	os.WriteFile("a.in", []byte("A\n"), 0o644)
+	os.WriteFile("b.in", []byte("B\n"), 0o644)
+	// a is already done (a.out newer than a.in); b still needs to run.
+	os.WriteFile("a.out", []byte("A\n"), 0o644)
+	touchNewer(t, "a.out")
+	_, errOut, code := captureOutErr(t, func() int {
+		return run([]string{"sub", "-o", "{@.in}.out", "cp {} {@.in}.out", "--", "a.in", "b.in"})
+	})
+	if code != 0 {
+		t.Fatalf("cgp sub fan-out = %d", code)
+	}
+	if !strings.Contains(errOut, "# skip: a.in") {
+		t.Errorf("expected skip line for a.in on stderr, got:\n%s", errOut)
+	}
+	if !fileThere(dir, "b.out") {
+		t.Error("fan-out did not produce b.out")
 	}
 }
 
