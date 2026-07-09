@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/compgenlab/cgpipe/internal/ast"
 	"github.com/compgenlab/cgpipe/internal/eval"
@@ -25,7 +27,8 @@ ${input}/${output} substitute; use $VAR for shell variables.
 
 Fan-out: list FILEs after -- (or via --files-from) and cgpipe submits one independent
 job per file, expanding {} placeholders in the command, the job name, and the
--o/-i/-a values:
+-o/-i/-a values. A file whose -o outputs already exist and are newer than its
+inputs is skipped (make-like; logged to stderr):
 
     {}  {^}     the full input path
     {@}         the basename (directory stripped)
@@ -48,7 +51,9 @@ options:
     -f, --files-from F   read fan-out files from F, one per line (- = stdin; only once)
     --array              submit the fan-out as ONE job array (slurm/batchq/pbs); each
                          task runs one file's command, dispatched by the scheduler's
-                         array task-id. shell/sge fall back to one job per file. A
+                         array task-id. shell/sge fall back to one job per file. Tasks
+                         whose -o outputs are already up to date are skipped, so only
+                         the missing indices are submitted (--array=1,3,6). A
                          {}-expanded --after is rejected (per-element dependency).
     -r, --runner NAME    runner: shell (default), slurm, sge, pbs, batchq
     -l, --ledger PATH    ledger directory
@@ -339,17 +344,31 @@ flags:
 			var body strings.Builder
 			fmt.Fprintf(&body, "case \"$%s\" in\n", taskVar)
 			var jobIns, jobOuts []string
+			var survivors []int
 			for idx, f := range fanFiles {
 				n := idx + 1
+				taskOuts := substAll(outs, f, n)
+				taskIns := append([]string{f}, substAll(ins, f, n)...)
+				// Skip a task whose declared outputs are already up to date, so only
+				// the missing indices end up in the --array spec.
+				if upToDate(taskOuts, taskIns) {
+					fmt.Fprintf(os.Stderr, "# skip: array task %d (%s) — output up to date\n", n, f)
+					continue
+				}
 				fmt.Fprintf(&body, "  %d) %s ;;\n", n, strings.Join(substAll(cmdParts, f, n), " "))
 				jobIns = append(jobIns, f)
 				jobIns = append(jobIns, substAll(ins, f, n)...)
-				jobOuts = append(jobOuts, substAll(outs, f, n)...)
+				jobOuts = append(jobOuts, taskOuts...)
+				survivors = append(survivors, n)
+			}
+			if len(survivors) == 0 {
+				fmt.Fprintf(os.Stderr, "cgp sub: all %d array tasks already up to date; nothing to submit\n", len(fanFiles))
+				return 0
 			}
 			fmt.Fprintf(&body, "  *) echo \"cgp: no array task $%s\" >&2; exit 1 ;;\nesac\n", taskVar)
-			settings["job.array"] = eval.StrVal(fmt.Sprintf("1-%d", len(fanFiles)))
+			settings["job.array"] = eval.StrVal(arraySpec(survivors))
 			if dryRun {
-				fmt.Printf("# ── array job: %d tasks ──\n", len(fanFiles))
+				fmt.Printf("# ── array job: %d tasks ──\n", len(survivors))
 			}
 			return submitOne(body.String(), name, dedupeStrings(jobOuts), dedupeStrings(jobIns), after, stdout, stderr)
 		}
@@ -359,6 +378,13 @@ flags:
 	// Fan-out: one independent job per file, with `{}` expansion against it.
 	for idx, f := range fanFiles {
 		n := idx + 1
+		// The fan-out file itself is the job's primary declared input.
+		jobIns := append([]string{f}, substAll(ins, f, n)...)
+		// Skip a file whose declared outputs are already up to date (make-like).
+		if upToDate(substAll(outs, f, n), jobIns) {
+			fmt.Fprintf(os.Stderr, "# skip: %s — output up to date\n", f)
+			continue
+		}
 		if dryRun {
 			fmt.Printf("# ── job %d/%d: %s ──\n", n, len(fanFiles), f)
 		}
@@ -366,8 +392,6 @@ flags:
 		if jobName != "" {
 			jobName = substInput(jobName, f, n)
 		}
-		// The fan-out file itself is the job's primary declared input.
-		jobIns := append([]string{f}, substAll(ins, f, n)...)
 		code := submitOne(
 			strings.Join(substAll(cmdParts, f, n), " "),
 			jobName,
@@ -397,6 +421,60 @@ func arrayTaskVar(runner string) string {
 		return "PBS_ARRAY_INDEX"
 	}
 	return ""
+}
+
+// upToDate reports whether every declared output exists and is at least as new
+// as the newest input — i.e. the task's work is already done and can be skipped.
+// With no declared outputs it returns false (nothing to check against → always
+// run), matching the pipeline's staleness rule (internal/runner/driver.go resolve).
+func upToDate(outs, ins []string) bool {
+	if len(outs) == 0 {
+		return false
+	}
+	var newestIn time.Time
+	for _, in := range ins {
+		if fi, err := os.Stat(in); err == nil && fi.ModTime().After(newestIn) {
+			newestIn = fi.ModTime()
+		}
+	}
+	for _, o := range outs {
+		fi, err := os.Stat(o)
+		if err != nil || fi.ModTime().Before(newestIn) {
+			return false // missing or stale → must run
+		}
+	}
+	return true
+}
+
+// arraySpec renders ascending 1-based task indices as a scheduler array spec,
+// collapsing contiguous runs into ranges: [1,2,3,5] -> "1-3,5", [1] -> "1". The
+// indices arrive in order (fan-out files are iterated in order), so no sort.
+func arraySpec(idx []int) string {
+	if len(idx) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	start, prev := idx[0], idx[0]
+	flush := func() {
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		if start == prev {
+			b.WriteString(strconv.Itoa(start))
+		} else {
+			fmt.Fprintf(&b, "%d-%d", start, prev)
+		}
+	}
+	for _, n := range idx[1:] {
+		if n == prev+1 {
+			prev = n
+			continue
+		}
+		flush()
+		start, prev = n, n
+	}
+	flush()
+	return b.String()
 }
 
 // dedupeStrings returns ss with duplicates removed, preserving first-seen order.
