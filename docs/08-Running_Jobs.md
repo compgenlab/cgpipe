@@ -248,6 +248,11 @@ Fan-out jobs are independent siblings: each fan-out file is its job's primary in
 `-d`/`--deps` applies to every job, and `-a`/`--after` is resolved per file (after
 `{}` expansion). Use `-dr` to preview every rendered job before submitting.
 
+Like the pipeline, fan-out is make-like: a file whose declared `-o` output already
+exists and is newer than its inputs is skipped (logged to stderr), so a rerun
+submits only the files that still need work. A file with no declared `-o` output is
+always submitted.
+
 To submit the whole fan-out as a **single scheduler array job** instead of N
 separate ones, add `--array` — see [Array Jobs](09-Array_Jobs.md).
 

@@ -101,6 +101,25 @@ cgp sub -r slurm --array -a '{@}.bam' 'index {}' -- *.bam
 
 If you need per-element dependencies, drop `--array` (submit one job per file).
 
+### Finished tasks are skipped
+
+Like the pipeline, `cgp sub` is make-like: a task whose declared `-o` output
+already exists and is **newer than its inputs** (its fan-out file plus any `-i`)
+is skipped. Only the missing indices are submitted, so a restart resubmits just
+the gaps. Given a 6-file array where tasks 2–5 are already done:
+
+```sh
+cgp sub -r slurm --array -o '{@.fastq.gz}.bam' \
+    'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz
+# → #SBATCH --array=1,6   (contiguous runs collapse, e.g. --array=1-3,7)
+# stderr: # skip: array task 2 (s2.fastq.gz) — output up to date
+```
+
+Each skip is logged to stderr. If every task is already up to date nothing is
+submitted (a note is printed). A task with **no** declared `-o` output is always
+submitted — cgpipe has nothing to check it against. The same skip-if-up-to-date
+rule applies to the plain per-file fan-out (without `--array`).
+
 ## Pipeline array jobs
 
 Inside a pipeline, a fan-out is a `for` loop that emits one target per unit of work

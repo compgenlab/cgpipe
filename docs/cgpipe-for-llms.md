@@ -164,7 +164,7 @@ map per scheduler (`mem="8G"` → SLURM `--mem=8000`, `procs=4` → `-c 4`).
 Dependencies are derived from `output: input` edges (SLURM `afterok:<id>`).
 One-off: `cgp sub -r slurm -m 8G -o out.bam -i in.bam 'samtools sort -o ${output} ${input}'`.
 Fan-out one job per file with `{}` (`{@}`=basename, `{^.gz}`/`{@.gz}`=suffix-strip, `{#}`=index): `cgp sub -m 4G -o '{@.fastq.gz}.bam' 'bwa mem ref.fa {} > {@.fastq.gz}.bam' -- *.fastq.gz` (or `--files-from list.txt`).
-Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep).
+Add `--array` to submit the fan-out as ONE scheduler array (slurm/batchq/pbs; one task per file, dispatched by the task-id var): `cgp sub -r slurm --array 'fastqc {} -o qc/' -- *.fastq`. Fixed `-d`/`-a` apply to the whole array; a `{}`-expanded `--after` is rejected (per-element dep). Make-like: a task whose `-o` output is already newer than its inputs is skipped (stderr-logged), so only the missing indices are submitted (`--array=1,3,6`) — same for the plain per-file fan-out.
 
 ## Reading files (sample sheets, scatter + gather)
 Read a data file at **eval time** and build targets from its rows — scatter and
