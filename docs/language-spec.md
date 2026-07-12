@@ -764,6 +764,7 @@ is stale-checked, scheduled, and present under `-dr`. Reserve `open(…,"w")` fo
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] <command ...> [-- <file ...>]
     cgp ledger {dump|search|status|vacuum} <dir>
+    cgp status [--json] [-r RUNNER] [--ledger <dir>] [JOBID ...]
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
     cgp lsp
@@ -821,13 +822,21 @@ A task whose declared `-o` outputs already exist and are newer than that task's 
 
 `dump`, `search`, and `status` open the ledger read-only, so they are safe to run while a pipeline is in flight.
 
-### 15.3 `cgp convert` — migrate an older script
+### 15.3 `cgp status` — normalized job status
+`cgp status [--json] [-r RUNNER] [--ledger <dir>] [JOBID ...]` reports each job's **normalized**, enriched live status — the scheduler-agnostic counterpart of `cgp ledger status` (§15.2), which prints raw native words as TSV. Like it, it needs a scheduler runner (`-r RUNNER`, else `cgp.runner`; a non-scheduler runner is rejected) and a ledger dir (`-l`/`--ledger <dir>`, a positional existing directory, else `cgp.ledger`); it opens the ledger read-only.
+
+- With **no `JOBID`**, it reports every job that currently **owns** an output (the latest producer per output — the last-write-wins fold of [§10.3](#103-ownership-and-vacuum), not the full job history), ordered by submit time. Give one or more `JOBID`s to report just those (the ledger is then used only to enrich them, and may be absent).
+- `state` is normalized to one of `queued | running | done | failed | cancelled | unknown`. `unknown` means the scheduler no longer knows the job (aged out with no accounting record); such a job is reconciled from disk to `done` when every owned output exists and is no older than its submit time.
+- **Default output** is a table: `<jobid>\t<state>\t<name>` (plus a trailing reason column when the scheduler reports one).
+- **`--json`** emits a single JSON **array** of job objects for tools (e.g. a monitoring dashboard) to `json.Unmarshal` directly. Each object always carries `job_id`, `name`, `state`, `native_state` (the raw scheduler word), `reason`, and — when finished — `exit_code`; array tasks add `array_id`/`task_index`. Best-effort detail fields are included when the scheduler exposes them (probed via `scontrol`/`sacct` for SLURM, `qstat -f` for PBS, `qstat`/`qacct` for SGE, `batchq status` for BatchQ) and omitted otherwise: `submit_time`/`start_time`/`end_time` (RFC3339), `elapsed`, `time_limit`, `nodes`, `partition`, `cpus`, `mem_req`, `mem_used`, `account`, `user`, `work_dir`, `stdout_path`, `stderr_path`, `deps`, and the cgp-specific `pipeline`, `run_id`, `outputs`.
+
+### 15.4 `cgp convert` — migrate an older script
 `cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgpipe-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgp.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgpipe-convert:` comment for you to review.
 
-### 15.4 `cgp show-template` — print a scheduler's default template
+### 15.5 `cgp show-template` — print a scheduler's default template
 `cgp show-template -r <slurm|sge|pbs|batchq>` prints that scheduler's built-in submission template to stdout, as a starting point for a custom one. Save it (`> ~/.cgp/custom_template.cgp`, or any path named by `cgp.runner.<name>.template`) and edit it to replace the built-in submission script — see [§11.3](#113-selected-cgpipe-settings). The rest of the runner's wiring (submit command, status probes, mem normalization) is unchanged; only the rendered script is overridden.
 
-### 15.5 `cgp lsp` — language server
+### 15.6 `cgp lsp` — language server
 `cgp lsp` runs a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) server over stdin/stdout, providing diagnostics (parse errors), semantic tokens, hover, and completion for `.cgp` files. It is launched by an editor, not used interactively; the bundled VSCode extension (`editor/vscode/`) starts it automatically when `cgp` is on `PATH`.
 
 ---

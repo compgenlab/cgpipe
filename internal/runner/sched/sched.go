@@ -89,6 +89,12 @@ type Scheduler struct {
 	// exposes one, with ok=false otherwise. Best-effort: used by `cgp ledger status`
 	// as the upper bound of the output-mtime window. Only some schedulers implement it.
 	EndTime func(string) (int64, bool)
+	// Detail returns a rich, normalized snapshot of a job's live status for
+	// `cgp status` (state, native word, reason, exit code, timing, placement,
+	// resources, provenance), with ok=false when the scheduler no longer knows the
+	// job. Best-effort: unavailable fields are left zero. Only some schedulers
+	// implement it; nil means only the coarse State/Status probes are available.
+	Detail func(string) (JobDetail, bool)
 	// ArrayTaskVar is the run-time environment variable carrying a job array's task
 	// index (e.g. SLURM_ARRAY_TASK_ID). "" means the scheduler has no array support,
 	// so array groups fall back to one job per element.
@@ -105,6 +111,7 @@ var schedulers = map[string]Scheduler{
 		State:        slurmState,
 		Status:       slurmStatus,
 		EndTime:      slurmEndTime,
+		Detail:       slurmDetail,
 		ArrayTaskVar: "SLURM_ARRAY_TASK_ID",
 	},
 	"sge": {
@@ -115,6 +122,7 @@ var schedulers = map[string]Scheduler{
 		IsActive:   sgeActive,
 		State:      sgeState,
 		Status:     sgeStatus,
+		Detail:     sgeDetail,
 	},
 	"pbs": {
 		Name: "pbs", Template: pbsTmpl,
@@ -124,6 +132,7 @@ var schedulers = map[string]Scheduler{
 		IsActive:   pbsActive,
 		State:      pbsState,
 		Status:     pbsStatus,
+		Detail:     pbsDetail,
 		// No ArrayTaskVar: pipeline-array task ids on PBS use a different subjob
 		// format (12345[i]) than SLURM/BatchQ's <base>_<i>, so pipeline arrays fall
 		// back to per-element submission on PBS. (cgp sub --array has no downstream
@@ -138,6 +147,7 @@ var schedulers = map[string]Scheduler{
 		State:        batchqState,
 		Status:       batchqStatus,
 		EndTime:      batchqEndTime,
+		Detail:       batchqDetail,
 		ArrayTaskVar: "BATCHQ_ARRAY_TASK_ID",
 	},
 }
@@ -183,8 +193,13 @@ func slurmStatus(id string) string {
 
 // slurmState maps a SLURM JobState (from `scontrol show job`) to the report
 // vocabulary; "" means unknown (e.g. the job has aged out of scontrol).
-func slurmState(id string) string {
-	switch slurmStatus(id) {
+func slurmState(id string) string { return slurmStateFor(slurmStatus(id)) }
+
+// slurmStateFor maps a native SLURM JobState word to the 4-value report
+// vocabulary (queued/running/done/failed); "" means unknown. Note CANCELLED
+// folds into "failed" here — `cgp status` distinguishes it separately.
+func slurmStateFor(word string) string {
+	switch word {
 	case "PENDING":
 		return "queued"
 	case "RUNNING", "CONFIGURING", "COMPLETING", "RESIZING":
@@ -291,8 +306,13 @@ func batchqActive(id string) bool {
 }
 
 // batchqState maps a BatchQ status to the report vocabulary; "" means unknown.
-func batchqState(id string) string {
-	switch batchqStatus(id) {
+func batchqState(id string) string { return batchqStateFor(batchqStatus(id)) }
+
+// batchqStateFor maps a native BatchQ status word to the 4-value report
+// vocabulary; "" means unknown. CANCELED folds into "failed" here — `cgp status`
+// distinguishes it separately.
+func batchqStateFor(word string) string {
+	switch word {
 	case "USERHOLD", "WAITING", "QUEUED", "PROXYQUEUED":
 		return "queued"
 	case "RUNNING":
@@ -357,8 +377,12 @@ func sgeActive(id string) bool {
 }
 
 // sgeState maps an SGE state code to the report vocabulary; "" means unknown.
-func sgeState(id string) string {
-	switch st := sgeStatus(id); st {
+func sgeState(id string) string { return sgeStateFor(sgeStatus(id)) }
+
+// sgeStateFor maps a native SGE state code to the 4-value report vocabulary;
+// "" means unknown.
+func sgeStateFor(word string) string {
+	switch word {
 	case "qw", "hqw", "hRwq":
 		return "queued"
 	case "r", "t", "Rr", "Rt", "s", "S", "T":
@@ -398,8 +422,12 @@ func pbsActive(id string) bool {
 }
 
 // pbsState maps a PBS job_state to the report vocabulary; "" means unknown.
-func pbsState(id string) string {
-	switch pbsStatus(id) {
+func pbsState(id string) string { return pbsStateFor(pbsStatus(id)) }
+
+// pbsStateFor maps a native PBS job_state code to the 4-value report vocabulary;
+// "" means unknown.
+func pbsStateFor(word string) string {
+	switch word {
 	case "Q", "H", "W", "T":
 		return "queued"
 	case "R", "E", "S":

@@ -37,7 +37,37 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags "${ldflags}" -o "dist/${bin}" ./cmd/cgpipe
 
+      # Matrix jobs don't share a filesystem, so hand each binary off as an
+      # artifact for the release job to collect and checksum together.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cgp-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/cgp-*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Emit one "<sha256>␠␠<filename>" line per binary (bare filenames, so the
+      # file verifies with `sha256sum -c SHA256SUMS` from the download dir).
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum cgp-* > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Attach to release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/cgp-*
+          files: |
+            dist/cgp-*
+            dist/SHA256SUMS
