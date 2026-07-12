@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/compgenlab/cgpipe/internal/ast"
-	"github.com/compgenlab/cgpipe/internal/eval"
 	"github.com/compgenlab/cgpipe/internal/ledger"
 	"github.com/compgenlab/cgpipe/internal/runner/sched"
 )
@@ -194,30 +192,10 @@ func runLedgerStatus(args []string) int {
 		}
 	}
 
-	// Resolve the runner and ledger dir from config when not given explicitly,
-	// mirroring `cgp sub`: evaluate the config layers with an empty pipeline.
-	if runnerName == "" || dir == "" {
-		cfgs, err := loadConfigs()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		base, err := eval.Run(&ast.File{}, eval.Options{Configs: cfgs})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
-			return 1
-		}
-		vars := base.Vars()
-		if runnerName == "" {
-			if v, ok := vars["cgp.runner"]; ok {
-				runnerName = eval.Stringify(v)
-			}
-		}
-		if dir == "" {
-			if v, ok := vars["cgp.ledger"]; ok {
-				dir = eval.Stringify(v)
-			}
-		}
+	var err error
+	if runnerName, dir, err = resolveRunnerAndLedger(runnerName, dir); err != nil {
+		fmt.Fprintf(os.Stderr, "cgp: %v\n", err)
+		return 1
 	}
 
 	if dir == "" {

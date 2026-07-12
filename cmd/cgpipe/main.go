@@ -85,6 +85,7 @@ usage:
     cgp [options] <pipeline.cgp> [goal ...] [--name value ...]
     cgp sub [options] <command ...> [-- file ...]   (one-off job / fan-out; see cgp sub -h)
     cgp ledger {dump|search|status|vacuum} <dir>   (see cgp ledger)
+    cgp status [--json] [-r RUNNER] [<dir>]   (each job's normalized live state; --json for tools)
     cgp show-template -r <runner>          (print a scheduler's built-in submission template)
     cgp lsp                                (run the language server over stdio; for editors)
     cgp version
@@ -135,6 +136,8 @@ func run(args []string) int {
 		return 0
 	case "ledger":
 		return runLedger(args[1:])
+	case "status":
+		return runStatus(args[1:])
 	case "sub":
 		return runSub(args[1:])
 	case "convert":
