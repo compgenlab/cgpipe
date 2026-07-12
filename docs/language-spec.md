@@ -765,6 +765,7 @@ is stale-checked, scheduled, and present under `-dr`. Reserve `open(…,"w")` fo
     cgp sub [options] <command ...> [-- <file ...>]
     cgp ledger {dump|search|status|vacuum} <dir>
     cgp status [--json] [-r RUNNER] [--ledger <dir>] [JOBID ...]
+    cgp doctor [--write]
     cgp convert <old.cgp> [-o out.cgp]
     cgp show-template -r <runner>
     cgp lsp
@@ -830,13 +831,18 @@ A task whose declared `-o` outputs already exist and are newer than that task's 
 - **Default output** is a table: `<jobid>\t<state>\t<name>` (plus a trailing reason column when the scheduler reports one).
 - **`--json`** emits a single JSON **array** of job objects for tools (e.g. a monitoring dashboard) to `json.Unmarshal` directly. Each object always carries `job_id`, `name`, `state`, `native_state` (the raw scheduler word), `reason`, and — when finished — `exit_code`; array tasks add `array_id`/`task_index`. Best-effort detail fields are included when the scheduler exposes them (probed via `scontrol`/`sacct` for SLURM, `qstat -f` for PBS, `qstat`/`qacct` for SGE, `batchq status --json` for BatchQ) and omitted otherwise: `submit_time`/`start_time`/`end_time` (RFC3339), `elapsed`, `time_limit`, `nodes`, `partition`, `cpus`, `mem_req`, `mem_used`, `account`, `user`, `work_dir`, `stdout_path`, `stderr_path`, `deps`, and the cgp-specific `pipeline`, `run_id`, `outputs`.
 
-### 15.4 `cgp convert` — migrate an older script
+### 15.4 `cgp doctor` — check job-submission setup
+`cgp doctor` inspects the environment and helps get job submission configured. It reports the cgp version, which config files were found (in priority order), the resolved `cgp.runner`/`cgp.ledger`, and which batch schedulers are usable on this machine — checking each scheduler's submit and status commands on `PATH`, and disambiguating the shared `qsub` between SGE and PBS via environment/tool signals (`SGE_ROOT`/`qconf` vs `PBS_*`/`pbsnodes`). It then recommends a `cgp.runner` when none is set.
+
+Setup stays **explicit** — cgp never selects a scheduler at run time. By default `doctor` only advises. With **`--write`** it applies the recommendation, appending `cgp.runner = "<name>"` to `~/.cgp/config`, but **only when exactly one scheduler is unambiguously detected**; it refuses (and explains) when a runner is already set, when several are detected, or when SGE-vs-PBS is ambiguous. Exit status is non-zero only when the *configured* runner is unusable (its submit command is missing from `PATH`).
+
+### 15.5 `cgp convert` — migrate an older script
 `cgp convert <old.cgp>` reads a legacy (JVM-cgpipe-era) script and prints the cgpipe-equivalent to stdout (or to `-o FILE`). It is a best-effort aid: it rewrites the mechanical differences — `<% … %>` setting blocks into directive blocks, `<% if … %>`/`<% for … %>` into `%`-control lines, `$<`/`$>`/`$%` into `${input}`/`${output}`/`${stem}`, `if … endif` / `for … done` into brace blocks, `__pre__::`/etc. into `@pre`, `name::` snippets into `snippet name { }`, `import` into `@name`, and `cgp.*` settings into `cgp.*` — and annotates anything it cannot safely convert with a `# cgpipe-convert:` comment for you to review.
 
-### 15.5 `cgp show-template` — print a scheduler's default template
+### 15.6 `cgp show-template` — print a scheduler's default template
 `cgp show-template -r <slurm|sge|pbs|batchq>` prints that scheduler's built-in submission template to stdout, as a starting point for a custom one. Save it (`> ~/.cgp/custom_template.cgp`, or any path named by `cgp.runner.<name>.template`) and edit it to replace the built-in submission script — see [§11.3](#113-selected-cgpipe-settings). The rest of the runner's wiring (submit command, status probes, mem normalization) is unchanged; only the rendered script is overridden.
 
-### 15.6 `cgp lsp` — language server
+### 15.7 `cgp lsp` — language server
 `cgp lsp` runs a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) server over stdin/stdout, providing diagnostics (parse errors), semantic tokens, hover, and completion for `.cgp` files. It is launched by an editor, not used interactively; the bundled VSCode extension (`editor/vscode/`) starts it automatically when `cgp` is on `PATH`.
 
 ---
