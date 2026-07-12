@@ -1,8 +1,11 @@
 package sched
 
 import (
+	"bytes"
+	"encoding/json"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -383,7 +386,46 @@ func sgeDetail(id string) (JobDetail, bool) {
 
 // --- BatchQ -----------------------------------------------------------------
 
+// batchqJSONUnsupported records that this batchq build rejects the --json flag,
+// so we stop paying for a doomed probe and use the porcelain fallback instead.
+var batchqJSONUnsupported atomic.Bool
+
+// batchqJob mirrors the fields of batchq's `api.JobDTO` that cgp maps. batchq
+// emits its own native record (`batchq status --json` = a JSON array of these);
+// cgp converts it here rather than asking batchq to rename anything. Scheduler
+// specifics live in the free-form details/running_details maps under batchq's
+// own key names (e.g. the exec host is running_details["host"]).
+type batchqJob struct {
+	JobID          string            `json:"job_id"`
+	Status         string            `json:"status"`
+	Name           string            `json:"name"`
+	SubmitTime     *time.Time        `json:"submit_time"`
+	StartTime      *time.Time        `json:"start_time"`
+	EndTime        *time.Time        `json:"end_time"`
+	ReturnCode     int               `json:"return_code"`
+	Details        map[string]string `json:"details"`
+	RunningDetails map[string]string `json:"running_details"`
+}
+
+// bqField returns the first non-empty value found for any of keys, checking
+// running_details before details.
+func (j batchqJob) bqField(keys ...string) string {
+	for _, k := range keys {
+		if v := cleanField(j.RunningDetails[k]); v != "" {
+			return v
+		}
+		if v := cleanField(j.Details[k]); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func batchqDetail(id string) (JobDetail, bool) {
+	if d, ok := batchqDetailJSON(id); ok {
+		return d, true
+	}
+	// Fallback for a batchq without --json: state word + end time only.
 	word := batchqStatus(id)
 	if word == "" {
 		return JobDetail{}, false
@@ -394,6 +436,67 @@ func batchqDetail(id string) (JobDetail, bool) {
 	}
 	if end, ok := batchqEndTime(id); ok {
 		d.EndTime = end
+	}
+	return d, true
+}
+
+// batchqDetailJSON queries `batchq status --json <id>` and converts batchq's
+// native JobDTO into cgp's JobDetail. Returns false (so batchqDetail falls back)
+// when --json is unsupported, the probe fails, or the job is unknown.
+func batchqDetailJSON(id string) (JobDetail, bool) {
+	if batchqJSONUnsupported.Load() {
+		return JobDetail{}, false
+	}
+	out, stderr, err := probe("batchq", "status", "--json", id)
+	if err != nil {
+		if bytes.Contains(stderr, []byte("unknown flag")) || bytes.Contains(stderr, []byte("unknown shorthand")) {
+			batchqJSONUnsupported.Store(true)
+		}
+		return JobDetail{}, false
+	}
+	var recs []batchqJob
+	if json.Unmarshal(out, &recs) != nil || len(recs) == 0 {
+		return JobDetail{}, false
+	}
+	j := recs[0]
+	for _, r := range recs { // an array collapses to its tasks; prefer an exact id
+		if r.JobID == id {
+			j = r
+			break
+		}
+	}
+	word := j.Status
+	if word == "" {
+		return JobDetail{}, false
+	}
+	d := JobDetail{
+		NativeState: word,
+		State:       normState(batchqStateFor(word), word, "CANCELED"),
+		Nodes:       j.bqField("host", "exec_host", "node", "nodes"),
+		Partition:   j.bqField("queue", "partition"),
+		CPUs:        j.bqField("cpus", "procs", "ncpus"),
+		MemReq:      j.bqField("mem", "mem_req"),
+		MemUsed:     j.bqField("mem_used", "maxvmem"),
+		Reason:      j.bqField("reason"),
+		Account:     j.bqField("account"),
+		User:        j.bqField("user", "owner"),
+		WorkDir:     j.bqField("work_dir", "cwd", "workdir"),
+		StdoutPath:  j.bqField("stdout", "stdout_path"),
+		StderrPath:  j.bqField("stderr", "stderr_path"),
+	}
+	if j.SubmitTime != nil {
+		d.SubmitTime = j.SubmitTime.Unix()
+	}
+	if j.StartTime != nil {
+		d.StartTime = j.StartTime.Unix()
+	}
+	if j.EndTime != nil {
+		d.EndTime = j.EndTime.Unix()
+	}
+	// return_code is only meaningful once the job has reached a terminal state.
+	switch word {
+	case "SUCCESS", "FAILED", "CANCELED":
+		d.ExitCode, d.HasExit = j.ReturnCode, true
 	}
 	return d, true
 }
