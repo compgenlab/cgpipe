@@ -49,7 +49,7 @@ func installBatchqJSON(t *testing.T, jsonByID, statusWords map[string]string, re
 func TestBatchqDetailJSON(t *testing.T) {
 	batchqJSONUnsupported.Store(false)
 	installBatchqJSON(t, map[string]string{
-		"100": `[{"job_id":"100","status":"RUNNING","name":"align","submit_time":"2026-06-10T12:30:00Z","start_time":"2026-06-10T12:34:56Z","return_code":0,"running_details":{"host":"gpu-04","pid":"1234"}}]`,
+		"100": `[{"job_id":"100","status":"RUNNING","name":"align","submit_time":"2026-06-10T12:30:00Z","start_time":"2026-06-10T12:34:56Z","return_code":0,"running_details":{"host":"gpu-04","pid":"1234"},"details":{"procs":"8","mem":"16G","walltime":"24:00:00","wd":"/scratch/run","stdout":"/scratch/run/o.log","stderr":"/scratch/run/e.log"}}]`,
 		"101": `[{"job_id":"101","status":"SUCCESS","return_code":0,"end_time":"2026-06-10T13:00:00Z"}]`,
 		"102": `[{"job_id":"102","status":"FAILED","return_code":7}]`,
 		"103": `[{"job_id":"103","status":"CANCELED","return_code":0}]`,
@@ -65,6 +65,13 @@ func TestBatchqDetailJSON(t *testing.T) {
 	}
 	if d.Nodes != "gpu-04" {
 		t.Errorf("100 nodes=%q, want gpu-04 (from running_details.host)", d.Nodes)
+	}
+	// batchq's native detail keys (procs/mem/walltime/wd/stdout) map to cgp fields.
+	if d.CPUs != "8" || d.MemReq != "16G" || d.TimeLimit != "24:00:00" {
+		t.Errorf("100 cpus=%q mem=%q limit=%q, want 8/16G/24:00:00", d.CPUs, d.MemReq, d.TimeLimit)
+	}
+	if d.WorkDir != "/scratch/run" || d.StdoutPath != "/scratch/run/o.log" {
+		t.Errorf("100 wd=%q stdout=%q", d.WorkDir, d.StdoutPath)
 	}
 	if d.StartTime == 0 || d.SubmitTime == 0 {
 		t.Errorf("100 times not parsed: submit=%d start=%d", d.SubmitTime, d.StartTime)

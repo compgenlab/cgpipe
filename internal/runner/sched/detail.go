@@ -394,7 +394,8 @@ var batchqJSONUnsupported atomic.Bool
 // emits its own native record (`batchq status --json` = a JSON array of these);
 // cgp converts it here rather than asking batchq to rename anything. Scheduler
 // specifics live in the free-form details/running_details maps under batchq's
-// own key names (e.g. the exec host is running_details["host"]).
+// own key names — the ones cgp reads today are running_details["host"] (exec
+// host) and details {"procs","mem","walltime","wd","stdout","stderr"}.
 type batchqJob struct {
 	JobID          string            `json:"job_id"`
 	Status         string            `json:"status"`
@@ -474,13 +475,14 @@ func batchqDetailJSON(id string) (JobDetail, bool) {
 		State:       normState(batchqStateFor(word), word, "CANCELED"),
 		Nodes:       j.bqField("host", "exec_host", "node", "nodes"),
 		Partition:   j.bqField("queue", "partition"),
-		CPUs:        j.bqField("cpus", "procs", "ncpus"),
+		CPUs:        j.bqField("procs", "cpus", "ncpus"),
 		MemReq:      j.bqField("mem", "mem_req"),
 		MemUsed:     j.bqField("mem_used", "maxvmem"),
+		TimeLimit:   j.bqField("walltime", "time_limit"),
 		Reason:      j.bqField("reason"),
 		Account:     j.bqField("account"),
 		User:        j.bqField("user", "owner"),
-		WorkDir:     j.bqField("work_dir", "cwd", "workdir"),
+		WorkDir:     j.bqField("wd", "work_dir", "cwd", "workdir"),
 		StdoutPath:  j.bqField("stdout", "stdout_path"),
 		StderrPath:  j.bqField("stderr", "stderr_path"),
 	}
