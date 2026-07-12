@@ -25,7 +25,7 @@ one or more JOBIDs to report just those.
 options:
     --json         emit a JSON array of job objects (for tools); default is a table
     -r RUNNER      scheduler to query (slurm/sge/pbs/batchq); defaults to cgp.runner from config
-    --ledger DIR   ledger directory; defaults to cgp.ledger from config
+    -l, --ledger DIR   ledger directory; defaults to cgp.ledger from config
     <dir>          a positional existing directory is taken as the ledger dir
 
 state is normalized to: queued | running | done | failed | cancelled | unknown
@@ -103,7 +103,7 @@ func runStatus(args []string) int {
 				return 2
 			}
 			runnerName = v
-		case "--ledger":
+		case "-l", "--ledger":
 			v, ok := c.value()
 			if !ok {
 				fmt.Fprint(os.Stderr, statusUsage)

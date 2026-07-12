@@ -169,6 +169,25 @@ func TestStatusOwnersNotHistory(t *testing.T) {
 	}
 }
 
+// The ledger dir may be given via -l (alias of --ledger) as well as positionally.
+func TestStatusLedgerFlagAlias(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	db := filepath.Join(dir, "l.db")
+	lg, err := ledger.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lg.Record(ledger.Job{JobID: "j-run", Name: "sort", Outputs: []string{"run.out"}})
+	lg.Close()
+	installBatchqStatusLines(t, map[string]string{"j-run": "j-run RUNNING"})
+
+	out := captureStdout(t, func() int { return run([]string{"status", "-r", "batchq", "-l", db}) })
+	if !strings.Contains(out, "j-run\trunning\tsort") {
+		t.Errorf("-l alias did not resolve ledger dir:\n%s", out)
+	}
+}
+
 // A non-scheduler runner has no state probe, so `cgp status` rejects it.
 func TestStatusRejectsShell(t *testing.T) {
 	dir := t.TempDir()
