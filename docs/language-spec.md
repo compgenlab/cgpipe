@@ -794,6 +794,8 @@ Submits a single command as a job, using the same runners, settings, and ledger 
 
 Options: `-n, --name`, `-m, --mem`, `-p, --procs`, `-t, --walltime`, `-o, --output PATH` (declared output, repeatable), `-i, --input PATH` (declared input, repeatable), `-d, --deps IDS` (depend on existing job ids, comma-separated; repeatable), `-a, --after PATH` (depend on the active ledger owner of `PATH`; repeatable), `-f, --files-from F` (read fan-out files from `F`, one per line; `-` = stdin; only once), `-r, --runner`, `-l, --ledger`, `-dr`, `-h, --help`.
 
+Scheduler settings, mirroring the `job.*` namespace ([§11.4](#114-per-job-settings-the-job-namespace)): `--account`, `--queue`, `--gpu`, `--mail` set the like-named portable settings (`job.account` etc.), rendered to each scheduler's own flag. `-c, --custom S` (repeatable) appends a **verbatim** extra directive line to `job.custom` — e.g. `--custom '-A foo'` renders `#SBATCH -A foo` under SLURM (`#$`/`#PBS`/`#BATCHQ` under SGE/PBS/BatchQ). All apply to every job of a fan-out and are not `{}`-expanded.
+
 **Fan-out.** Files listed after `--` (or supplied via `--files-from`) each submit one independent job, with `{}` placeholders expanded against the file in the command, the job name, and the `-o`/`-i`/`-a` values:
 
 | Placeholder | Expands to |
