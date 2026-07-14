@@ -197,6 +197,8 @@ Options:
 | `-m, --mem S` / `-p, --procs N` / `-t, --walltime S` | Resources |
 | `-o, --output PATH` | Declared output (repeatable; recorded in the ledger) |
 | `-i, --input PATH` | Declared input (repeatable) |
+| `--account S` / `--queue S` / `--gpu N` / `--mail ADDR` | Portable scheduler settings (`job.account`/`job.queue`/`job.gpu`/`job.mail`), rendered to each scheduler's own flag |
+| `-c, --custom S` | Extra scheduler directive line, verbatim (repeatable) — e.g. `--custom '-A foo'` → `#SBATCH -A foo` (`#$`/`#PBS`/`#BATCHQ` elsewhere) |
 | `--stdout PATH` / `--stderr PATH` | Redirect job stdout/stderr (scheduler runners; `{}`-expanded per fan-out file) |
 | `-d, --deps IDS` | Depend on existing job ids (comma-separated; repeatable) |
 | `-a, --after PATH` | Depend on the active job that owns `PATH` in the ledger (repeatable) |

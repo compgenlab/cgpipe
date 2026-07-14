@@ -44,6 +44,12 @@ options:
     -t, --walltime S     wall-time limit
     -o, --output PATH    declared output (repeatable; recorded in the ledger)
     -i, --input PATH     declared input (repeatable)
+    -c, --custom S       extra scheduler directive line, verbatim (repeatable),
+                         e.g. --custom '-A acct' -> #SBATCH -A acct (#$/#PBS/#BATCHQ)
+    --account S          account / project        (job.account)
+    --queue S            queue / partition        (job.queue)
+    --gpu N              request N GPUs           (job.gpu)
+    --mail ADDR          notification address     (job.mail)
     --stdout PATH        redirect job stdout to PATH (scheduler runners; {}-expanded per file)
     --stderr PATH        redirect job stderr to PATH (scheduler runners; {}-expanded per file)
     -d, --deps IDS       depend on existing job ids (comma-separated; repeatable)
@@ -80,6 +86,7 @@ func runSub(args []string) int {
 	dryRun := false
 	asArray := false
 	settings := map[string]eval.Value{}
+	var customDirectives []string
 	var cmdParts, files []string
 
 	i := 0
@@ -160,6 +167,36 @@ flags:
 				return 2
 			}
 			ins = append(ins, v)
+		case "-c", "--custom":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			customDirectives = append(customDirectives, v)
+		case "-account", "--account":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			settings["job.account"] = eval.StrVal(v)
+		case "-queue", "--queue":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			settings["job.queue"] = eval.StrVal(v)
+		case "-gpu", "--gpu":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			settings["job.gpu"] = eval.ParseScalar(v)
+		case "-mail", "--mail":
+			v, ok := val()
+			if !ok {
+				return 2
+			}
+			settings["job.mail"] = eval.StrVal(v)
 		case "-stdout", "--stdout":
 			v, ok := val()
 			if !ok {
@@ -266,6 +303,17 @@ flags:
 				settings[k] = v
 			}
 		}
+	}
+	// --custom directives append to any job.custom from config (they don't replace
+	// it), and render as verbatim scheduler directive lines (#SBATCH/#$/#PBS/#BATCHQ).
+	if len(customDirectives) > 0 {
+		var existing []string
+		if lv, ok := settings["job.custom"].(eval.ListVal); ok {
+			for _, e := range lv {
+				existing = append(existing, eval.Stringify(e))
+			}
+		}
+		settings["job.custom"] = eval.StrList(append(existing, customDirectives...))
 	}
 	if runnerName != "" {
 		settings["cgp.runner"] = eval.StrVal(runnerName)
