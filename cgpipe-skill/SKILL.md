@@ -86,6 +86,15 @@ cgp pipeline.cgp --sample s1 --ref hg38.fa   # set script variables
 Set `cgp.runner.shell.autoexec = true` (in `~/.cgp/config`) if you want the shell
 runner to execute directly instead of printing.
 
+> **Dry run is a preview the *user* reads, not just a self-check.** `-dr` renders the
+> **exact** scripts that would be submitted — the per-target bash, or the full `sbatch`/
+> `qsub`/BatchQ script with its `#SBATCH`/directive lines and dependency wiring — and
+> writes them to stdout **without executing or submitting anything**. Before you submit
+> on the user's behalf (any scheduler run, any `cgp sub`), run the same command with
+> `-dr` first and **show the user the rendered output so they can see and approve what
+> will be submitted**. Nothing reaches the scheduler until they've seen it. Prefer this
+> over describing what a script *would* contain — let them read the real thing.
+
 **One-time setup check:** `cgp doctor` reports the version, which config files were
 found, the resolved runner/ledger, and which schedulers are usable on this machine.
 `cgp doctor --write` appends `cgp.runner = "<name>"` to `~/.cgp/config` — but only
@@ -154,7 +163,10 @@ a task whose `-o` output is already newer than its inputs is skipped (logged to
 stderr), so a restart resubmits only the missing indices (`--array=1,3,6`). The same
 skip rule applies to the plain per-file fan-out.
 
-Always dry-run first: add `-dr` to see the exact script/array before it's submitted.
+**Always dry-run first, and show the user the result.** Add `-dr` to render the exact
+script/array that would be submitted; put that rendered output in front of the user so
+they can review the command, resources, and directives *before* anything hits the
+scheduler. Only drop `-dr` to actually submit once they've seen it.
 
 ---
 
@@ -341,9 +353,11 @@ Key moves to reuse for any fan-out:
 5. **Atomic writes** (`> ${output}.tmp && mv`) everywhere; `\$(...)` / `\$b` defer to
    the job's shell (unescaped `$(...)` would run at render time).
 
-Preview it before running: `cgp -dr pipeline.cgp --sheet samples.tsv --ref hg38.fa`
-(local bash) or `cgp -dr -r slurm ... ` (sbatch scripts). Add `-r slurm` without `-dr`
-to submit. `-r graphviz` / `-r html` render the whole cohort's DAG in one document.
+Preview it before running — and show the user: `cgp -dr pipeline.cgp --sheet
+samples.tsv --ref hg38.fa` (local bash) or `cgp -dr -r slurm ... ` (the actual sbatch
+scripts). The `-dr` output *is* what would be submitted, so surface it for the user to
+approve before you drop `-dr` and submit. `-r graphviz` / `-r html` render the whole
+cohort's DAG in one document.
 
 ---
 
