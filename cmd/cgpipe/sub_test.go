@@ -66,3 +66,24 @@ func TestSubNamedSettingsPBS(t *testing.T) {
 		}
 	}
 }
+
+// On the batchq runner the named settings route through batchq's generic
+// passthrough rather than a native flag: account/queue become `-custom
+// key=value` details (batchq's SLURM proxy maps them to -A/-p) and gpu becomes a
+// `-resource` requirement (mapped to --gres=gpu:N downstream). cgp's `queue` is
+// batchq/SLURM's `partition`.
+func TestSubNamedSettingsBatchq(t *testing.T) {
+	t.Chdir(t.TempDir())
+	out := renderSub(t, "-r", "batchq",
+		"--account", "lab123", "--queue", "highmem", "--gpu", "2",
+		"-o", "out.bam", "echo", "hi")
+	for _, want := range []string{
+		"#BATCHQ -custom account=lab123",
+		"#BATCHQ -custom partition=highmem",
+		"#BATCHQ -resource gpu=2",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- got ---\n%s", want, out)
+		}
+	}
+}

@@ -61,6 +61,14 @@ near the top becomes the default for every target defined after it, unless a
 target overrides it. To hold the *entire* pipeline until it submits cleanly, see
 `global_hold` in the [Configuration Reference](14-Configuration_Reference.md).
 
+**BatchQ is a meta-scheduler.** When it proxies to a downstream scheduler
+(e.g. SLURM), `job.account` and `job.queue` are forwarded as BatchQ's generic
+`-custom account=…` / `-custom partition=…` passthrough (BatchQ's SLURM proxy
+turns those into `#SBATCH -A` / `-p`), and `job.gpu` is forwarded as a
+`-resource gpu=N` requirement (which the proxy turns into `--gres=gpu:N`). You
+set the same portable `job.*` settings regardless of runner; only the emitted
+directive differs.
+
 ### The same job, four schedulers
 
 This target —

@@ -27,6 +27,15 @@
 % if job.mail {
 #BATCHQ -mail ${job.mail}
 % }
+% if job.queue {
+#BATCHQ -custom partition=${job.queue}
+% }
+% if job.account {
+#BATCHQ -custom account=${job.account}
+% }
+% if job.gpu {
+#BATCHQ -resource gpu=${job.gpu}
+% }
 % if job.stdout {
 #BATCHQ -stdout ${job.stdout}
 % }

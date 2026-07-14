@@ -21,6 +21,11 @@ in config):
 | `job.mail` | `#SBATCH --mail-type=… --mail-user=…` |
 | `job.stdout` / `job.stderr` | `#SBATCH -o` / `-e` |
 
+Each runner emits its own form of these — SGE `#$`, PBS `#PBS`, and BatchQ, being
+a meta-scheduler, forwards `job.account`/`job.queue` as `#BATCHQ -custom account=…`
+/`-custom partition=…` and `job.gpu` as `#BATCHQ -resource gpu=N`, which its
+downstream scheduler (e.g. SLURM) turns back into `-A`/`-p`/`--gres`.
+
 ```
 out.bam: {{
     job.name    = "j"
