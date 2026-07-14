@@ -1,0 +1,13 @@
+# Named scheduler settings route through batchq's generic passthrough so they
+# reach the downstream scheduler: account/queue become `-custom key=value`
+# details (the SLURM proxy maps them to -A/-p), and gpu becomes a `-resource`
+# requirement (the proxy maps resource.gpu to --gres=gpu:N).
+out.bam: {{
+    job.name    = "j"
+    job.account = "lab123"
+    job.queue   = "highmem"
+    job.gpu     = 2
+    --
+    run ${output}
+}}
+@default: out.bam

@@ -1,0 +1,13 @@
+#!/bin/bash
+#BATCHQ -name j
+#BATCHQ -custom partition=highmem
+#BATCHQ -custom account=lab123
+#BATCHQ -resource gpu=2
+#BATCHQ -output out.bam
+#BATCHQ -wd .
+
+set -eo pipefail
+
+
+run out.bam
+
